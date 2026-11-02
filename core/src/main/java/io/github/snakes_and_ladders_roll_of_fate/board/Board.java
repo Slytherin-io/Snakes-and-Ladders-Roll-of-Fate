@@ -13,7 +13,25 @@ public class Board {
     }
 
     public void generateBoard() {
-        // Will implement later
+        tiles.clear();
+        for (int i = 1; i <= boardSize; i++) {
+            tiles.add(new NormalTile(i));
+        }
+        // test snake and ladder for testing
+        tiles.set(13, new SnakeTile(14, 4));   // Tile 14 slides to 4
+        tiles.set(8, new LadderTile(9, 31));   // Tile 9 climbs to 31
+    }
+
+    public void displayBoard() {
+        System.out.println("\n=== SNAKES AND LADDERS: ROLL OF FATE (TEST BOARD) ===");
+        for (Tile tile : tiles) {
+            System.out.print(String.format("%4d:%-7s|", tile.getPosition(), tile.getType()));
+
+            if (tile.getPosition() % 10 == 0) {
+                System.out.println();
+            }
+        }
+        System.out.println();
     }
 
     public Tile getTile(int position) {

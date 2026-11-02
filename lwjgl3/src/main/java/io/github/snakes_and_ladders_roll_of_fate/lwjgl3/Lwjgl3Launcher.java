@@ -2,7 +2,7 @@ package io.github.snakes_and_ladders_roll_of_fate.lwjgl3;
 
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
-import io.github.snakes_and_ladders_roll_of_fate.Main;
+//import io.github.snakes_and_ladders_roll_of_fate.Main;
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
 
 /** Launches the desktop (LWJGL3) application. */
