@@ -11,6 +11,7 @@ import io.github.snakes_and_ladders_roll_of_fate.screens.BoardScreen;
 import io.github.snakes_and_ladders_roll_of_fate.screens.MainMenuScreen;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
@@ -37,7 +38,7 @@ public class RollOfFateGame extends Game {
         players = new ArrayList<>();
         createPlayer();
 
-        currentTurn = 0;
+        currentTurn = 0; // Player 1
 
         board = new Board(100);
         board.generateBoard();

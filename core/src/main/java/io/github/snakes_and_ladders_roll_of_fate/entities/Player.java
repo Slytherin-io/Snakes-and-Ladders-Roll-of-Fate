@@ -25,7 +25,10 @@ public class Player extends Entity {
     }
 
     public void levelUp() {
-        level++;
+        this.level++;
+        setAttack(getAttack() + 2);   // +2 Attack every level
+        setDefense(getDefense() + 1); // +1 Defense every level
+        setHealth(getHealth() + 20);  // Heal up on level up!
     }
 
     public void makeChoice(int choiceIndex) {}

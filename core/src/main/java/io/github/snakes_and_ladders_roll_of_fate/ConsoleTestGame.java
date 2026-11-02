@@ -3,7 +3,9 @@ package io.github.snakes_and_ladders_roll_of_fate;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 
+import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
+import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +19,7 @@ public class ConsoleTestGame {
     private int currentTurn;
     private String gameState;
     private GameMode selectedGameMode;
+    private Dice movementDice = new Dice(6);
 
     private Scanner sc = new Scanner(System.in);
 
@@ -48,6 +51,44 @@ public class ConsoleTestGame {
         board.displayBoard();
 
         gameState = "PLAYING";
+
+        runGameLoop();
+    }
+
+    public void runGameLoop() {
+        sc.nextLine(); 
+
+        while (!checkGameOver()) {
+            Player currentPlayer = getCurrentPlayer();
+
+            // Roll Dice
+            System.out.println("\n-------------------------------------------");
+            System.out.println(currentPlayer.getName() + "'s turn (Position: " + currentPlayer.getPosition() + ")");
+            System.out.print("Press ENTER to roll...");
+            sc.nextLine();
+
+            // Move player with D6
+            rollForMovement(currentPlayer);
+
+            // Resolve tile polymorphically
+            Tile currentTile = board.getTile(currentPlayer.getPosition());
+            if (currentTile != null) {
+                System.out.printf("\n** ENTERED %s TILE (Tile %d) **\n", currentTile.getType(), currentTile.getPosition());
+                System.out.println("> " + currentTile.getEffect());
+                currentTile.onLand(currentPlayer);
+                System.out.println("Current Position: " + currentPlayer.getPosition());
+            }
+
+            // Check win condition after tile effect has finished
+            if (checkGameOver()) {
+                System.out.println("\n" + currentPlayer.getName() + " REACHED THE GOAL! " + getGameState());
+                break;
+            }
+
+            // If Pass-and-Play, Pass turn to next player
+            // else move to next roll 
+            nextTurn();
+        }
     }
 
     public void displayPlayers() {
@@ -64,7 +105,7 @@ public class ConsoleTestGame {
         do {
             System.out.print("Enter Choice (1-4): ");
             int choice = sc.nextInt();
-            
+
             switch (choice) {
                 case 1:
                     startGame();
@@ -82,7 +123,7 @@ public class ConsoleTestGame {
                     System.out.println("Please enter a valid number (1-4)");
                     break;
             }
-            if (choice >= 1 && choice <= 4) break; 
+            if (choice >= 1 && choice <= 4) break;
         } while (true);
     }
 
@@ -130,6 +171,11 @@ public class ConsoleTestGame {
         }
 
         return false;
+    }
+
+    public void rollForMovement(Player player) {
+        int steps = movementDice.roll();
+        player.move(steps);
     }
 
     // Getters & Setters
