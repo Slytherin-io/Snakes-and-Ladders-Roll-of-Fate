@@ -5,6 +5,7 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
+import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,19 +61,32 @@ public class ConsoleTestGame {
         while (!checkGameOver()) {
             Player currentPlayer = getCurrentPlayer();
 
+            // Roll Dice
             System.out.println("\n-------------------------------------------");
             System.out.println(currentPlayer.getName() + "'s turn (Position: " + currentPlayer.getPosition() + ")");
             System.out.print("Press ENTER to roll...");
             sc.nextLine();
 
+            // Move player with D6
             rollForMovement(currentPlayer);
 
-            if (checkGameOver()) {
-                System.out.println("\n" + currentPlayer.getName() + " WON!");
-                System.out.println("GAME OVER! " + getGameState());
-                break; 
+            // Resolve tile polymorphically
+            Tile currentTile = board.getTile(currentPlayer.getPosition());
+            if (currentTile != null) {
+                System.out.printf("\n** ENTERED %s TILE (Tile %d) **\n", currentTile.getType(), currentTile.getPosition());
+                System.out.println("> " + currentTile.getEffect());
+                currentTile.onLand(currentPlayer);
+                System.out.println("Current Position: " + currentPlayer.getPosition());
             }
 
+            // Check win condition after tile effect has finished
+            if (checkGameOver()) {
+                System.out.println("\n" + currentPlayer.getName() + " REACHED THE GOAL! " + getGameState());
+                break;
+            }
+
+            // If Pass-and-Play, Pass turn to next player
+            // else move to next roll 
             nextTurn();
         }
     }

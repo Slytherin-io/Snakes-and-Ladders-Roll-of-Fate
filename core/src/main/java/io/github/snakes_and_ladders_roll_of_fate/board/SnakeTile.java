@@ -17,6 +17,7 @@ public class SnakeTile extends Tile {
 
     public void applyEffect(Player player) {
         player.setPosition(destination);
+        System.out.println("Going down to " + destination);
     }
 
     public int getDestination() { return destination; }
