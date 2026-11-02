@@ -8,7 +8,7 @@ The top level of our repository contains the Gradle configuration and the main m
 * **`assets/`**: The home for all visual and audio files. UI skins, fonts, character sprites, and board textures go here. The `core` module loads files directly from this folder.
 * **`core/`**: The heart of the game. This contains all platform-independent Java code, game logic, and MVC architecture.
 * **`lwjgl3/`**: The desktop-specific launcher module. It contains the `Lwjgl3Launcher.java` file which configures window size, framerate, and application title. This will rarely be modified.
-* **`docs/`**: (To be created) The home for all project documentation, meeting minutes, and architectural references.
+* **`docs/`**: The home for all project documentation, meeting minutes, and architectural references.
 * **`.gitignore`**: Specifies files and directories that Git should ignore (like local IDE settings and compiled build caches).
 * **`build.gradle` / `settings.gradle` / `gradlew`**: The Gradle build configuration and wrapper files.
 
