@@ -3,6 +3,7 @@ package io.github.snakes_and_ladders_roll_of_fate;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 
+import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ public class ConsoleTestGame {
     private int currentTurn;
     private String gameState;
     private GameMode selectedGameMode;
+    private Dice movementDice = new Dice(6);
 
     private Scanner sc = new Scanner(System.in);
 
@@ -48,6 +50,31 @@ public class ConsoleTestGame {
         board.displayBoard();
 
         gameState = "PLAYING";
+
+        runGameLoop();
+    }
+
+    public void runGameLoop() {
+        sc.nextLine(); 
+
+        while (!checkGameOver()) {
+            Player currentPlayer = getCurrentPlayer();
+
+            System.out.println("\n-------------------------------------------");
+            System.out.println(currentPlayer.getName() + "'s turn (Position: " + currentPlayer.getPosition() + ")");
+            System.out.print("Press ENTER to roll...");
+            sc.nextLine();
+
+            rollForMovement(currentPlayer);
+
+            if (checkGameOver()) {
+                System.out.println("\n" + currentPlayer.getName() + " WON!");
+                System.out.println("GAME OVER! " + getGameState());
+                break; 
+            }
+
+            nextTurn();
+        }
     }
 
     public void displayPlayers() {
@@ -64,7 +91,7 @@ public class ConsoleTestGame {
         do {
             System.out.print("Enter Choice (1-4): ");
             int choice = sc.nextInt();
-            
+
             switch (choice) {
                 case 1:
                     startGame();
@@ -82,7 +109,7 @@ public class ConsoleTestGame {
                     System.out.println("Please enter a valid number (1-4)");
                     break;
             }
-            if (choice >= 1 && choice <= 4) break; 
+            if (choice >= 1 && choice <= 4) break;
         } while (true);
     }
 
@@ -130,6 +157,11 @@ public class ConsoleTestGame {
         }
 
         return false;
+    }
+
+    public void rollForMovement(Player player) {
+        int steps = movementDice.roll();
+        player.move(steps);
     }
 
     // Getters & Setters
