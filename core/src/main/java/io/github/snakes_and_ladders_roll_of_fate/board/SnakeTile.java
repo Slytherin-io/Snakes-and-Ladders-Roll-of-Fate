@@ -12,6 +12,7 @@ public class SnakeTile extends Tile {
 
     @Override 
     public void onLand(Player player) {
+        System.out.println(dialogue.createSnakeDialogue());
         applyEffect(player);
     }
 

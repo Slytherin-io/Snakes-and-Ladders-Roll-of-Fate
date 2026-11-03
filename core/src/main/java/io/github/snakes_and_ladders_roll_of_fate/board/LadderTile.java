@@ -12,6 +12,7 @@ public class LadderTile extends Tile {
 
     @Override 
     public void onLand(Player player) {
+        System.out.println(dialogue.createLadderDialogue());
         applyEffect(player);
     }
 

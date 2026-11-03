@@ -1,11 +1,13 @@
 package io.github.snakes_and_ladders_roll_of_fate.board;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.systems.Dialogue;
 
 public abstract class Tile {
     private int position;
     private String type;
     private String effect;
+    protected static Dialogue dialogue;
 
     public Tile(int position, String type, String effect) {
         this.position = position;
