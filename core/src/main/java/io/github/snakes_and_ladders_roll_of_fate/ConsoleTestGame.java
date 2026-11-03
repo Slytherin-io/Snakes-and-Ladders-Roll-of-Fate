@@ -6,7 +6,10 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
+import io.github.snakes_and_ladders_roll_of_fate.board.NormalTile;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dialogue;
+import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +24,7 @@ public class ConsoleTestGame {
     private String gameState;
     private GameMode selectedGameMode;
     private Dice movementDice = new Dice(6);
+    private EventManager eventManager = new EventManager();
 
     private Scanner sc = new Scanner(System.in);
 
@@ -78,6 +82,20 @@ public class ConsoleTestGame {
                 System.out.println("> " + currentTile.getEffect());
                 currentTile.onLand(currentPlayer);
                 System.out.println("Current Position: " + currentPlayer.getPosition());
+
+                // Trigger dynamic events on normal tiles
+                if (currentTile instanceof NormalTile && Math.random() < 0.35) {
+                    Event event = eventManager.selectEvent();
+                    if (event != null) {
+                        eventManager.triggerEvent(currentPlayer);
+                        System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                        if (sc.hasNextInt()) {
+                            int choice = sc.nextInt();
+                            sc.nextLine(); // flush newline
+                            eventManager.resolveEvent(choice, currentPlayer);
+                        }
+                    }
+                }
             }
 
             // Check win condition after tile effect has finished

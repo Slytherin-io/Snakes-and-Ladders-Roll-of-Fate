@@ -8,7 +8,7 @@ public abstract class Tile {
     private int position;
     private String type;
     private String effect;
-    protected static Dialogue dialogue;
+    protected static Dialogue dialogue = new Dialogue();
     private static final Random tileGen = new Random();
 
     public Tile(int position, String type, String effect) {
