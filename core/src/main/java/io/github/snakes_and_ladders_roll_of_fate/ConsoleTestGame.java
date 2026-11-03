@@ -83,7 +83,7 @@ public class ConsoleTestGame {
                 System.out.println("> " + currentTile.getEffect());
                 currentTile.onLand(currentPlayer);
                 System.out.println("Current Position: " + currentPlayer.getPosition());
-                System.out.println(currentPlayer.getHealth());
+
 
                 // Trigger dynamic events on normal tiles
                 if (currentTile instanceof NormalTile && Math.random() < 0.35) {
