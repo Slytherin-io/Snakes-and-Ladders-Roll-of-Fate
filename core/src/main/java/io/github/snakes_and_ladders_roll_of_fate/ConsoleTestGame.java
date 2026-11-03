@@ -6,6 +6,7 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
+import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +57,7 @@ public class ConsoleTestGame {
     }
 
     public void runGameLoop() {
-        sc.nextLine(); 
+        sc.nextLine();
 
         while (!checkGameOver()) {
             Player currentPlayer = getCurrentPlayer();
@@ -69,6 +70,7 @@ public class ConsoleTestGame {
 
             // Move player with D6
             rollForMovement(currentPlayer);
+            System.out.println(movementDice.getValue());
 
             // Resolve tile polymorphically
             Tile currentTile = board.getTile(currentPlayer.getPosition());
@@ -77,6 +79,7 @@ public class ConsoleTestGame {
                 System.out.println("> " + currentTile.getEffect());
                 currentTile.onLand(currentPlayer);
                 System.out.println("Current Position: " + currentPlayer.getPosition());
+                System.out.println(currentPlayer.getHealth());
             }
 
             // Check win condition after tile effect has finished
@@ -86,7 +89,7 @@ public class ConsoleTestGame {
             }
 
             // If Pass-and-Play, Pass turn to next player
-            // else move to next roll 
+            // else move to next roll
             nextTurn();
         }
     }
@@ -176,6 +179,10 @@ public class ConsoleTestGame {
     public void rollForMovement(Player player) {
         int steps = movementDice.roll();
         player.move(steps);
+
+    }
+    public void rollForDamage(Player player){
+
     }
 
     // Getters & Setters

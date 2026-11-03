@@ -16,6 +16,7 @@ public class Dice {
     public int roll() {
         this.value = random.nextInt(sides) + 1;
         return value;
+
     }
 
     // Getters and Setters
