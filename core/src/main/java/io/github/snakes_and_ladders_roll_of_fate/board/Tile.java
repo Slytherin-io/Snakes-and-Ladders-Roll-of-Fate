@@ -1,12 +1,14 @@
 package io.github.snakes_and_ladders_roll_of_fate.board;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.systems.Dialogue;
 import java.util.Random;
 
 public abstract class Tile {
     private int position;
     private String type;
     private String effect;
+    protected static Dialogue dialogue;
     private static final Random tileGen = new Random();
 
     public Tile(int position, String type, String effect) {
