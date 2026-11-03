@@ -45,6 +45,8 @@ public class SnakeTile extends Tile {
                 break;}
         }
 
+        System.out.println(dialogue.createSnakeDialogue());
+        applyEffect(player);
     }
 
     public void applyEffect(Player player) {
