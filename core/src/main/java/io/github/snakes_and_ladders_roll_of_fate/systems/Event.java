@@ -23,7 +23,7 @@ public class Event {
     }
 
     public void trigger() {
-        System.out.println("\n📜 === [EVENT] " + title.toUpperCase() + " ===");
+        System.out.println("\n=== [EVENT] " + title.toUpperCase() + " ===");
         System.out.println(description);
         System.out.println("What will you do?");
         if (choices != null) {
@@ -48,7 +48,7 @@ public class Event {
 
     public void resolve(int choiceIndex, Player player) {
         if (choices == null || choiceIndex < 1 || choiceIndex > choices.size()) {
-            System.out.println("⚠️ Invalid choice. The opportunity fades away.");
+            System.out.println("Invalid choice. The opportunity fades away.");
             return;
         }
 
