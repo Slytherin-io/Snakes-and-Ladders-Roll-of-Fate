@@ -17,6 +17,7 @@ public class LadderTile extends Tile {
 
     public void applyEffect(Player player) {
         player.setPosition(destination);
+        System.out.println("Going up to " + destination);
     }
 
     public int getDestination() { return destination; }

@@ -13,7 +13,29 @@ public class Board {
     }
 
     public void generateBoard() {
-        // Will implement later
+        this.tiles.clear(); // Clear list in case we are regenerating
+        String previousType = null;
+
+        for (int position = 1; position <= this.boardSize; position++) {
+            // Pass the previous tile's type into the generator
+            Tile newTile = Tile.createRandom(position, previousType);
+            this.tiles.add(newTile);
+
+            // Update previousType for the next loop iteration
+            previousType = newTile.getType();
+        }
+    }
+
+    public void displayBoard() {
+        System.out.println("\n=== SNAKES AND LADDERS: ROLL OF FATE (TEST BOARD) ===");
+        for (Tile tile : tiles) {
+            System.out.print(String.format("%4d:%-7s|", tile.getPosition(), tile.getType()));
+
+            if (tile.getPosition() % 10 == 0) {
+                System.out.println();
+            }
+        }
+        System.out.println();
     }
 
     public Tile getTile(int position) {

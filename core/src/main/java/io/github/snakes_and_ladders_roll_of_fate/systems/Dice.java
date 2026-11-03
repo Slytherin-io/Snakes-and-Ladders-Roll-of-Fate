@@ -1,18 +1,20 @@
 package io.github.snakes_and_ladders_roll_of_fate.systems;
 
-import com.badlogic.gdx.math.MathUtils;
+import java.util.Random;
 
 public class Dice {
     private int sides;
     private int value;
+    private Random random;
 
     public Dice(int sides) {
         this.sides = sides;
         this.value = 1;
+        this.random = new Random();
     }
 
     public int roll() {
-        this.value = MathUtils.random(1, sides);
+        this.value = random.nextInt(sides) + 1;
         return value;
     }
 
