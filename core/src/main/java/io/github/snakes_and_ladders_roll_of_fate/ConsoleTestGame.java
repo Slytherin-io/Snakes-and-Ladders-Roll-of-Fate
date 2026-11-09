@@ -85,9 +85,9 @@ public class ConsoleTestGame {
 
                 // Trigger dynamic events on normal tiles
                 if (currentTile instanceof NormalTile && Math.random() < 0.35) {
-                    Event event = eventManager.selectEvent();
+                    Event event = eventManager.selectEventForTile(currentPlayer.getPosition());
                     if (event != null) {
-                        eventManager.triggerEvent(currentPlayer);
+                        eventManager.triggerEvent();
                         System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
                         if (sc.hasNextInt()) {
                             int choice = sc.nextInt();
@@ -100,7 +100,22 @@ public class ConsoleTestGame {
 
             // Check win condition after tile effect has finished
             if (checkGameOver()) {
-                System.out.println("\n" + currentPlayer.getName() + " REACHED THE GOAL! " + getGameState());
+                if (currentPlayer != null && currentPlayer.getHealth() <= 0) {
+                    System.out.println("\n" + currentPlayer.getName() + " died! " + getGameState());
+                    players.remove(currentTurn);
+                    
+                    if (players.isEmpty()) {
+                        System.out.println("\n" + getGameState());
+                        break;
+                    }
+
+                    if (currentTurn >= players.size()) {
+                        currentTurn = 0;
+                    }
+                    continue;
+                }
+
+                System.out.println(currentPlayer.getName() + " REACHED THE GOAL! " + getGameState());
                 break;
             }
 
@@ -173,7 +188,14 @@ public class ConsoleTestGame {
     }
 
     public boolean checkGameOver() {
-        if (players.isEmpty()) return false;
+        if (players.isEmpty()) {
+            gameState = "GAME OVER";
+            return true;
+        }
+
+        if (currentTurn >= players.size()) {
+            currentTurn = 0;
+        }
 
         Player currentPlayer = players.get(currentTurn);
 
@@ -202,7 +224,11 @@ public class ConsoleTestGame {
     public List<Player> getPlayers() { return players; }
     public int getCurrentTurn() { return currentTurn; }
     public Player getCurrentPlayer() {
-        return players.isEmpty() ? null : players.get(currentTurn);
+        if (players.isEmpty()) return null;
+        if (currentTurn >= players.size()) {
+            currentTurn = 0;
+        }
+        return players.get(currentTurn);
     }
     public String getGameState() { return gameState; }
 
