@@ -51,7 +51,7 @@ public class Event {
             return;
         }
         EventChoice chosen = choices.get(choiceIndex - 1);
-        System.out.println("\n> You chose: " + chosen.getText());
+        System.out.println("\n> " + player.getName() + " chose: " + chosen.getText());
         chosen.execute(player);
     }
 

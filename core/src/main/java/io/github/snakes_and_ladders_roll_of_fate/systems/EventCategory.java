@@ -4,5 +4,8 @@ public enum EventCategory {
     SHRINE, // blessings, healing
     TRAP, // hazards, damage, movement setbacks
     MERCHANT, // trade-offs, buying/selling
-    BLESSING // gambles, riddles
+    BLESSING, // gambles, riddles
+    NORMAL,
+    SNAKE,
+    LADDER
 }

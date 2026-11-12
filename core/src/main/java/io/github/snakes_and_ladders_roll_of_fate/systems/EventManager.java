@@ -21,24 +21,54 @@ public class EventManager {
     }
 
     // Selects an event specifically eligible for the player's current tile
-    public Event selectEventForTile(int playerTilePosition) {
+    public Event selectEventForTile(int playerTilePosition, EventCategory category) {
+        if (category == EventCategory.SNAKE) {
+            this.activeEvent = EventRepository.createProceduralSnakeEvent(playerTilePosition);
+            return activeEvent;
+        }
+
+        if (category == EventCategory.LADDER) {
+            this.activeEvent = EventRepository.createProceduralLadderEvent(playerTilePosition);
+            return activeEvent;
+        }
+
+        // For NORMAL / ambient encounters: 50% chance to generate a procedural Shrine, or roll from existing pool
+        if (random.nextBoolean()) {
+            this.activeEvent = EventRepository.createProceduralShrineEvent(playerTilePosition);
+            return activeEvent;
+        }
+
         List<Event> eligibleEvents = new ArrayList<>();
 
         for (Event event : events) {
-            if (event.isEligibleForTile(playerTilePosition)) {
+            boolean matchesTile = event.isEligibleForTile(playerTilePosition);
+            boolean matchesCategory;
+
+            if (category == null || category == EventCategory.NORMAL) {
+                // Normal / general tiles match ambient categories (SHRINE, MERCHANT, TRAP, BLESSING, NORMAL)
+                matchesCategory = (event.getCategory() != EventCategory.SNAKE && event.getCategory() != EventCategory.LADDER);
+            } else {
+                matchesCategory = (event.getCategory() == category);
+            }
+
+            if (matchesTile && matchesCategory) {
                 eligibleEvents.add(event);
             }
         }
 
-        // If no events match this tile, return null
+        // Fallback to a procedural shrine if pool is empty
         if (eligibleEvents.isEmpty()) {
-            this.activeEvent = null;
-            return null;
+            this.activeEvent = EventRepository.createProceduralShrineEvent(playerTilePosition);
+            return activeEvent;
         }
 
         // Pick randomly among the eligible events
         this.activeEvent = eligibleEvents.get(random.nextInt(eligibleEvents.size()));
         return activeEvent;
+    }
+
+    public Event selectEventForTile(int playerTilePosition) {
+        return selectEventForTile(playerTilePosition, null);
     }
 
     // Fallback: Selects any event regardless of tile position

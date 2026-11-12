@@ -7,8 +7,10 @@ import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
 import io.github.snakes_and_ladders_roll_of_fate.board.NormalTile;
+import io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dialogue;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventManager;
 
 import java.util.ArrayList;
@@ -80,22 +82,62 @@ public class ConsoleTestGame {
             if (currentTile != null) {
                 System.out.printf("\n** ENTERED %s TILE (Tile %d) **\n", currentTile.getType(), currentTile.getPosition());
                 System.out.println("> " + currentTile.getEffect());
-                currentTile.onLand(currentPlayer);
-                System.out.println("Current Position: " + currentPlayer.getPosition());
 
-                // Trigger dynamic events on normal tiles
-                if (currentTile instanceof NormalTile && Math.random() < 0.35) {
-                    Event event = eventManager.selectEventForTile(currentPlayer.getPosition());
+                EventCategory category = currentTile.getEventCategory();
+
+                if (category == EventCategory.SNAKE) {
+                    // Trigger Snake Dilemma before sliding
+                    Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.SNAKE);
+                    int choice = 2; // Default to sliding if skipped
+                    if (event != null) {
+                        eventManager.triggerEvent();
+                        System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                        if (sc.hasNextInt()) {
+                            choice = sc.nextInt();
+                            sc.nextLine();
+                            eventManager.resolveEvent(choice, currentPlayer);
+                        }
+                    }
+
+                    // If Choice 1 was selected and player survived, they resisted the drop!
+                    if (choice == 1 && currentPlayer.getHealth() > 0) {
+                        System.out.println("  [RESISTED] You stood your ground and fought off the serpent, resisting the slide!");
+                    } else {
+                        // Otherwise, the serpent drags the player down
+                        currentTile.onLand(currentPlayer);
+                    }
+                } else if (category == EventCategory.LADDER) {
+                    // Trigger Ladder Event before / during climb
+                    Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
                     if (event != null) {
                         eventManager.triggerEvent();
                         System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
                         if (sc.hasNextInt()) {
                             int choice = sc.nextInt();
-                            sc.nextLine(); // flush newline
+                            sc.nextLine();
                             eventManager.resolveEvent(choice, currentPlayer);
                         }
                     }
+                    // Player climbs up to destination
+                    currentTile.onLand(currentPlayer);
+                } else {
+                    // Normal tile: safe landing dialogue + 35% chance for ambient encounter
+                    currentTile.onLand(currentPlayer);
+                    if (Math.random() < 0.35) {
+                        Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
+                        if (event != null) {
+                            eventManager.triggerEvent();
+                            System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                            if (sc.hasNextInt()) {
+                                int choice = sc.nextInt();
+                                sc.nextLine();
+                                eventManager.resolveEvent(choice, currentPlayer);
+                            }
+                        }
+                    }
                 }
+
+                System.out.println("Current Position: " + currentPlayer.getPosition());
             }
 
             // Check win condition after tile effect has finished
@@ -105,7 +147,7 @@ public class ConsoleTestGame {
                     players.remove(currentTurn);
                     
                     if (players.isEmpty()) {
-                        System.out.println("\n" + getGameState());
+                        System.out.println("\nGAME OVER. " + getGameState());
                         break;
                     }
 
