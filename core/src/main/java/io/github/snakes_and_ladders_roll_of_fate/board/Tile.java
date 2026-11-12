@@ -2,6 +2,8 @@ package io.github.snakes_and_ladders_roll_of_fate.board;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dialogue;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
+
 import java.util.Random;
 
 public abstract class Tile {
@@ -10,11 +12,13 @@ public abstract class Tile {
     private String effect;
     protected static Dialogue dialogue = new Dialogue();
     private static final Random tileGen = new Random();
+    private EventCategory category;
 
-    public Tile(int position, String type, String effect) {
+    public Tile(int position, String type, String effect, EventCategory category) {
         this.position = position;
         this.type = type;
         this.effect = effect;
+        this.category = category;
     }
 
 
@@ -69,4 +73,6 @@ public abstract class Tile {
     public String getEffect() { return effect; }
 
     public void setEffect(String effect) { this.effect = effect; }
+
+    public EventCategory getEventCategory() { return category; }
 }

@@ -1,12 +1,13 @@
 package io.github.snakes_and_ladders_roll_of_fate.board;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
 
 public class SnakeTile extends Tile {
     private int destination;
     
     public SnakeTile(int position, int destination) {
-        super(position, "SNAKE", "Slide backwards to a lower tile!");
+        super(position, "SNAKE", "Slide backwards to a lower tile!", EventCategory.SNAKE);
         this.destination = destination;
     }
 
