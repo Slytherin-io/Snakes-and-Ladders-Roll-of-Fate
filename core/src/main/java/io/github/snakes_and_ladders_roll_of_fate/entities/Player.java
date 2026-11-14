@@ -5,7 +5,7 @@ import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 
 public class Player extends Entity {
     private String name;
-    private Inventory inventory; 
+    private Inventory inventory;
     private int level;
     private int experience;
 
@@ -28,7 +28,8 @@ public class Player extends Entity {
         this.level++;
         setAttack(getAttack() + 2);   // +2 Attack every level
         setDefense(getDefense() + 1); // +1 Defense every level
-        setHealth(getHealth() + 20);  // Heal up on level up!
+        setHealth(getHealth() + 20);// Heal up on level up!
+        System.out.println("Leveled Up!");//For level up tests
     }
 
     public void makeChoice(int choiceIndex) {}
@@ -39,6 +40,7 @@ public class Player extends Entity {
 
     public int getLevel() { return level; }
     public int getExperience() { return experience; }
+    public void setExperience(int experience) {this.experience = experience;}
 
     public Inventory getInventory() { return inventory; }
     public void setInventory(Inventory inventory) { this.inventory = inventory; }

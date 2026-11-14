@@ -63,7 +63,7 @@ public class ConsoleTestGame {
     }
 
     public void runGameLoop() {
-        sc.nextLine(); 
+        sc.nextLine();
 
         while (!checkGameOver()) {
             Player currentPlayer = getCurrentPlayer();
@@ -76,6 +76,7 @@ public class ConsoleTestGame {
 
             // Move player with D6
             rollForMovement(currentPlayer);
+            System.out.println(movementDice.getValue());
 
             // Resolve tile polymorphically
             Tile currentTile = board.getTile(currentPlayer.getPosition());
@@ -136,8 +137,23 @@ public class ConsoleTestGame {
                         }
                     }
                 }
-
+                currentTile.onLand(currentPlayer);
                 System.out.println("Current Position: " + currentPlayer.getPosition());
+
+
+                // Trigger dynamic events on normal tiles
+                if (currentTile instanceof NormalTile && Math.random() < 0.35) {
+                    Event event = eventManager.selectEvent();
+                    if (event != null) {
+                        eventManager.triggerEvent(currentPlayer);
+                        System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                        if (sc.hasNextInt()) {
+                            int choice = sc.nextInt();
+                            sc.nextLine(); // flush newline
+                            eventManager.resolveEvent(choice, currentPlayer);
+                        }
+                    }
+                }
             }
 
             // Check win condition after tile effect has finished
@@ -145,7 +161,7 @@ public class ConsoleTestGame {
                 if (currentPlayer != null && currentPlayer.getHealth() <= 0) {
                     System.out.println("\n" + currentPlayer.getName() + " died! " + getGameState());
                     players.remove(currentTurn);
-                    
+
                     if (players.isEmpty()) {
                         System.out.println("\nGAME OVER. " + getGameState());
                         break;
@@ -162,7 +178,7 @@ public class ConsoleTestGame {
             }
 
             // If Pass-and-Play, Pass turn to next player
-            // else move to next roll 
+            // else move to next roll
             nextTurn();
         }
     }
@@ -259,6 +275,10 @@ public class ConsoleTestGame {
     public void rollForMovement(Player player) {
         int steps = movementDice.roll();
         player.move(steps);
+
+    }
+    public void rollForDamage(Player player){
+
     }
 
     // Getters & Setters

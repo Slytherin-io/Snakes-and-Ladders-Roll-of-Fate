@@ -19,18 +19,19 @@ public class BattleSystem {
     }
 
     public int calculateDamage(Entity attacker, Entity defender) {
-        int roll = combatDice.roll(); 
+        int roll = combatDice.roll();
         int baseDamage = Math.max(1, attacker.getAttack() - defender.getDefense());
 
         if (roll == 20) {
-            System.out.println("💥 CRITICAL HIT (Rolled a 20)!"); // for console testing
+            System.out.println("CRITICAL HIT (Rolled a 20)!"); // for console testing
             return baseDamage * 2;
         } else if (roll == 1) {
-            System.out.println("💨 CRITICAL MISS (Rolled a 1)!"); // for console testing
+            System.out.println("CRITICAL MISS (Rolled a 1)!"); // for console testing
             return 0;
         } else {
-            return baseDamage;
+            return baseDamage + roll;
         }
+
     }
 
     public void endBattle() {
