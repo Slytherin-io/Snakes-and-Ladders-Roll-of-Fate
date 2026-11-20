@@ -2,6 +2,7 @@ package io.github.snakes_and_ladders_roll_of_fate;
 
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventChoice;
@@ -400,17 +401,35 @@ public class ConsoleTestGame {
 
     public void createPlayer() {
         players.clear();
+        CharacterClass[] availableClasses = CharacterClass.values();
         for (int i = 1; i <= totalPlayers; i++ ) {
-            Player player = new Player("Player " + i);
-            player.setHealth(100);
+            System.out.println("\n--- SELECT ANIMAL CHAMPION FOR PLAYER " + i + " ---");
+            for (int c = 0; c < availableClasses.length; c++) {
+                CharacterClass cls = availableClasses[c];
+                System.out.printf("  [%d] %s (%s) - HP: %d | ATK: %d | DEF: %d | Gear: %s%n",
+                    (c + 1), cls.getName(), cls.getTitle(), cls.getBaseHealth(), cls.getBaseAttack(), cls.getBaseDefense(), cls.getStartingItemName());
+            }
+            int choice = 1;
+            while (true) {
+                System.out.print("Enter choice (1-4, default 1): ");
+                String input = sc.nextLine().trim();
+                if (input.isEmpty()) {
+                    choice = 1;
+                    break;
+                }
+                try {
+                    int val = Integer.parseInt(input);
+                    if (val >= 1 && val <= availableClasses.length) {
+                        choice = val;
+                        break;
+                    }
+                } catch (NumberFormatException ignored) {}
+                System.out.println("Invalid choice. Please enter 1 to 4.");
+            }
+            CharacterClass chosenClass = availableClasses[choice - 1];
+            Player player = new Player("Player " + i, chosenClass);
             player.setPosition(1);
-            player.setAttack(5);
-            player.setDefense(5);
-
-            // Starter loadout: 1 consumable potion, 1 equipment shield with randomized durability (2-4 uses)
-            player.addItem(Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP"));
-            player.addItem(Item.createEquipment("Wooden Shield", EventEffectType.DEFENSE, 3, 2, 4, "+3 DEF (1 Turn Buff)"));
-
+            System.out.printf("  [CHOSEN] Player %d embarked as %s the %s%n", i, chosenClass.getName(), chosenClass.getTitle());
             players.add(player);
         }
     }

@@ -1,6 +1,7 @@
 package io.github.snakes_and_ladders_roll_of_fate.items;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventChoice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffect;
@@ -326,6 +327,61 @@ public class InventoryTest {
         highSnake.startCombat(doomedPlayer);
         if (doomedPlayer.getHealth() != 0) {
             throw new AssertionError("Critically injured player (<=25 HP) should die if taking lethal combat damage, was: " + doomedPlayer.getHealth());
+        }
+
+        // 17. Character Class Archetypes & Starting Gear Tests
+        System.out.println("\n[Test 19] Character Class Selection & Starting Gear...");
+        CharacterClass[] classes = CharacterClass.values();
+        if (classes.length != 4) {
+            throw new AssertionError("There should be 4 playable character classes, found: " + classes.length);
+        }
+
+        // Test Turtle Archetype (Tank)
+        Player turtlePlayer = new Player("Shelly", CharacterClass.TURTLE);
+        if (turtlePlayer.getHealth() != 120) throw new AssertionError("Turtle HP should be 120, was: " + turtlePlayer.getHealth());
+        if (turtlePlayer.getAttack() != 4) throw new AssertionError("Turtle ATK should be 4, was: " + turtlePlayer.getAttack());
+        if (turtlePlayer.getDefense() != 7) throw new AssertionError("Turtle DEF should be 7, was: " + turtlePlayer.getDefense());
+        if (!"Turtle".equals(turtlePlayer.getEntityClass())) throw new AssertionError("Entity class should be Turtle");
+        if (turtlePlayer.getInventory().getItems().size() != 1) throw new AssertionError("Turtle should start with 1 item");
+        if (!"Turtle Shell Buckler".equals(turtlePlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Turtle should start with Turtle Shell Buckler");
+        }
+
+        // Test Cat Archetype (Agile)
+        Player catPlayer = new Player("Shadow", CharacterClass.CAT);
+        if (catPlayer.getHealth() != 90) throw new AssertionError("Cat HP should be 90, was: " + catPlayer.getHealth());
+        if (catPlayer.getAttack() != 6) throw new AssertionError("Cat ATK should be 6, was: " + catPlayer.getAttack());
+        if (catPlayer.getDefense() != 4) throw new AssertionError("Cat DEF should be 4, was: " + catPlayer.getDefense());
+        if (!"Cat's Agility Charm".equals(catPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Cat should start with Cat's Agility Charm");
+        }
+
+        // Test Fox Archetype (Trickster)
+        Player foxPlayer = new Player("Reynard", CharacterClass.FOX);
+        if (foxPlayer.getHealth() != 95) throw new AssertionError("Fox HP should be 95, was: " + foxPlayer.getHealth());
+        if (foxPlayer.getAttack() != 7) throw new AssertionError("Fox ATK should be 7, was: " + foxPlayer.getAttack());
+        if (foxPlayer.getDefense() != 3) throw new AssertionError("Fox DEF should be 3, was: " + foxPlayer.getDefense());
+        if (!"Fox's Hunting Fang".equals(foxPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Fox should start with Fox's Hunting Fang");
+        }
+
+        // Test Bird Archetype (Ascendant)
+        Player birdPlayer = new Player("Gale", CharacterClass.BIRD);
+        if (birdPlayer.getHealth() != 85) throw new AssertionError("Bird HP should be 85, was: " + birdPlayer.getHealth());
+        if (birdPlayer.getAttack() != 5) throw new AssertionError("Bird ATK should be 5, was: " + birdPlayer.getAttack());
+        if (birdPlayer.getDefense() != 4) throw new AssertionError("Bird DEF should be 4, was: " + birdPlayer.getDefense());
+        if (!"Feather of the Gale".equals(birdPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Bird should start with Feather of the Gale");
+        }
+
+        // Test using Turtle's starting equipment in combat stance
+        turtlePlayer.useItem(0); // Uses Turtle Shell Buckler (+3 DEF)
+        if (turtlePlayer.getDefense() != 10) { // Base 7 + Buff 3
+            throw new AssertionError("Turtle DEF with active buff should be 10, was: " + turtlePlayer.getDefense());
+        }
+        turtlePlayer.clearTemporaryBuffs();
+        if (turtlePlayer.getDefense() != 7) {
+            throw new AssertionError("Turtle DEF after turn should reset to base 7, was: " + turtlePlayer.getDefense());
         }
 
         System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");
