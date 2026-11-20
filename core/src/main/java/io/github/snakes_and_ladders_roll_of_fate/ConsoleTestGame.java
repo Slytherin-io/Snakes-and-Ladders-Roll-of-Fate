@@ -11,6 +11,7 @@ import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
 import io.github.snakes_and_ladders_roll_of_fate.board.NormalTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile;
+import io.github.snakes_and_ladders_roll_of_fate.board.LadderTile;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dialogue;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
@@ -245,9 +246,10 @@ public class ConsoleTestGame {
         EventCategory category = currentTile.getEventCategory();
 
         if (category == EventCategory.SNAKE) {
-            // Trigger Snake Dilemma before sliding
+            SnakeTile snakeTile = (SnakeTile) currentTile;
             Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.SNAKE);
-            int choice = 2; // Default to sliding if skipped
+            int choice = 3; // Default to fleeing if skipped
+
             if (event != null) {
                 eventManager.triggerEvent(currentPlayer);
                 System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
@@ -258,15 +260,22 @@ public class ConsoleTestGame {
                 }
             }
 
-            // If Choice 1 was selected and player survived, they resisted the drop
-            if (choice == 1 && currentPlayer.getHealth() > 0) {
-                System.out.println("  [RESISTED] You stood your ground and fought off the serpent, resisting the slide!");
+            EventChoice chosen = (event != null && choice >= 1 && choice <= event.getChoices().size())
+                ? event.getChoices().get(choice - 1) : null;
+
+            if (chosen != null && chosen.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY) {
+                // Shield deflection: successfully held ground without battle or slide!
+                System.out.println("  [HELD GROUND] You warded off the serpent and held your position!");
+            } else if (choice == 1) {
+                // Choice 1: Draw weapon and engage in battle
+                snakeTile.startCombat(currentPlayer);
             } else {
-                // Otherwise, the serpent drags the player down
-                currentTile.onLand(currentPlayer);
+                // Choice 3 (or retreat/flee): Slide down safely without combat!
+                System.out.println("  [RETREAT] You fled down the slope to escape the beast!");
+                snakeTile.applyEffect(currentPlayer);
             }
         } else if (category == EventCategory.LADDER) {
-            // Trigger Ladder Event before / during climb
+            LadderTile ladderTile = (LadderTile) currentTile;
             Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
             if (event != null) {
                 eventManager.triggerEvent(currentPlayer);
@@ -278,10 +287,9 @@ public class ConsoleTestGame {
                 }
             }
             // Player climbs up to destination
-            currentTile.onLand(currentPlayer);
+            ladderTile.applyEffect(currentPlayer);
         } else {
-            // Normal tile: safe landing dialogue + 35% chance for ambient encounter
-            currentTile.onLand(currentPlayer);
+            // Normal tile: 35% chance for ambient encounter (Shrine, Merchant, Trap)
             if (Math.random() < 0.35) {
                 Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
                 if (event != null) {
@@ -293,6 +301,9 @@ public class ConsoleTestGame {
                         eventManager.resolveEvent(choice, currentPlayer);
                     }
                 }
+            } else {
+                // Safe peaceful landing dialogue only if no ambient event occurred
+                currentTile.onLand(currentPlayer);
             }
         }
         System.out.println("Current Position: " + currentPlayer.getPosition());

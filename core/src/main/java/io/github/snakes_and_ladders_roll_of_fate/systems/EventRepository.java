@@ -74,29 +74,22 @@ public class EventRepository {
         return shrine;
     }
 
-    // Generates a dynamic Snake event with a generated story and shuffled reaction choice
+    // Generates a dynamic Snake event with combat, shield deflection, and retreat options
     public static Event createProceduralSnakeEvent(int tilePosition) {
         String[] story = EventStoryGenerator.generateSnakeStory();
         Event snake = new Event(story[0], story[1], EventCategory.SNAKE, 1, 100);
 
-        List<EventChoice> daringChoices = new ArrayList<>();
-        daringChoices.add(EventChoice.createEquipmentAssistedChoice(
+        // Choice 1: Fight the serpent (Initiates BattleSystem)
+        snake.addChoice(new EventChoice("Draw weapon and engage the serpent in battle"));
+
+        // Choice 2: Deflect with equipment if equipped (Uses 1 durability, avoids battle and slide)
+        snake.addChoice(EventChoice.createEquipmentAssistedChoice(
             "Deflect the serpent's fangs with your shield (Uses 1 durability)",
             ItemType.EQUIPMENT
         ));
-        daringChoices.add(new EventChoice("Attempt to parry the serpent with your blade", 11)
-            .onSuccess(EventEffectType.EXPERIENCE, 25, 45)
-            .onFailure(EventEffectType.HEALTH, -20, -10));
-        daringChoices.add(new EventChoice("Brace behind your shield for the strike", 9)
-            .onSuccess(EventEffectType.DEFENSE, 1)
-            .onFailure(EventEffectType.HEALTH, -15, -8));
-        daringChoices.add(new EventChoice("Vault aggressively over the coils", 13)
-            .onSuccess(EventEffectType.MOVE, 1)
-            .onFailure(EventEffectType.HEALTH, -25, -15));
 
-        Collections.shuffle(daringChoices);
-        snake.addChoice(daringChoices.get(0)); // Daring challenge option
-        snake.addChoice(new EventChoice("Flee down the slope")); // Safe fallback option
+        // Choice 3: Flee down the slope (Safely slides down without combat)
+        snake.addChoice(new EventChoice("Flee down the slope to safety"));
 
         return snake;
     }

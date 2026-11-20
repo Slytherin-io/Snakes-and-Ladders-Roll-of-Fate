@@ -46,9 +46,18 @@
   - Updated `trigger(Player player)` to display `[LOCKED]` on choices where player requirements are not met (e.g., insufficient EXP or HP).
   - Updated `resolve(choiceIndex, player)` to prevent players from executing locked choices.
 
-### 5. Automated Verification Suite
+### 5. Battle System & Event Trigger Harmonization
+- **`board/SnakeTile.java` & `ConsoleTestGame.java`**:
+  - Rewired the Snake Tile resolution logic so the Battle System is triggered exclusively when the player actively chooses to engage (`Choice 1: Draw weapon and fight`).
+  - Choosing to retreat (`Choice 3: Flee down slope`) slides the player down safely with zero combat engagement.
+  - Choosing shield deflection (`Choice 2`) consumes 1 equipment durability and holds ground without fighting or sliding.
+- **`board/LadderTile.java` & `board/NormalTile.java`**:
+  - Eliminated duplicate dialogue calls (`dialogue.createLadderDialogue()` and `dialogue.createSnakeDialogue()`), allowing procedural event stories to take center stage.
+  - Normal tiles now only print peaceful breathing dialogue when no ambient event occurs.
+
+### 6. Automated Verification Suite
 - **`items/InventoryTest.java`**:
-  - Expanded the test suite to 14 automated tests covering item grants, Option B swap replacement, merchant blood rites, EXP costs, barter trades, requirement locking, and equipment hazard deflection.
+  - Expanded the test suite to 15 automated tests covering item grants, Option B swap replacement, merchant blood rites, EXP costs, barter trades, requirement locking, equipment hazard deflection, and snake tile combat trigger harmonization.
   - Verified 100% test passage via Gradle (`.\gradlew :core:testInventory`).
 
 ---
@@ -58,9 +67,10 @@
 - **Economy Without Currency:** Because the game lacks gold or coins, standard merchant designs were not applicable. Resolved by utilizing survival resources (Health, EXP, and Item Barter), which creates higher stakes and strategic trade-offs.
 - **Full Inventory During Event Rewards:** Automatically abandoning rewards felt punishing, while forcing an item into a full bag caused array errors. Resolved with Option B (Interactive Swap), giving players full agency over what gear to keep or discard.
 - **Suicide & Bankrupt Choice Prevention:** Prevented players from accidentally killing themselves on Blood Rites or spending EXP they don't possess by adding strict requirement checks and displaying `[LOCKED]` indicators.
+- **Combat Trigger Inversion & Double Dialogue Collision:** Choosing to flee previously triggered `SnakeTile.onLand()`, which forced the player into an automated battle to the death while printing a second, unrelated serpent story. Resolved by decoupling the slide from combat: fleeing immediately slides down with zero combat, while choosing to fight cleanly initiates the `BattleSystem`.
 
 ---
 
 ## Next Steps
-- **Harmonize the Battle System with Event Handling on Snake Tiles:** Resolve the interference where choosing to flee in an event still forces the player into automated combat in `SnakeTile.onLand()`. Wire Choice 1 (Fight) directly into the `BattleSystem` for loot/EXP rewards, and wire Choice 2 (Flee) into an immediate positional slide down the snake without combat.
-- Translate the console merchant and inventory menus into graphical Scene2D UI windows for `BoardScreen`.
+- Translate the polished console simulation mechanics (Inventory, Merchant barters, and Snake combat encounters) into graphical Scene2D UI dialog windows for `BoardScreen` and `BattleScreen`.
+- Implement visual animations and sound cues for acquiring items, shattering equipment, and taking damage in battles.

@@ -190,6 +190,33 @@ public class InventoryTest {
             throw new AssertionError("Equipment durability should be reduced by 1 on deflection!");
         }
 
+        // 13. Snake Tile & Combat Trigger Harmonization
+        System.out.println("\n[Test 15] Snake Tile Trigger Harmonization (Flee vs Combat)...");
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile snakeTile = 
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(15, 5);
+
+        // Test Flee: Slides down with zero combat damage
+        Player fleePlayer = new Player("Runner");
+        fleePlayer.setHealth(100);
+        fleePlayer.setPosition(15);
+        snakeTile.applyEffect(fleePlayer);
+        if (fleePlayer.getPosition() != 5) {
+            throw new AssertionError("Fleeing player should slide down to Tile 5, was: " + fleePlayer.getPosition());
+        }
+        if (fleePlayer.getHealth() != 100) {
+            throw new AssertionError("Fleeing player should take zero combat damage, was: " + fleePlayer.getHealth());
+        }
+
+        // Test Combat: Start combat runs BattleSystem and awards loot on victory
+        Player fightPlayer = new Player("Warrior");
+        fightPlayer.setHealth(100);
+        fightPlayer.setAttack(50); // High attack to guarantee victory in round 1
+        fightPlayer.setPosition(15);
+        snakeTile.startCombat(fightPlayer);
+        if (fightPlayer.getInventory().isEmpty()) {
+            throw new AssertionError("Victorious warrior should receive loot drop from slain serpent!");
+        }
+
         System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");
     }
 }

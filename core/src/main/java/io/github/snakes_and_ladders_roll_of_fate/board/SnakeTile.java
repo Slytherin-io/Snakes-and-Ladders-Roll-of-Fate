@@ -17,13 +17,17 @@ public class SnakeTile extends Tile {
 
     @Override
     public void onLand(Player player) {
-        System.out.println(dialogue.createSnakeDialogue());
+        startCombat(player);
+    }
+
+    public void startCombat(Player player) {
+        System.out.println("\n** COMBAT INITIATED: " + player.getName() + " vs SERPENT (HP: " + getPosition() + ", ATK: " + (getPosition() + 1) + ") **");
         BattleSystem newBattle = new BattleSystem();
         Entity snake = new Enemy("SNAKE");
         snake.setAttack(getPosition()+1);
         snake.setHealth(getPosition());
         newBattle.startBattle(player, snake);
-        while (player.getHealth() > 0 && snake.getHealth() >0){
+        while (player.getHealth() > 0 && snake.getHealth() > 0){
             int playerDamage = newBattle.calculateDamage(player, snake);
             int newSnakeHealth = snake.getHealth() - playerDamage; // Calculate first, don't apply yet
 
@@ -59,12 +63,11 @@ public class SnakeTile extends Tile {
                 }
             }
         }
-
     }
 
     public void applyEffect(Player player) {
         player.setPosition(destination);
-        System.out.println("Going down to " + destination);
+        System.out.println("  [SLIDE] Slid down to Tile " + destination);
     }
 
 
