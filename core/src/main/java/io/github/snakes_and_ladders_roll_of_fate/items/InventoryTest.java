@@ -1,6 +1,7 @@
 package io.github.snakes_and_ladders_roll_of_fate.items;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventChoice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffect;
@@ -127,7 +128,7 @@ public class InventoryTest {
 
         // 9. Merchant Encounter: Blood Rite (HP Payment)
         System.out.println("\n[Test 11] Merchant Blood Rite (HP Cost for Item)...");
-        Event merchantEvent = EventRepository.createProceduralMerchantEvent(10);
+        Event merchantEvent = EventRepository.createProceduralMerchantEvent(50); // Act II merchant (20 HP, 35 EXP)
         int hpBeforeRite = player.getHealth();
         // Choice 1 is Blood Rite (Cost: 20 HP for Iron Sword)
         // Free up a slot for the test
@@ -215,6 +216,172 @@ public class InventoryTest {
         snakeTile.startCombat(fightPlayer);
         if (fightPlayer.getInventory().isEmpty()) {
             throw new AssertionError("Victorious warrior should receive loot drop from slain serpent!");
+        }
+
+        // 14. Event Pacing Controller & Cooldown Tests
+        System.out.println("\n[Test 16] Pacing Controller Cooldown & Bad-Luck Protection...");
+        io.github.snakes_and_ladders_roll_of_fate.systems.EventManager eventMgr = 
+            new io.github.snakes_and_ladders_roll_of_fate.systems.EventManager();
+
+        Player pacingPlayer = new Player("Scout");
+        pacingPlayer.resetEventCooldown(); // 0 turns elapsed
+        if (eventMgr.shouldTriggerAmbientEvent(pacingPlayer)) {
+            throw new AssertionError("Ambient event should NOT trigger immediately after reset (0 turns elapsed)");
+        }
+        pacingPlayer.incrementTurnsSinceLastEvent(); // 1 turn elapsed
+        // Now eligible (turnsSinceLastEvent >= 1)
+        if (pacingPlayer.getTurnsSinceLastEvent() != 1) {
+            throw new AssertionError("Player should have 1 turn elapsed");
+        }
+
+        // 15. Act Stratification & Narrative Scaling Tests
+        System.out.println("\n[Test 17] Act Stratification & Scaling (Act I, II, III)...");
+        int act1 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(15);
+        int act2 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(50);
+        int act3 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(85);
+
+        if (act1 != 1) throw new AssertionError("Tile 15 should be in Act 1, was: " + act1);
+        if (act2 != 2) throw new AssertionError("Tile 50 should be in Act 2, was: " + act2);
+        if (act3 != 3) throw new AssertionError("Tile 85 should be in Act 3, was: " + act3);
+
+        Event act1Merchant = EventRepository.createProceduralMerchantEvent(15);
+        Event act3Merchant = EventRepository.createProceduralMerchantEvent(85);
+
+        // Act 1 blood cost should be 10 HP, Act 3 blood cost should be 35 HP
+        if (act1Merchant.getChoices().get(0).getRequirementValue() != 10) {
+            throw new AssertionError("Act 1 blood cost should be 10 HP");
+        }
+        if (act3Merchant.getChoices().get(0).getRequirementValue() != 35) {
+            throw new AssertionError("Act 3 blood cost should be 35 HP");
+        }
+
+        // 16. Combat Rebalance & Mortal Retreat Safeguard Tests
+        System.out.println("\n[Test 18] Snake Combat Stat Rebalance & Mortal Retreat Safeguard...");
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile lowSnake = 
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(14, 4);
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile midSnake = 
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(49, 20);
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile highSnake = 
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(98, 40);
+
+        // Verify Act-based stat scaling
+        if (lowSnake.getSnakeAttack() != 8 || lowSnake.getSnakeHealth() != 22) {
+            throw new AssertionError("Tile 14 Snake should have 8 ATK and 22 HP, was: " + lowSnake.getSnakeAttack() + " / " + lowSnake.getSnakeHealth());
+        }
+        if (midSnake.getSnakeAttack() != 13 || midSnake.getSnakeHealth() != 39) {
+            throw new AssertionError("Tile 49 Snake should have 13 ATK and 39 HP, was: " + midSnake.getSnakeAttack() + " / " + midSnake.getSnakeHealth());
+        }
+        if (highSnake.getSnakeAttack() != 20 || highSnake.getSnakeHealth() != 64) {
+            throw new AssertionError("Tile 98 Snake should have 20 ATK and 64 HP, was: " + highSnake.getSnakeAttack() + " / " + highSnake.getSnakeHealth());
+        }
+
+        // Verify BattleSystem damage calculation bounded variance
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem bs = 
+            new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        Player atkEntity = new Player("Atk");
+        atkEntity.setAttack(10);
+        Player defEntity = new Player("Def");
+        defEntity.setDefense(5);
+        for (int i = 0; i < 50; i++) {
+            int dmg = bs.calculateDamage(atkEntity, defEntity);
+            // With baseDamage = 5: Miss = 0, Normal = 5 to 9, Crit = 15. Must never exceed 15
+            if (dmg > 15) {
+                throw new AssertionError("Damage should be bounded to at most 15, was: " + dmg);
+            }
+        }
+
+        // Verify Standard Retreat: Player reduced below 25 HP slides down
+        Player retreatPlayer = new Player("Retreater");
+        retreatPlayer.setHealth(40);
+        retreatPlayer.setAttack(1);
+        retreatPlayer.setDefense(0);
+        retreatPlayer.setPosition(98);
+        highSnake.startCombat(retreatPlayer);
+        if (retreatPlayer.getHealth() > 25 || retreatPlayer.getHealth() <= 0) {
+            throw new AssertionError("Player taking non-lethal hit below 25 HP should survive in retreat range, was: " + retreatPlayer.getHealth());
+        }
+        if (retreatPlayer.getPosition() != 40) {
+            throw new AssertionError("Retreating player should slide down to destination (40), was: " + retreatPlayer.getPosition());
+        }
+
+        // Verify Mortal Retreat Safeguard: Player with >25 HP taking lethal damage (>26 dmg) -> Clamps to 1 HP & slides down
+        Player woundedPlayer = new Player("Survivor");
+        woundedPlayer.setHealth(26);
+        woundedPlayer.setAttack(1); // Low attack so snake hits back
+        woundedPlayer.setDefense(-10); // Guarantees incoming damage exceeds 26
+        woundedPlayer.setPosition(98);
+        highSnake.startCombat(woundedPlayer);
+        if (woundedPlayer.getHealth() != 1) {
+            throw new AssertionError("Player who entered combat with >25 HP should survive lethal blow with 1 HP, was: " + woundedPlayer.getHealth());
+        }
+        if (woundedPlayer.getPosition() != 40) {
+            throw new AssertionError("Player surviving lethal blow should slide down to destination (40), was: " + woundedPlayer.getPosition());
+        }
+
+        // Verify Lethal Death when entering combat with <= 25 HP
+        Player doomedPlayer = new Player("Doomed");
+        doomedPlayer.setHealth(15);
+        doomedPlayer.setAttack(1);
+        doomedPlayer.setDefense(-10);
+        doomedPlayer.setPosition(98);
+        highSnake.startCombat(doomedPlayer);
+        if (doomedPlayer.getHealth() != 0) {
+            throw new AssertionError("Critically injured player (<=25 HP) should die if taking lethal combat damage, was: " + doomedPlayer.getHealth());
+        }
+
+        // 17. Character Class Archetypes & Starting Gear Tests
+        System.out.println("\n[Test 19] Character Class Selection & Starting Gear...");
+        CharacterClass[] classes = CharacterClass.values();
+        if (classes.length != 4) {
+            throw new AssertionError("There should be 4 playable character classes, found: " + classes.length);
+        }
+
+        // Test Turtle Archetype (Tank)
+        Player turtlePlayer = new Player("Shelly", CharacterClass.TURTLE);
+        if (turtlePlayer.getHealth() != 120) throw new AssertionError("Turtle HP should be 120, was: " + turtlePlayer.getHealth());
+        if (turtlePlayer.getAttack() != 4) throw new AssertionError("Turtle ATK should be 4, was: " + turtlePlayer.getAttack());
+        if (turtlePlayer.getDefense() != 7) throw new AssertionError("Turtle DEF should be 7, was: " + turtlePlayer.getDefense());
+        if (!"Turtle".equals(turtlePlayer.getEntityClass())) throw new AssertionError("Entity class should be Turtle");
+        if (turtlePlayer.getInventory().getItems().size() != 1) throw new AssertionError("Turtle should start with 1 item");
+        if (!"Turtle Shell Buckler".equals(turtlePlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Turtle should start with Turtle Shell Buckler");
+        }
+
+        // Test Cat Archetype (Agile)
+        Player catPlayer = new Player("Shadow", CharacterClass.CAT);
+        if (catPlayer.getHealth() != 90) throw new AssertionError("Cat HP should be 90, was: " + catPlayer.getHealth());
+        if (catPlayer.getAttack() != 6) throw new AssertionError("Cat ATK should be 6, was: " + catPlayer.getAttack());
+        if (catPlayer.getDefense() != 4) throw new AssertionError("Cat DEF should be 4, was: " + catPlayer.getDefense());
+        if (!"Cat's Agility Charm".equals(catPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Cat should start with Cat's Agility Charm");
+        }
+
+        // Test Fox Archetype (Trickster)
+        Player foxPlayer = new Player("Reynard", CharacterClass.FOX);
+        if (foxPlayer.getHealth() != 95) throw new AssertionError("Fox HP should be 95, was: " + foxPlayer.getHealth());
+        if (foxPlayer.getAttack() != 7) throw new AssertionError("Fox ATK should be 7, was: " + foxPlayer.getAttack());
+        if (foxPlayer.getDefense() != 3) throw new AssertionError("Fox DEF should be 3, was: " + foxPlayer.getDefense());
+        if (!"Fox's Hunting Fang".equals(foxPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Fox should start with Fox's Hunting Fang");
+        }
+
+        // Test Bird Archetype (Ascendant)
+        Player birdPlayer = new Player("Gale", CharacterClass.BIRD);
+        if (birdPlayer.getHealth() != 85) throw new AssertionError("Bird HP should be 85, was: " + birdPlayer.getHealth());
+        if (birdPlayer.getAttack() != 5) throw new AssertionError("Bird ATK should be 5, was: " + birdPlayer.getAttack());
+        if (birdPlayer.getDefense() != 4) throw new AssertionError("Bird DEF should be 4, was: " + birdPlayer.getDefense());
+        if (!"Feather of the Gale".equals(birdPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Bird should start with Feather of the Gale");
+        }
+
+        // Test using Turtle's starting equipment in combat stance
+        turtlePlayer.useItem(0); // Uses Turtle Shell Buckler (+3 DEF)
+        if (turtlePlayer.getDefense() != 10) { // Base 7 + Buff 3
+            throw new AssertionError("Turtle DEF with active buff should be 10, was: " + turtlePlayer.getDefense());
+        }
+        turtlePlayer.clearTemporaryBuffs();
+        if (turtlePlayer.getDefense() != 7) {
+            throw new AssertionError("Turtle DEF after turn should reset to base 7, was: " + turtlePlayer.getDefense());
         }
 
         System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");

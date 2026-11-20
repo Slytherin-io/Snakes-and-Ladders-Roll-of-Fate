@@ -11,12 +11,37 @@ public class Player extends Entity {
     private int experience;
     private int tempAttack = 0;
     private int tempDefense = 0;
+    private int turnsSinceLastEvent = 99; // Starts ready for encounter
+    private CharacterClass characterClass;
 
     public Player(String name) {
         this.name = name;
         this.level = 1;
         this.experience = 0;
         this.inventory = new Inventory(4);
+    }
+
+    public Player(String name, CharacterClass characterClass) {
+        this(name);
+        applyCharacterClass(characterClass);
+    }
+
+    public void applyCharacterClass(CharacterClass characterClass) {
+        this.characterClass = characterClass;
+        if (characterClass != null) {
+            setEntityClass(characterClass.getName());
+            setHealth(characterClass.getBaseHealth());
+            setAttack(characterClass.getBaseAttack());
+            setDefense(characterClass.getBaseDefense());
+            Item startingItem = characterClass.getStartingItem();
+            if (startingItem != null) {
+                addItem(startingItem);
+            }
+        }
+    }
+
+    public CharacterClass getCharacterClass() {
+        return characterClass;
     }
 
     public boolean useItem(int slotIndex) {
@@ -130,4 +155,8 @@ public class Player extends Entity {
 
     public Inventory getInventory() { return inventory; }
     public void setInventory(Inventory inventory) { this.inventory = inventory; }
+
+    public int getTurnsSinceLastEvent() { return turnsSinceLastEvent; }
+    public void incrementTurnsSinceLastEvent() { this.turnsSinceLastEvent++; }
+    public void resetEventCooldown() { this.turnsSinceLastEvent = 0; }
 }

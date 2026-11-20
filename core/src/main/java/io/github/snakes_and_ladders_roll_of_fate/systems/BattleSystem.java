@@ -24,12 +24,14 @@ public class BattleSystem {
 
         if (roll == 20) {
             System.out.println("CRITICAL HIT (Rolled a 20)!"); // for console testing
-            return baseDamage * 2;
+            return Math.max(2, baseDamage * 2 + 5);
         } else if (roll == 1) {
             System.out.println("CRITICAL MISS (Rolled a 1)!"); // for console testing
             return 0;
         } else {
-            return baseDamage + roll;
+            // Scaled dice variance: roll between 2-19 adds 0 to 4 bonus damage, preventing one-hit kills
+            int rollBonus = (roll - 1) / 4;
+            return baseDamage + rollBonus;
         }
 
     }
