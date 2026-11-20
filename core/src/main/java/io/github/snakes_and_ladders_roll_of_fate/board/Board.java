@@ -13,13 +13,17 @@ public class Board {
     }
 
     public void generateBoard() {
-        tiles.clear();
-        for (int i = 1; i <= boardSize; i++) {
-            tiles.add(new NormalTile(i));
+        this.tiles.clear(); // Clear list in case we are regenerating
+        String previousType = null;
+
+        for (int position = 1; position <= this.boardSize; position++) {
+            // Pass the previous tile's type into the generator
+            Tile newTile = Tile.createRandom(position, previousType);
+            this.tiles.add(newTile);
+
+            // Update previousType for the next loop iteration
+            previousType = newTile.getType();
         }
-        // test snake and ladder for testing
-        tiles.set(13, new SnakeTile(14, 4));   // Tile 14 slides to 4
-        tiles.set(8, new LadderTile(9, 31));   // Tile 9 climbs to 31
     }
 
     public void displayBoard() {

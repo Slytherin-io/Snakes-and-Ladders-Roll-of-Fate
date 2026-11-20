@@ -1,6 +1,8 @@
 package io.github.snakes_and_ladders_roll_of_fate;
 
 import com.badlogic.gdx.Game;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.assets.AssetManager;
 import com.badlogic.gdx.Screen;
 
@@ -11,7 +13,9 @@ import io.github.snakes_and_ladders_roll_of_fate.screens.BoardScreen;
 import io.github.snakes_and_ladders_roll_of_fate.screens.MainMenuScreen;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
+import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class RollOfFateGame extends Game {
@@ -27,6 +31,11 @@ public class RollOfFateGame extends Game {
     @Override
     public void create() {
         assetManager = new AssetManager();
+
+        Assets.loadAll(assetManager);
+
+        assetManager.finishLoading();
+
         gameState = "MENU";
         setScreen(new MainMenuScreen(this));
     }
@@ -37,7 +46,7 @@ public class RollOfFateGame extends Game {
         players = new ArrayList<>();
         createPlayer();
 
-        currentTurn = 0;
+        currentTurn = 0; // Player 1
 
         board = new Board(100);
         board.generateBoard();
@@ -92,6 +101,14 @@ public class RollOfFateGame extends Game {
 
     @Override
     public void render() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F11)) {
+            if (Gdx.graphics.isFullscreen()) {
+                Gdx.graphics.setWindowedMode(1280, 720); // Switch to windowed
+            } else {
+                Gdx.graphics.setFullscreenMode(Gdx.graphics.getDisplayMode()); // Switch to fullscreen
+            }
+        }
+
         super.render();
     }
 
