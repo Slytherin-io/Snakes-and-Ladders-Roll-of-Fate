@@ -2,8 +2,9 @@ package io.github.snakes_and_ladders_roll_of_fate;
 
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
-
+import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
 import io.github.snakes_and_ladders_roll_of_fate.board.NormalTile;
@@ -27,6 +28,7 @@ public class ConsoleTestGame {
     private GameMode selectedGameMode;
     private Dice movementDice = new Dice(6);
     private EventManager eventManager = new EventManager();
+    private boolean hasUsedItemThisTurn = false;
 
     private Scanner sc = new Scanner(System.in);
 
@@ -63,97 +65,67 @@ public class ConsoleTestGame {
     }
 
     public void runGameLoop() {
-        sc.nextLine();
-
         while (!checkGameOver()) {
             Player currentPlayer = getCurrentPlayer();
+            if (currentPlayer == null) break;
 
-            // Roll Dice
-            System.out.println("\n-------------------------------------------");
-            System.out.println(currentPlayer.getName() + "'s turn (Position: " + currentPlayer.getPosition() + ")");
-            System.out.print("Press ENTER to roll...");
-            sc.nextLine();
+            boolean turnActionDecided = false;
 
-            // Move player with D6
+            while (!turnActionDecided && !checkGameOver()) {
+                System.out.println("\n-------------------------------------------");
+                String atkBuff = currentPlayer.getTempAttack() > 0 ? " (+" + currentPlayer.getTempAttack() + " Buff)" : "";
+                String defBuff = currentPlayer.getTempDefense() > 0 ? " (+" + currentPlayer.getTempDefense() + " Buff)" : "";
+                System.out.printf("%s's Turn | Tile: %d | HP: %d | ATK: %d%s | DEF: %d%s | EXP: %d (Lv %d)%n",
+                    currentPlayer.getName(),
+                    currentPlayer.getPosition(),
+                    currentPlayer.getHealth(),
+                    currentPlayer.getAttack(),
+                    atkBuff,
+                    currentPlayer.getDefense(),
+                    defBuff,
+                    currentPlayer.getExperience(),
+                    currentPlayer.getLevel()
+                );
+                System.out.println("[1] Roll Movement Dice (D6)");
+                System.out.println("[2] Use Item from Inventory" + (hasUsedItemThisTurn ? " [USED THIS TURN]" : ""));
+                System.out.println("[3] View Inventory / Equipment");
+                System.out.print("Select Action (1-3): ");
+
+                int action = 1;
+                if (sc.hasNextInt()) {
+                    action = sc.nextInt();
+                    sc.nextLine();
+                } else {
+                    sc.nextLine();
+                    continue;
+                }
+
+                switch (action) {
+                    case 1:
+                        turnActionDecided = true;
+                        break;
+                    case 2:
+                        handleUseItem(currentPlayer);
+                        break;
+                    case 3:
+                        handleViewInventory(currentPlayer);
+                        break;
+                    default:
+                        System.out.println("  [INVALID] Please select a number between 1 and 3.");
+                        break;
+                }
+            }
+
+            if (checkGameOver()) break;
+
+            // Roll Dice and Move
             rollForMovement(currentPlayer);
-            System.out.println(movementDice.getValue());
+            System.out.println("\n> " + currentPlayer.getName() + " rolled a " + movementDice.getValue() + "!");
 
             // Resolve tile polymorphically
             Tile currentTile = board.getTile(currentPlayer.getPosition());
             if (currentTile != null) {
-                System.out.printf("\n** ENTERED %s TILE (Tile %d) **\n", currentTile.getType(), currentTile.getPosition());
-                System.out.println("> " + currentTile.getEffect());
-
-                EventCategory category = currentTile.getEventCategory();
-
-                if (category == EventCategory.SNAKE) {
-                    // Trigger Snake Dilemma before sliding
-                    Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.SNAKE);
-                    int choice = 2; // Default to sliding if skipped
-                    if (event != null) {
-                        eventManager.triggerEvent();
-                        System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
-                        if (sc.hasNextInt()) {
-                            choice = sc.nextInt();
-                            sc.nextLine();
-                            eventManager.resolveEvent(choice, currentPlayer);
-                        }
-                    }
-
-                    // If Choice 1 was selected and player survived, they resisted the drop!
-                    if (choice == 1 && currentPlayer.getHealth() > 0) {
-                        System.out.println("  [RESISTED] You stood your ground and fought off the serpent, resisting the slide!");
-                    } else {
-                        // Otherwise, the serpent drags the player down
-                        currentTile.onLand(currentPlayer);
-                    }
-                } else if (category == EventCategory.LADDER) {
-                    // Trigger Ladder Event before / during climb
-                    Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
-                    if (event != null) {
-                        eventManager.triggerEvent();
-                        System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
-                        if (sc.hasNextInt()) {
-                            int choice = sc.nextInt();
-                            sc.nextLine();
-                            eventManager.resolveEvent(choice, currentPlayer);
-                        }
-                    }
-                    // Player climbs up to destination
-                    currentTile.onLand(currentPlayer);
-                } else {
-                    // Normal tile: safe landing dialogue + 35% chance for ambient encounter
-                    currentTile.onLand(currentPlayer);
-                    if (Math.random() < 0.35) {
-                        Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
-                        if (event != null) {
-                            eventManager.triggerEvent();
-                            System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
-                            if (sc.hasNextInt()) {
-                                int choice = sc.nextInt();
-                                sc.nextLine();
-                                eventManager.resolveEvent(choice, currentPlayer);
-                            }
-                        }
-                    }
-                }
-                currentTile.onLand(currentPlayer);
-                System.out.println("Current Position: " + currentPlayer.getPosition());
-
-
-                // Trigger dynamic events on normal tiles
-                if (currentTile instanceof NormalTile && Math.random() < 0.35) {
-                    Event event = eventManager.selectEvent();
-                    if (event != null) {
-                        eventManager.triggerEvent(currentPlayer);
-                        System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
-                        if (sc.hasNextInt()) {
-                            int choice = sc.nextInt();
-                            sc.nextLine(); // flush newline
-                            eventManager.resolveEvent(choice, currentPlayer);
-                        }
-                    }
-                }
+                resolveTile(currentTile, currentPlayer);
             }
 
             // Check win condition after tile effect has finished
@@ -170,10 +142,11 @@ public class ConsoleTestGame {
                     if (currentTurn >= players.size()) {
                         currentTurn = 0;
                     }
+                    hasUsedItemThisTurn = false;
                     continue;
                 }
 
-                System.out.println(currentPlayer.getName() + " REACHED THE GOAL! " + getGameState());
+                System.out.println("\n" + currentPlayer.getName() + " REACHED THE GOAL! " + getGameState());
                 break;
             }
 
@@ -183,6 +156,108 @@ public class ConsoleTestGame {
         }
     }
 
+    private void handleUseItem(Player player) {
+        if (hasUsedItemThisTurn) {
+            System.out.println("\n  [RESTRICTION] You have already used an item this turn! Limit 1 item per turn.");
+            return;
+        }
+
+        if (player.getInventory() == null || player.getInventory().isEmpty()) {
+            System.out.println("\n  [NOTICE] Your inventory is currently empty!");
+            return;
+        }
+
+        player.getInventory().displayInventory();
+        System.out.print("Select item slot to use (1-" + player.getInventory().size() + ", or 0 to cancel): ");
+
+        if (sc.hasNextInt()) {
+            int slot = sc.nextInt();
+            sc.nextLine();
+
+            if (slot == 0) {
+                System.out.println("  [CANCELLED] Item usage cancelled.");
+                return;
+            }
+
+            boolean success = player.useItem(slot - 1);
+            if (success) {
+                hasUsedItemThisTurn = true;
+            }
+        } else {
+            sc.nextLine();
+            System.out.println("  [INVALID] Invalid input.");
+        }
+    }
+
+    private void handleViewInventory(Player player) {
+        if (player.getInventory() != null) {
+            player.getInventory().displayInventory();
+        } else {
+            System.out.println("\n=== INVENTORY (0/4 SLOTS) ===");
+            System.out.println("  (Empty)");
+        }
+    }
+
+    private void resolveTile(Tile currentTile, Player currentPlayer) {
+        System.out.printf("\n** ENTERED %s TILE (Tile %d) **\n", currentTile.getType(), currentTile.getPosition());
+        System.out.println("> " + currentTile.getEffect());
+
+        EventCategory category = currentTile.getEventCategory();
+
+        if (category == EventCategory.SNAKE) {
+            // Trigger Snake Dilemma before sliding
+            Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.SNAKE);
+            int choice = 2; // Default to sliding if skipped
+            if (event != null) {
+                eventManager.triggerEvent();
+                System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                if (sc.hasNextInt()) {
+                    choice = sc.nextInt();
+                    sc.nextLine();
+                    eventManager.resolveEvent(choice, currentPlayer);
+                }
+            }
+
+            // If Choice 1 was selected and player survived, they resisted the drop!
+            if (choice == 1 && currentPlayer.getHealth() > 0) {
+                System.out.println("  [RESISTED] You stood your ground and fought off the serpent, resisting the slide!");
+            } else {
+                // Otherwise, the serpent drags the player down
+                currentTile.onLand(currentPlayer);
+            }
+        } else if (category == EventCategory.LADDER) {
+            // Trigger Ladder Event before / during climb
+            Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
+            if (event != null) {
+                eventManager.triggerEvent();
+                System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                if (sc.hasNextInt()) {
+                    int choice = sc.nextInt();
+                    sc.nextLine();
+                    eventManager.resolveEvent(choice, currentPlayer);
+                }
+            }
+            // Player climbs up to destination
+            currentTile.onLand(currentPlayer);
+        } else {
+            // Normal tile: safe landing dialogue + 35% chance for ambient encounter
+            currentTile.onLand(currentPlayer);
+            if (Math.random() < 0.35) {
+                Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
+                if (event != null) {
+                    eventManager.triggerEvent();
+                    System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                    if (sc.hasNextInt()) {
+                        int choice = sc.nextInt();
+                        sc.nextLine();
+                        eventManager.resolveEvent(choice, currentPlayer);
+                    }
+                }
+            }
+        }
+        System.out.println("Current Position: " + currentPlayer.getPosition());
+    }
+
     public void displayPlayers() {
         for (Player player : players) {
             System.out.println("\n=== " + player.getName() + " ===");
@@ -190,13 +265,23 @@ public class ConsoleTestGame {
             System.out.printf("Attack: %d%n", player.getAttack());
             System.out.printf("Defense: %d%n", player.getDefense());
             System.out.printf("Position: %d%n", player.getPosition());
+            if (player.getInventory() != null) {
+                player.getInventory().displayInventory();
+            }
         }
     }
 
     public void getUserInput() {
         do {
             System.out.print("Enter Choice (1-4): ");
-            int choice = sc.nextInt();
+            int choice = -1;
+            if (sc.hasNextInt()) {
+                choice = sc.nextInt();
+                sc.nextLine();
+            } else {
+                sc.nextLine();
+                continue;
+            }
 
             switch (choice) {
                 case 1:
@@ -222,7 +307,12 @@ public class ConsoleTestGame {
     public int setTotalPlayer() {
         do {
             System.out.print("Enter total number of Players (2-4): ");
-            this.totalPlayers = sc.nextInt();
+            if (sc.hasNextInt()) {
+                this.totalPlayers = sc.nextInt();
+                sc.nextLine();
+            } else {
+                sc.nextLine();
+            }
         } while (totalPlayers < 2 || totalPlayers > 4);
         return this.totalPlayers;
     }
@@ -235,11 +325,20 @@ public class ConsoleTestGame {
             player.setPosition(1);
             player.setAttack(5);
             player.setDefense(5);
+
+            // Starter loadout: 1 consumable potion, 1 equipment shield with randomized durability (2-4 uses)
+            player.addItem(Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP"));
+            player.addItem(Item.createEquipment("Wooden Shield", EventEffectType.DEFENSE, 3, 2, 4, "+3 DEF (1 Turn Buff)"));
+
             players.add(player);
         }
     }
 
     public void nextTurn() {
+        if (!players.isEmpty() && currentTurn < players.size()) {
+            players.get(currentTurn).clearTemporaryBuffs();
+        }
+        this.hasUsedItemThisTurn = false;
         if (!players.isEmpty()) {
             this.currentTurn = (currentTurn + 1) % players.size();
         }
@@ -303,7 +402,14 @@ public class ConsoleTestGame {
             System.out.println("\n[1] SINGLE PLAYER");
             System.out.println("[2] PASS AND PLAY");
             System.out.print("Select Game Mode (1-2): ");
-            int modeIndex = sc.nextInt();
+            int modeIndex = -1;
+            if (sc.hasNextInt()) {
+                modeIndex = sc.nextInt();
+                sc.nextLine();
+            } else {
+                sc.nextLine();
+                continue;
+            }
 
             switch (modeIndex) {
                 case 1:

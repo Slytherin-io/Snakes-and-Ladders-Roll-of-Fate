@@ -5,6 +5,7 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
+import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 public class SnakeTile extends Tile {
     private int destination;
@@ -30,6 +31,8 @@ public class SnakeTile extends Tile {
                 snake.setHealth(0); // Clamp to 0
                 player.setExperience(player.getPosition() * 2);
                 System.out.println("You dealt " + playerDamage + " damage. Snake HP: 0");
+                System.out.println("  [VICTORY] The slain serpent dropped loot!");
+                player.addItem(Item.createRandomLoot());
                 break;
             } else {
                 snake.setHealth(newSnakeHealth); // Safe to apply
