@@ -2,7 +2,6 @@ package io.github.snakes_and_ladders_roll_of_fate;
 
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
-import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventChoice;
@@ -161,11 +160,8 @@ public class ConsoleTestGame {
             if (checkGameOver()) break;
 
             // Roll Dice and Move
-            int oldPos = currentPlayer.getPosition();
             rollForMovement(currentPlayer);
-            int newPos = currentPlayer.getPosition();
             System.out.println("\n> " + currentPlayer.getName() + " rolled a " + movementDice.getValue() + "!");
-            checkActTransition(oldPos, newPos);
 
             // Resolve tile polymorphically
             Tile currentTile = board.getTile(currentPlayer.getPosition());
@@ -280,36 +276,21 @@ public class ConsoleTestGame {
             }
         } else if (category == EventCategory.LADDER) {
             LadderTile ladderTile = (LadderTile) currentTile;
-            boolean canClimb = true;
-
-            if (eventManager.shouldTriggerLadderEvent()) {
-                Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
-                if (event != null) {
-                    eventManager.triggerEvent(currentPlayer);
-                    System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
-                    if (sc.hasNextInt()) {
-                        int choice = sc.nextInt();
-                        sc.nextLine();
-                        eventManager.resolveEvent(choice, currentPlayer);
-
-                        EventChoice chosen = (choice >= 1 && choice <= event.getChoices().size())
-                            ? event.getChoices().get(choice - 1) : null;
-                        if (chosen != null && chosen.getDifficultyClass() > 0 && !chosen.didLastCheckSucceed()) {
-                            System.out.println("  [SLIPPED] Your grip gave out! You tumbled off the ladder and could not ascend!");
-                            canClimb = false;
-                        }
-                    }
+            Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
+            if (event != null) {
+                eventManager.triggerEvent(currentPlayer);
+                System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                if (sc.hasNextInt()) {
+                    int choice = sc.nextInt();
+                    sc.nextLine();
+                    eventManager.resolveEvent(choice, currentPlayer);
                 }
-            } else {
-                System.out.println("  [STABLE ASCENT] The ladder holds firm. You climb swiftly up the slope!");
             }
-
-            if (canClimb) {
-                ladderTile.applyEffect(currentPlayer);
-            }
+            // Player climbs up to destination
+            ladderTile.applyEffect(currentPlayer);
         } else {
-            // Normal tile: Dynamic pacing check with cooldown & bad-luck protection
-            if (eventManager.shouldTriggerAmbientEvent(currentPlayer)) {
+            // Normal tile: 35% chance for ambient encounter (Shrine, Merchant, Trap)
+            if (Math.random() < 0.35) {
                 Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
                 if (event != null) {
                     eventManager.triggerEvent(currentPlayer);
@@ -319,25 +300,13 @@ public class ConsoleTestGame {
                         sc.nextLine();
                         eventManager.resolveEvent(choice, currentPlayer);
                     }
-                    currentPlayer.resetEventCooldown();
                 }
             } else {
-                // Safe peaceful landing dialogue and cooldown increment
-                currentPlayer.incrementTurnsSinceLastEvent();
+                // Safe peaceful landing dialogue only if no ambient event occurred
                 currentTile.onLand(currentPlayer);
             }
         }
         System.out.println("Current Position: " + currentPlayer.getPosition());
-    }
-
-    private void checkActTransition(int oldPos, int newPos) {
-        if (oldPos <= 30 && newPos > 30 && newPos <= 70) {
-            System.out.println("\n[ZONE TRANSITION] Entering Act II: The Jagged Crags & Caverns (Tiles 31-70)!");
-            System.out.println("  The path narrows along sheer drops. Hazards grow harsher and merchants demand heavier tolls.");
-        } else if (oldPos <= 70 && newPos > 70) {
-            System.out.println("\n[ZONE TRANSITION] Entering Act III: The Spire of Fate & Dragon's Summit (Tiles 71-100)!");
-            System.out.println("  The summit is in sight! Cosmic tempests rage as mythic trials and apex serpents guard the peak.");
-        }
     }
 
     public void displayPlayers() {
@@ -401,35 +370,17 @@ public class ConsoleTestGame {
 
     public void createPlayer() {
         players.clear();
-        CharacterClass[] availableClasses = CharacterClass.values();
         for (int i = 1; i <= totalPlayers; i++ ) {
-            System.out.println("\n--- SELECT ANIMAL CHAMPION FOR PLAYER " + i + " ---");
-            for (int c = 0; c < availableClasses.length; c++) {
-                CharacterClass cls = availableClasses[c];
-                System.out.printf("  [%d] %s (%s) - HP: %d | ATK: %d | DEF: %d | Gear: %s%n",
-                    (c + 1), cls.getName(), cls.getTitle(), cls.getBaseHealth(), cls.getBaseAttack(), cls.getBaseDefense(), cls.getStartingItemName());
-            }
-            int choice = 1;
-            while (true) {
-                System.out.print("Enter choice (1-4, default 1): ");
-                String input = sc.nextLine().trim();
-                if (input.isEmpty()) {
-                    choice = 1;
-                    break;
-                }
-                try {
-                    int val = Integer.parseInt(input);
-                    if (val >= 1 && val <= availableClasses.length) {
-                        choice = val;
-                        break;
-                    }
-                } catch (NumberFormatException ignored) {}
-                System.out.println("Invalid choice. Please enter 1 to 4.");
-            }
-            CharacterClass chosenClass = availableClasses[choice - 1];
-            Player player = new Player("Player " + i, chosenClass);
+            Player player = new Player("Player " + i);
+            player.setHealth(100);
             player.setPosition(1);
-            System.out.printf("  [CHOSEN] Player %d embarked as %s the %s%n", i, chosenClass.getName(), chosenClass.getTitle());
+            player.setAttack(5);
+            player.setDefense(5);
+
+            // Starter loadout: 1 consumable potion, 1 equipment shield with randomized durability (2-4 uses)
+            player.addItem(Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP"));
+            player.addItem(Item.createEquipment("Wooden Shield", EventEffectType.DEFENSE, 3, 2, 4, "+3 DEF (1 Turn Buff)"));
+
             players.add(player);
         }
     }

@@ -8,235 +8,138 @@ import java.util.List;
 
 public class EventRepository {
 
-    // --- PROCEDURAL EVENT GENERATORS (ACT-AWARE & GROUNDED) ---
+    // --- PROCEDURAL EVENT GENERATORS (MYSTERIOUS & UNPREDICTABLE) ---
 
-    // Generates a dynamic Merchant encounter scaled to Act I, Act II, or Act III
+    // Generates a dynamic Merchant encounter with Blood, Knowledge, and Barter trades
     public static Event createProceduralMerchantEvent(int tilePosition) {
-        String[] story = EventStoryGenerator.generateMerchantStory(tilePosition);
-        int act = EventStoryGenerator.getAct(tilePosition);
+        String[] story = EventStoryGenerator.generateMerchantStory();
         Event merchant = new Event(story[0], story[1], EventCategory.MERCHANT, 1, 100);
 
-        if (act == 1) {
-            // Act I: Gentle beginner trades
-            merchant.addChoice(EventChoice.createBloodCostChoice(
-                "Blood Rite: Cut your palm upon the merchant's ritual dagger",
-                10,
-                Item.createEquipment("Bronze Dagger", EventEffectType.ATTACK, 2, 2, 3, "+2 ATK (1 Turn Buff)")
-            ));
-            merchant.addChoice(EventChoice.createExpCostChoice(
-                "Knowledge Tribute: Recite ancient martial lore from memory",
-                20,
-                Item.createEquipment("Wooden Buckler", EventEffectType.DEFENSE, 2, 2, 4, "+2 DEF (1 Turn Buff)")
-            ));
-            merchant.addChoice(EventChoice.createBarterChoice(
-                "Barter: Trade a relic from your pack for herbal medicine",
-                Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP")
-            ));
-        } else if (act == 2) {
-            // Act II: Substantial mid-game trades
-            merchant.addChoice(EventChoice.createBloodCostChoice(
-                "Blood Rite: Swear a blood oath upon the tempered iron blade",
-                20,
-                Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 4, 2, 4, "+4 ATK (1 Turn Buff)")
-            ));
-            merchant.addChoice(EventChoice.createExpCostChoice(
-                "Knowledge Tribute: Impart strategic battlefield wisdom",
-                35,
-                Item.createEquipment("Reinforced Shield", EventEffectType.DEFENSE, 4, 2, 5, "+4 DEF (1 Turn Buff)")
-            ));
-            merchant.addChoice(EventChoice.createBarterChoice(
-                "Barter: Relinquish gear in exchange for an alchemical elixir",
-                Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP")
-            ));
-        } else {
-            // Act III: Mythic summit trades for high stakes
-            merchant.addChoice(EventChoice.createBloodCostChoice(
-                "Blood Rite: Offer deep life essence for the mythical dragon blade",
-                35,
-                Item.createEquipment("Dragon-Slayer Blade", EventEffectType.ATTACK, 6, 3, 5, "+6 ATK (1 Turn Buff)")
-            ));
-            merchant.addChoice(EventChoice.createExpCostChoice(
-                "Knowledge Tribute: Surrender memories of past triumphs for the summit's aegis",
-                60,
-                Item.createEquipment("Aegis of the Summit", EventEffectType.DEFENSE, 6, 3, 5, "+6 DEF (1 Turn Buff)")
-            ));
-            merchant.addChoice(EventChoice.createBarterChoice(
-                "Barter: Sacrifice your finest inventory treasure for divine ambrosia",
-                Item.createConsumable("Celestial Ambrosia", EventEffectType.HEALTH, 80, "Restores 80 HP")
-            ));
-        }
+        // Choice 1: Blood Rite (Sacrifice 20 HP for Iron Sword)
+        merchant.addChoice(EventChoice.createBloodCostChoice(
+            "Blood Rite: Sacrifice 20 HP for an Iron Sword (+4 ATK)",
+            20,
+            Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 4, 2, 4, "+4 ATK (1 Turn Buff)")
+        ));
 
+        // Choice 2: Knowledge Tribute (Pay 35 EXP for Reinforced Shield)
+        merchant.addChoice(EventChoice.createExpCostChoice(
+            "Knowledge Tribute: Pay 35 EXP for a Reinforced Shield (+4 DEF)",
+            35,
+            Item.createEquipment("Reinforced Shield", EventEffectType.DEFENSE, 4, 2, 5, "+4 DEF (1 Turn Buff)")
+        ));
+
+        // Choice 3: Barter (Trade any item from your bag for Greater Health Elixir)
+        merchant.addChoice(EventChoice.createBarterChoice(
+            "Barter: Trade any item from your bag for a Greater Health Elixir (+50 HP)",
+            Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP")
+        ));
+
+        // Choice 4: Decline
         merchant.addChoice(new EventChoice("Decline and walk away safely"));
+
         return merchant;
     }
 
-    // Generates a dynamic Shrine event with rich, randomized choice decks
+    // Generates a dynamic Shrine event with a generated story and 2 shuffled choices
     public static Event createProceduralShrineEvent(int tilePosition) {
-        String[] story = EventStoryGenerator.generateShrineStory(tilePosition);
-        int act = EventStoryGenerator.getAct(tilePosition);
+        String[] story = EventStoryGenerator.generateShrineStory();
         Event shrine = new Event(story[0], story[1], EventCategory.SHRINE, 1, 100);
 
         List<EventChoice> choiceDeck = new ArrayList<>();
+        choiceDeck.add(new EventChoice("Pray for vitality").withEffect(EventEffectType.HEALTH, 15, 35));
+        choiceDeck.add(new EventChoice("Pray for martial strength").withEffect(EventEffectType.ATTACK, 1, 3));
+        choiceDeck.add(new EventChoice("Pray for protective aegis").withEffect(EventEffectType.DEFENSE, 1, 2));
+        choiceDeck.add(new EventChoice("Offer blood upon the altar")
+            .withEffect(EventEffectType.HEALTH, -10)
+            .withEffect(EventEffectType.EXPERIENCE, 40, 75));
+        choiceDeck.add(new EventChoice("Commune with the ancient spirit", 11)
+            .onSuccess(EventEffectType.ATTACK, 2, 4)
+            .onSuccess(EventEffectType.HEALTH, 15, 25)
+            .onFailure(EventEffectType.HEALTH, -15, -8));
+        choiceDeck.add(new EventChoice("Reach into the altar's glowing hollow", 12)
+            .onSuccess(EventEffectType.EXPERIENCE, 50, 90)
+            .onSuccess(EventEffectType.DEFENSE, 1, 2)
+            .onFailure(EventEffectType.HEALTH, -20, -10));
+        choiceDeck.add(new EventChoice("Pry open the stone relic box behind the altar", 12)
+            .onSuccess(EventEffectType.ITEM)
+            .onFailure(EventEffectType.HEALTH, -15, -8));
 
-        if (act == 1) {
-            // Act I Choices (5 varied options, shuffle and pick 2)
-            choiceDeck.add(new EventChoice("Kneel and pray for peaceful vitality")
-                .withEffect(EventEffectType.HEALTH, 15, 25));
-            choiceDeck.add(new EventChoice("Meditate upon martial focus")
-                .withEffect(EventEffectType.ATTACK, 1, 2));
-            choiceDeck.add(new EventChoice("Whisper prayers for a protective ward")
-                .withEffect(EventEffectType.DEFENSE, 1, 2));
-            choiceDeck.add(new EventChoice("Offer fresh drops of blood upon the stone altar")
-                .withEffect(EventEffectType.HEALTH, -8)
-                .withEffect(EventEffectType.EXPERIENCE, 30, 50));
-            choiceDeck.add(new EventChoice("Carefully search the mossy hollow beneath the statue", 10)
-                .onSuccess(EventEffectType.ITEM)
-                .onFailure(EventEffectType.HEALTH, -8));
-            choiceDeck.add(new EventChoice("Sip from the clear mountain runoff basin")
-                .withEffect(EventEffectType.HEALTH, 10, 20));
-        } else if (act == 2) {
-            // Act II Choices (6 varied options, shuffle and pick 2)
-            choiceDeck.add(new EventChoice("Pray for scorching restorative warmth")
-                .withEffect(EventEffectType.HEALTH, 25, 40));
-            choiceDeck.add(new EventChoice("Channel the mountain's furious battle spirit")
-                .withEffect(EventEffectType.ATTACK, 2, 3));
-            choiceDeck.add(new EventChoice("Grasp the iron obelisk to fortify your defenses")
-                .withEffect(EventEffectType.DEFENSE, 2, 3));
-            choiceDeck.add(new EventChoice("Spill blood onto the sacrificial groove")
-                .withEffect(EventEffectType.HEALTH, -15)
-                .withEffect(EventEffectType.EXPERIENCE, 50, 80));
-            choiceDeck.add(new EventChoice("Attempt to commune with the restless cavern phantom", 11)
-                .onSuccess(EventEffectType.ATTACK, 2, 4)
-                .onSuccess(EventEffectType.HEALTH, 15, 25)
-                .onFailure(EventEffectType.HEALTH, -15));
-            choiceDeck.add(new EventChoice("Reach deep into the dark basalt relic box", 12)
-                .onSuccess(EventEffectType.ITEM)
-                .onFailure(EventEffectType.HEALTH, -18));
-            choiceDeck.add(new EventChoice("Drink the bubbling volcanic mineral water", 11)
-                .onSuccess(EventEffectType.HEALTH, 30, 45)
-                .onFailure(EventEffectType.HEALTH, -15));
-        } else {
-            // Act III Choices (6 high-stakes options, shuffle and pick 2)
-            choiceDeck.add(new EventChoice("Bathe in the blinding celestial starlight")
-                .withEffect(EventEffectType.HEALTH, 45, 70));
-            choiceDeck.add(new EventChoice("Channel the raw solar wrath of the summit")
-                .withEffect(EventEffectType.ATTACK, 4, 5));
-            choiceDeck.add(new EventChoice("Invoke the ancient cosmic barrier")
-                .withEffect(EventEffectType.DEFENSE, 3, 4));
-            choiceDeck.add(new EventChoice("Surrender your vital essence to the celestial wyrm")
-                .withEffect(EventEffectType.HEALTH, -25)
-                .withEffect(EventEffectType.EXPERIENCE, 90, 140));
-            choiceDeck.add(new EventChoice("Attempt to unseal the glowing Apex Vault", 13)
-                .onSuccess(EventEffectType.ITEM)
-                .onSuccess(EventEffectType.EXPERIENCE, 40)
-                .onFailure(EventEffectType.HEALTH, -30));
-            choiceDeck.add(new EventChoice("Speak the forbidden cosmic incantation", 13)
-                .onSuccess(EventEffectType.ATTACK, 4, 6)
-                .onSuccess(EventEffectType.HEALTH, 20, 35)
-                .onFailure(EventEffectType.HEALTH, -30));
-        }
-
+        // Shuffle deck and pick 2 unique choices
         Collections.shuffle(choiceDeck);
         shrine.addChoice(choiceDeck.get(0));
         shrine.addChoice(choiceDeck.get(1));
-        shrine.addChoice(new EventChoice("Walk away peacefully"));
+        shrine.addChoice(new EventChoice("Walk away peacefully")); // Guaranteed safe exit
 
         return shrine;
     }
 
     // Generates a dynamic Snake event with combat, shield deflection, and retreat options
     public static Event createProceduralSnakeEvent(int tilePosition) {
-        String[] story = EventStoryGenerator.generateSnakeStory(tilePosition);
+        String[] story = EventStoryGenerator.generateSnakeStory();
         Event snake = new Event(story[0], story[1], EventCategory.SNAKE, 1, 100);
 
+        // Choice 1: Fight the serpent (Initiates BattleSystem)
         snake.addChoice(new EventChoice("Draw weapon and engage the serpent in battle"));
+
+        // Choice 2: Deflect with equipment if equipped (Uses 1 durability, avoids battle and slide)
         snake.addChoice(EventChoice.createEquipmentAssistedChoice(
-            "Raise your shield to deflect the serpent's fangs",
+            "Deflect the serpent's fangs with your shield (Uses 1 durability)",
             ItemType.EQUIPMENT
         ));
+
+        // Choice 3: Flee down the slope (Safely slides down without combat)
         snake.addChoice(new EventChoice("Flee down the slope to safety"));
 
         return snake;
     }
 
-    // Generates a dynamic Ladder event with climbing dilemmas and shuffled options
+    // Generates a dynamic Ladder event with a generated story and shuffled climb choices
     public static Event createProceduralLadderEvent(int tilePosition) {
-        String[] story = EventStoryGenerator.generateLadderStory(tilePosition);
-        int act = EventStoryGenerator.getAct(tilePosition);
+        String[] story = EventStoryGenerator.generateLadderStory();
         Event ladder = new Event(story[0], story[1], EventCategory.LADDER, 1, 100);
 
-        ladder.addChoice(new EventChoice("Ascend cautiously along the rungs"));
+        List<EventChoice> climbChoices = new ArrayList<>();
+        climbChoices.add(new EventChoice("Study the glowing base runes")
+            .withEffect(EventEffectType.EXPERIENCE, 25, 50));
+        climbChoices.add(new EventChoice("Channel celestial energy into your weapon", 10)
+            .onSuccess(EventEffectType.ATTACK, 2, 4)
+            .onFailure(EventEffectType.HEALTH, -10, -5));
+        climbChoices.add(new EventChoice("Inspect the reinforced iron rungs")
+            .withEffect(EventEffectType.DEFENSE, 1, 2));
 
-        List<EventChoice> ladderDeck = new ArrayList<>();
-
-        if (act == 1) {
-            ladderDeck.add(new EventChoice("Study the trail markings etched into the timber")
-                .withEffect(EventEffectType.EXPERIENCE, 20, 35));
-            ladderDeck.add(new EventChoice("Sprint recklessly up two rungs at once", 10)
-                .onSuccess(EventEffectType.MOVE, 1)
-                .onFailure(EventEffectType.HEALTH, -6));
-            ladderDeck.add(new EventChoice("Test the hemp bindings before climbing")
-                .withEffect(EventEffectType.DEFENSE, 1));
-        } else if (act == 2) {
-            ladderDeck.add(new EventChoice("Leap boldly over the missing chasm rungs", 11)
-                .onSuccess(EventEffectType.MOVE, 2)
-                .onFailure(EventEffectType.HEALTH, -16));
-            ladderDeck.add(new EventChoice("Reinforce the creaking rungs with scrap wire", 11)
-                .onSuccess(EventEffectType.DEFENSE, 2)
-                .onFailure(EventEffectType.HEALTH, -10));
-            ladderDeck.add(new EventChoice("Ascend with eyes shut, trusting your footing", 11)
-                .onSuccess(EventEffectType.EXPERIENCE, 40, 65)
-                .onFailure(EventEffectType.HEALTH, -12));
-        } else {
-            ladderDeck.add(new EventChoice("Vault across the ethereal bridge of starlight", 13)
-                .onSuccess(EventEffectType.MOVE, 3)
-                .onFailure(EventEffectType.HEALTH, -28));
-            ladderDeck.add(new EventChoice("Channel cosmic energy through the glowing rungs", 12)
-                .onSuccess(EventEffectType.ATTACK, 3, 5)
-                .onFailure(EventEffectType.HEALTH, -20));
-            ladderDeck.add(new EventChoice("Charge through the freezing gales without pausing", 12)
-                .onSuccess(EventEffectType.MOVE, 2)
-                .onFailure(EventEffectType.HEALTH, -22));
-        }
-
-        Collections.shuffle(ladderDeck);
-        ladder.addChoice(ladderDeck.get(0));
+        Collections.shuffle(climbChoices);
+        ladder.addChoice(new EventChoice("Ascend directly to the summit"));
+        ladder.addChoice(climbChoices.get(0));
+        ladder.addChoice(climbChoices.get(1));
 
         return ladder;
     }
 
-    // --- STATIC DEFAULT EVENT DECK (Zoned by Act, Clean Narrative Text) ---
+    // --- STATIC DEFAULT EVENT DECK (Backwards Compatible) ---
     public static List<Event> getDefaultEvents() {
         List<Event> events = new ArrayList<>();
 
-        // Act I: Ancient Trail Cache (Tiles 1-30)
-        Event cache = new Event("Fallen Scout's Pack", "You spot a weathered satchel lodged beneath roots.", EventCategory.BLESSING, 1, 30);
-        cache.addChoice(new EventChoice("Scavenge supplies carefully from the satchel").withEffect(EventEffectType.ITEM));
-        cache.addChoice(new EventChoice("Leave it undisturbed"));
-        events.add(cache);
+        // Peddler (Tiles 1-100)
+        Event peddler = new Event("Wandering Peddler", "A shady dealer offers a forbidden potion.", EventCategory.MERCHANT, 1, 100);
+        peddler.addChoice(EventChoice.createBloodCostChoice("Drink the blood draught (Cost: 15 HP for 40 EXP)", 15, null)
+            .withEffect(EventEffectType.EXPERIENCE, 40));
+        peddler.addChoice(new EventChoice("Decline the offer"));
+        events.add(peddler);
 
-        // Act II: Hidden Springboard (Tiles 31-70)
-        Event trap = new Event("Hidden Springboard", "A mechanical plate clicks beneath your boots!", EventCategory.TRAP, 31, 70);
-        trap.addChoice(new EventChoice("Surrender to the mechanical launch plate").withEffect(EventEffectType.MOVE, 2));
-        trap.addChoice(new EventChoice("Tumble violently onto the stone floor").withEffect(EventEffectType.HEALTH, -15, -8));
+        // Springboard Trap (Tiles 20-80)
+        Event trap = new Event("Hidden Springboard", "A mechanical plate clicks beneath your boots!", EventCategory.TRAP, 20, 80);
+        trap.addChoice(new EventChoice("Ride the mechanical launch forward!").withEffect(EventEffectType.MOVE, 2));
+        trap.addChoice(new EventChoice("Dive to the stone floor").withEffect(EventEffectType.HEALTH, -15, -5));
         events.add(trap);
 
-        // Act II: Poison Dart Trap (Tiles 31-70)
-        Event dartTrap = new Event("Poison Dart Trap", "Concealed wall slots hiss as darts target you!", EventCategory.TRAP, 31, 70);
-        dartTrap.addChoice(EventChoice.createEquipmentAssistedChoice("Raise your shield to block the whistling darts", ItemType.EQUIPMENT));
-        dartTrap.addChoice(new EventChoice("Dive headfirst into the stone alcove", 11)
-            .onSuccess(EventEffectType.EXPERIENCE, 35)
-            .onFailure(EventEffectType.HEALTH, -18));
+        // Poison Dart Trap with equipment deflection
+        Event dartTrap = new Event("Poison Dart Trap", "Concealed wall slots hiss as darts target you!", EventCategory.TRAP, 10, 90);
+        dartTrap.addChoice(EventChoice.createEquipmentAssistedChoice("Raise shield to deflect darts (Uses 1 durability)", ItemType.EQUIPMENT));
+        dartTrap.addChoice(new EventChoice("Dive into the stone alcove (DC 11)", 11)
+            .onSuccess(EventEffectType.EXPERIENCE, 25)
+            .onFailure(EventEffectType.HEALTH, -15));
         events.add(dartTrap);
-
-        // Act III: Dragon's Breath Vent (Tiles 71-99)
-        Event dragonVent = new Event("Volcanic Wyrm Vent", "Scalding geothermal steam hisses violently from fissure vents!", EventCategory.TRAP, 71, 99);
-        dragonVent.addChoice(EventChoice.createEquipmentAssistedChoice("Brace behind your shield against the scalding steam", ItemType.EQUIPMENT));
-        dragonVent.addChoice(new EventChoice("Sprint blindly through the flaming vent", 13)
-            .onSuccess(EventEffectType.MOVE, 2)
-            .onFailure(EventEffectType.HEALTH, -30));
-        dragonVent.addChoice(new EventChoice("Wait cautiously for the steam clouds to subside"));
-        events.add(dragonVent);
 
         return events;
     }

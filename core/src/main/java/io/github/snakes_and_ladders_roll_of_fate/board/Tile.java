@@ -27,32 +27,18 @@ public abstract class Tile {
             return new NormalTile(position);
         }
 
-        int roll = tileGen.nextInt(100);
-        int pickType; // 0 = Normal, 1 = Ladder, 2 = Snake
+        int pickType;
 
-        // Weighted spawn rates by Act to ensure balanced board progression
-        if (position <= 30) {
-            // Act I: 70% Normal, 18% Ladder, 12% Snake (~5 ladders, ~3 snakes)
-            if (roll < 70) pickType = 0;
-            else if (roll < 88) pickType = 1;
-            else pickType = 2;
-        } else if (position <= 70) {
-            // Act II: 72% Normal, 12% Ladder, 16% Snake (~4 ladders, ~6 snakes)
-            if (roll < 72) pickType = 0;
-            else if (roll < 84) pickType = 1;
-            else pickType = 2;
+        // Prevent consecutive Ladders or Snakes
+        if ("LADDER".equals(previousType)) {
+            // Pick between Normal (0) and Snake (2)
+            pickType = (tileGen.nextInt(2) == 0) ? 0 : 2;
+        } else if ("SNAKE".equals(previousType)) {
+            // Pick between Normal (0) and Ladder (1)
+            pickType = tileGen.nextInt(2); // Returns 0 or 1
         } else {
-            // Act III: 70% Normal, 6% Ladder, 24% Snake (~1-2 ladders, ~7 snakes)
-            if (roll < 70) pickType = 0;
-            else if (roll < 76) pickType = 1;
-            else pickType = 2;
-        }
-
-        // Prevent consecutive Ladders or Snakes (anti-clustering)
-        if (pickType == 1 && "LADDER".equals(previousType)) {
-            pickType = 0;
-        } else if (pickType == 2 && "SNAKE".equals(previousType)) {
-            pickType = 0;
+            // Normal or null (first tile), pick any of the 3
+            pickType = tileGen.nextInt(3);
         }
 
         switch (pickType) {
