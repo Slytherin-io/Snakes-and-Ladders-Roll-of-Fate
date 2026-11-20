@@ -6,6 +6,10 @@ import java.util.List;
 import java.util.Random;
 
 public class EventManager {
+    public static final double BASE_AMBIENT_CHANCE = 0.32;
+    public static final int COOLDOWN_TURNS = 1;
+    public static final double LADDER_EVENT_CHANCE = 0.40;
+
     private List<Event> events;
     private Event activeEvent;
     private Random random;
@@ -20,7 +24,23 @@ public class EventManager {
         this.events = EventRepository.getDefaultEvents();
     }
 
-    // Selects an event specifically eligible for the player's current tile
+    // Pacing Controller: Checks if an ambient encounter should trigger for the player
+    public boolean shouldTriggerAmbientEvent(Player player) {
+        if (player == null) return false;
+        if (player.getTurnsSinceLastEvent() < COOLDOWN_TURNS) {
+            return false;
+        }
+        // Bad-luck protection: +5% chance for every safe tile traversed beyond the cooldown
+        double dynamicChance = BASE_AMBIENT_CHANCE + ((player.getTurnsSinceLastEvent() - COOLDOWN_TURNS) * 0.05);
+        return random.nextDouble() < dynamicChance;
+    }
+
+    // Ladder Selectivity: 30% chance for special climbing dilemma; 70% direct smooth climb
+    public boolean shouldTriggerLadderEvent() {
+        return random.nextDouble() < LADDER_EVENT_CHANCE;
+    }
+
+    // Selects an event specifically eligible for the player's current tile and act
     public Event selectEventForTile(int playerTilePosition, EventCategory category) {
         if (category == EventCategory.SNAKE) {
             this.activeEvent = EventRepository.createProceduralSnakeEvent(playerTilePosition);
@@ -32,9 +52,18 @@ public class EventManager {
             return activeEvent;
         }
 
-        // For NORMAL / ambient encounters: 50% chance to generate a procedural Shrine, or roll from existing pool
-        if (random.nextBoolean()) {
+        if (category == EventCategory.MERCHANT) {
+            this.activeEvent = EventRepository.createProceduralMerchantEvent(playerTilePosition);
+            return activeEvent;
+        }
+
+        // For NORMAL / ambient encounters: 40% Shrine, 30% Merchant, 30% static zoned traps/caches
+        int ambientRoll = random.nextInt(100);
+        if (ambientRoll < 40) {
             this.activeEvent = EventRepository.createProceduralShrineEvent(playerTilePosition);
+            return activeEvent;
+        } else if (ambientRoll < 70) {
+            this.activeEvent = EventRepository.createProceduralMerchantEvent(playerTilePosition);
             return activeEvent;
         }
 
@@ -85,7 +114,9 @@ public class EventManager {
     }
 
     public void triggerEvent(Player player) {
-        triggerEvent();
+        if (activeEvent != null) {
+            activeEvent.trigger(player);
+        }
     }
 
     public void resolveEvent(int choiceIndex, Player player) {

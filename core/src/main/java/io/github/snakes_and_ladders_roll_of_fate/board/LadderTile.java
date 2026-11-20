@@ -19,7 +19,7 @@ public class LadderTile extends Tile {
 
     public void applyEffect(Player player) {
         player.setPosition(destination);
-        System.out.println("Going up to " + destination);
+        System.out.println("  [ASCENT] Climbed up to Tile " + destination);
     }
 
     public int getDestination() { return destination; }
