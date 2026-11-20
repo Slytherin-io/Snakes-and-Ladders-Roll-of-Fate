@@ -127,7 +127,7 @@ public class InventoryTest {
 
         // 9. Merchant Encounter: Blood Rite (HP Payment)
         System.out.println("\n[Test 11] Merchant Blood Rite (HP Cost for Item)...");
-        Event merchantEvent = EventRepository.createProceduralMerchantEvent(10);
+        Event merchantEvent = EventRepository.createProceduralMerchantEvent(50); // Act II merchant (20 HP, 35 EXP)
         int hpBeforeRite = player.getHealth();
         // Choice 1 is Blood Rite (Cost: 20 HP for Iron Sword)
         // Free up a slot for the test
@@ -215,6 +215,43 @@ public class InventoryTest {
         snakeTile.startCombat(fightPlayer);
         if (fightPlayer.getInventory().isEmpty()) {
             throw new AssertionError("Victorious warrior should receive loot drop from slain serpent!");
+        }
+
+        // 14. Event Pacing Controller & Cooldown Tests
+        System.out.println("\n[Test 16] Pacing Controller Cooldown & Bad-Luck Protection...");
+        io.github.snakes_and_ladders_roll_of_fate.systems.EventManager eventMgr = 
+            new io.github.snakes_and_ladders_roll_of_fate.systems.EventManager();
+
+        Player pacingPlayer = new Player("Scout");
+        pacingPlayer.resetEventCooldown(); // 0 turns elapsed
+        if (eventMgr.shouldTriggerAmbientEvent(pacingPlayer)) {
+            throw new AssertionError("Ambient event should NOT trigger immediately after reset (0 turns elapsed)");
+        }
+        pacingPlayer.incrementTurnsSinceLastEvent(); // 1 turn elapsed
+        // Now eligible (turnsSinceLastEvent >= 1)
+        if (pacingPlayer.getTurnsSinceLastEvent() != 1) {
+            throw new AssertionError("Player should have 1 turn elapsed");
+        }
+
+        // 15. Act Stratification & Narrative Scaling Tests
+        System.out.println("\n[Test 17] Act Stratification & Scaling (Act I, II, III)...");
+        int act1 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(15);
+        int act2 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(50);
+        int act3 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(85);
+
+        if (act1 != 1) throw new AssertionError("Tile 15 should be in Act 1, was: " + act1);
+        if (act2 != 2) throw new AssertionError("Tile 50 should be in Act 2, was: " + act2);
+        if (act3 != 3) throw new AssertionError("Tile 85 should be in Act 3, was: " + act3);
+
+        Event act1Merchant = EventRepository.createProceduralMerchantEvent(15);
+        Event act3Merchant = EventRepository.createProceduralMerchantEvent(85);
+
+        // Act 1 blood cost should be 10 HP, Act 3 blood cost should be 35 HP
+        if (act1Merchant.getChoices().get(0).getRequirementValue() != 10) {
+            throw new AssertionError("Act 1 blood cost should be 10 HP");
+        }
+        if (act3Merchant.getChoices().get(0).getRequirementValue() != 35) {
+            throw new AssertionError("Act 3 blood cost should be 35 HP");
         }
 
         System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");

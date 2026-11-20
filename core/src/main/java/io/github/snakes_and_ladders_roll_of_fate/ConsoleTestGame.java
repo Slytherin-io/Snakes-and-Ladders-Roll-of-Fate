@@ -160,8 +160,11 @@ public class ConsoleTestGame {
             if (checkGameOver()) break;
 
             // Roll Dice and Move
+            int oldPos = currentPlayer.getPosition();
             rollForMovement(currentPlayer);
+            int newPos = currentPlayer.getPosition();
             System.out.println("\n> " + currentPlayer.getName() + " rolled a " + movementDice.getValue() + "!");
+            checkActTransition(oldPos, newPos);
 
             // Resolve tile polymorphically
             Tile currentTile = board.getTile(currentPlayer.getPosition());
@@ -276,21 +279,36 @@ public class ConsoleTestGame {
             }
         } else if (category == EventCategory.LADDER) {
             LadderTile ladderTile = (LadderTile) currentTile;
-            Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
-            if (event != null) {
-                eventManager.triggerEvent(currentPlayer);
-                System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
-                if (sc.hasNextInt()) {
-                    int choice = sc.nextInt();
-                    sc.nextLine();
-                    eventManager.resolveEvent(choice, currentPlayer);
+            boolean canClimb = true;
+
+            if (eventManager.shouldTriggerLadderEvent()) {
+                Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
+                if (event != null) {
+                    eventManager.triggerEvent(currentPlayer);
+                    System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                    if (sc.hasNextInt()) {
+                        int choice = sc.nextInt();
+                        sc.nextLine();
+                        eventManager.resolveEvent(choice, currentPlayer);
+
+                        EventChoice chosen = (choice >= 1 && choice <= event.getChoices().size())
+                            ? event.getChoices().get(choice - 1) : null;
+                        if (chosen != null && chosen.getDifficultyClass() > 0 && !chosen.didLastCheckSucceed()) {
+                            System.out.println("  [SLIPPED] Your grip gave out! You tumbled off the ladder and could not ascend!");
+                            canClimb = false;
+                        }
+                    }
                 }
+            } else {
+                System.out.println("  [STABLE ASCENT] The ladder holds firm. You climb swiftly up the slope!");
             }
-            // Player climbs up to destination
-            ladderTile.applyEffect(currentPlayer);
+
+            if (canClimb) {
+                ladderTile.applyEffect(currentPlayer);
+            }
         } else {
-            // Normal tile: 35% chance for ambient encounter (Shrine, Merchant, Trap)
-            if (Math.random() < 0.35) {
+            // Normal tile: Dynamic pacing check with cooldown & bad-luck protection
+            if (eventManager.shouldTriggerAmbientEvent(currentPlayer)) {
                 Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
                 if (event != null) {
                     eventManager.triggerEvent(currentPlayer);
@@ -300,13 +318,25 @@ public class ConsoleTestGame {
                         sc.nextLine();
                         eventManager.resolveEvent(choice, currentPlayer);
                     }
+                    currentPlayer.resetEventCooldown();
                 }
             } else {
-                // Safe peaceful landing dialogue only if no ambient event occurred
+                // Safe peaceful landing dialogue and cooldown increment
+                currentPlayer.incrementTurnsSinceLastEvent();
                 currentTile.onLand(currentPlayer);
             }
         }
         System.out.println("Current Position: " + currentPlayer.getPosition());
+    }
+
+    private void checkActTransition(int oldPos, int newPos) {
+        if (oldPos <= 30 && newPos > 30 && newPos <= 70) {
+            System.out.println("\n[ZONE TRANSITION] Entering Act II: The Jagged Crags & Caverns (Tiles 31-70)!");
+            System.out.println("  The path narrows along sheer drops. Hazards grow harsher and merchants demand heavier tolls.");
+        } else if (oldPos <= 70 && newPos > 70) {
+            System.out.println("\n[ZONE TRANSITION] Entering Act III: The Spire of Fate & Dragon's Summit (Tiles 71-100)!");
+            System.out.println("  The summit is in sight! Cosmic tempests rage as mythic trials and apex serpents guard the peak.");
+        }
     }
 
     public void displayPlayers() {

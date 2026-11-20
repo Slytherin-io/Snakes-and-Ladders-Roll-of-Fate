@@ -29,6 +29,7 @@ public class EventChoice {
     private ChoiceRequirementType requirementType = ChoiceRequirementType.NONE;
     private int requirementValue = 0;
     private ItemType requiredItemType = null;
+    private boolean lastCheckSucceeded = true;
     private static final Dice d20 = new Dice(20);
 
     // Guaranteed choice constructor
@@ -160,6 +161,10 @@ public class EventChoice {
         return onSuccess(type, value, value);
     }
 
+    public EventChoice withEffect(EventEffectType type) {
+        return onSuccess(type);
+    }
+
     public EventChoice withEffect(Item item) {
         return onSuccess(item);
     }
@@ -248,14 +253,17 @@ public class EventChoice {
             System.out.printf("  [D20 ROLL] Rolled %d against DC %d...%n", roll, difficultyClass);
 
             if (roll >= difficultyClass) {
+                lastCheckSucceeded = true;
                 System.out.println("  [SUCCESS] You passed the check!");
                 applyEffects(player, successEffects);
             } else {
+                lastCheckSucceeded = false;
                 System.out.println("  [FAILURE] You failed the check!");
                 applyEffects(player, failureEffects);
             }
         } else {
             // Guaranteed choice
+            lastCheckSucceeded = true;
             applyEffects(player, successEffects);
         }
     }
@@ -281,4 +289,5 @@ public class EventChoice {
     public ChoiceRequirementType getRequirementType() { return requirementType; }
     public int getRequirementValue() { return requirementValue; }
     public ItemType getRequiredItemType() { return requiredItemType; }
+    public boolean didLastCheckSucceed() { return lastCheckSucceeded; }
 }

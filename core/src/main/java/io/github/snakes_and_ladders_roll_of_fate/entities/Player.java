@@ -11,6 +11,7 @@ public class Player extends Entity {
     private int experience;
     private int tempAttack = 0;
     private int tempDefense = 0;
+    private int turnsSinceLastEvent = 99; // Starts ready for encounter
 
     public Player(String name) {
         this.name = name;
@@ -130,4 +131,8 @@ public class Player extends Entity {
 
     public Inventory getInventory() { return inventory; }
     public void setInventory(Inventory inventory) { this.inventory = inventory; }
+
+    public int getTurnsSinceLastEvent() { return turnsSinceLastEvent; }
+    public void incrementTurnsSinceLastEvent() { this.turnsSinceLastEvent++; }
+    public void resetEventCooldown() { this.turnsSinceLastEvent = 0; }
 }
