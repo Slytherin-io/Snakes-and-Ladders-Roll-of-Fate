@@ -32,9 +32,18 @@ public class EventManager {
             return activeEvent;
         }
 
-        // For NORMAL / ambient encounters: 50% chance to generate a procedural Shrine, or roll from existing pool
-        if (random.nextBoolean()) {
+        if (category == EventCategory.MERCHANT) {
+            this.activeEvent = EventRepository.createProceduralMerchantEvent(playerTilePosition);
+            return activeEvent;
+        }
+
+        // For NORMAL / ambient encounters: 35% Shrine, 35% Merchant, 30% general pool
+        int ambientRoll = random.nextInt(100);
+        if (ambientRoll < 35) {
             this.activeEvent = EventRepository.createProceduralShrineEvent(playerTilePosition);
+            return activeEvent;
+        } else if (ambientRoll < 70) {
+            this.activeEvent = EventRepository.createProceduralMerchantEvent(playerTilePosition);
             return activeEvent;
         }
 
@@ -85,7 +94,9 @@ public class EventManager {
     }
 
     public void triggerEvent(Player player) {
-        triggerEvent();
+        if (activeEvent != null) {
+            activeEvent.trigger(player);
+        }
     }
 
     public void resolveEvent(int choiceIndex, Player player) {

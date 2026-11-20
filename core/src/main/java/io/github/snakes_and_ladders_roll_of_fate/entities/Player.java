@@ -2,6 +2,7 @@ package io.github.snakes_and_ladders_roll_of_fate.entities;
 
 import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
 
 public class Player extends Entity {
     private String name;
@@ -34,6 +35,35 @@ public class Player extends Entity {
             this.inventory = new Inventory(4);
         }
         return inventory.addItem(item);
+    }
+
+    public boolean replaceItem(int index, Item newItem) {
+        if (inventory == null) return false;
+        return inventory.replaceItem(index, newItem);
+    }
+
+    public boolean hasItemType(ItemType type) {
+        if (inventory == null) return false;
+        for (Item item : inventory.getItems()) {
+            if (item.getItemType() == type) return true;
+        }
+        return false;
+    }
+
+    public Item findItemByType(ItemType type) {
+        if (inventory == null) return null;
+        for (Item item : inventory.getItems()) {
+            if (item.getItemType() == type) return item;
+        }
+        return null;
+    }
+
+    public boolean hasItemNamed(String name) {
+        if (inventory == null || name == null) return false;
+        for (Item item : inventory.getItems()) {
+            if (name.equalsIgnoreCase(item.getName())) return true;
+        }
+        return false;
     }
 
     public void addTempAttack(int amount) {

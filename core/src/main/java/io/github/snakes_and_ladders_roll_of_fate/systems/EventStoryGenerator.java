@@ -79,6 +79,29 @@ public class EventStoryGenerator {
         "stands steadfast against the dark abyss."
     };
 
+    // --- MERCHANT POOLS ---
+    private static final String[] MERCHANT_TITLES = {
+        "The Veiled Collector", "Wandering Relic Merchant", "Alchemist of the Crossroad", "Nomadic Scavenger"
+    };
+    private static final String[] MERCHANT_PREFIXES = {
+        "Beside a flickering lantern of cobalt flame,",
+        "Sitting atop an iron-bound chest wrapped in chains,",
+        "Emerging from the roadside mist with a rattle of glass vials,",
+        "Crouched beneath a weather-beaten canvas canopy,"
+    };
+    private static final String[] MERCHANT_SUBJECTS = {
+        "a cloaked wanderer with eyes like polished obsidian",
+        "a scarred alchemist balancing strange glowing phials",
+        "a nomadic tinker surrounded by curious implements",
+        "a mysterious dealer draped in heavy velvet robes"
+    };
+    private static final String[] MERCHANT_PITCHES = {
+        "gestures to exotic wares with a toothy grin.",
+        "murmurs that all fates may be bartered for the right price.",
+        "offers rare artifacts in exchange for vitality, lore, or gear.",
+        "displays goods that could turn the tide of your perilous ascent."
+    };
+
     // --- PUBLIC GENERATORS ---
     public static String[] generateShrineStory() {
         String title = pick(SHRINE_TITLES);
@@ -95,6 +118,12 @@ public class EventStoryGenerator {
     public static String[] generateLadderStory() {
         String title = pick(LADDER_TITLES);
         String desc = String.format("%s %s %s", pick(LADDER_PREFIXES), pick(LADDER_SUBJECTS), pick(LADDER_CALLS));
+        return new String[] { title, desc };
+    }
+
+    public static String[] generateMerchantStory() {
+        String title = pick(MERCHANT_TITLES);
+        String desc = String.format("%s %s %s", pick(MERCHANT_PREFIXES), pick(MERCHANT_SUBJECTS), pick(MERCHANT_PITCHES));
         return new String[] { title, desc };
     }
 }

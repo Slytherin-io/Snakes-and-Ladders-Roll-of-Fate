@@ -36,13 +36,22 @@ public class Event {
         return tilePosition >= minTile && tilePosition <= maxTile;
     }
 
-    public void trigger() {
+    public void trigger(Player player) {
         System.out.printf("%n=== [EVENT: %s] %s ===%n", category, title.toUpperCase());
         System.out.println(description);
         System.out.println("What will you do?");
         for (int i = 0; i < choices.size(); i++) {
-            System.out.printf("  [%d] %s%n", (i + 1), choices.get(i).getText());
+            EventChoice choice = choices.get(i);
+            if (player != null && !choice.isAvailable(player)) {
+                System.out.printf("  [%d] [LOCKED] %s %s%n", (i + 1), choice.getText(), choice.getRequirementDescription());
+            } else {
+                System.out.printf("  [%d] %s%n", (i + 1), choice.getText());
+            }
         }
+    }
+
+    public void trigger() {
+        trigger(null);
     }
 
     public void resolve(int choiceIndex, Player player) {
@@ -51,6 +60,10 @@ public class Event {
             return;
         }
         EventChoice chosen = choices.get(choiceIndex - 1);
+        if (player != null && !chosen.isAvailable(player)) {
+            System.out.println("  [UNAVAILABLE] You cannot choose this! " + chosen.getRequirementDescription());
+            return;
+        }
         System.out.println("\n> " + player.getName() + " chose: " + chosen.getText());
         chosen.execute(player);
     }

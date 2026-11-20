@@ -38,6 +38,15 @@ public class Inventory {
         return null;
     }
 
+    public boolean replaceItem(int index, Item newItem) {
+        if (index >= 0 && index < items.size() && newItem != null) {
+            Item oldItem = items.set(index, newItem);
+            System.out.println("  [SWAPPED] Discarded " + oldItem.getName() + " and acquired " + newItem.getName() + ".");
+            return true;
+        }
+        return false;
+    }
+
     public boolean useItem(int index, Player player) {
         if (index < 0 || index >= items.size()) {
             System.out.println("  [INVALID SLOT] No item in slot " + (index + 1) + ".");

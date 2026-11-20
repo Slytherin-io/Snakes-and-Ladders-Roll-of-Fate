@@ -4,6 +4,8 @@ import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventChoice;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffect;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
@@ -48,6 +50,44 @@ public class ConsoleTestGame {
 
     public void startGame() {
         setGameMode(); // Single Player (for testing only)
+
+        // Configure Option B Interactive Item Swap Handler
+        EventEffect.setItemSwapHandler((player, newItem) -> {
+            System.out.printf("%n  [INVENTORY FULL] You found [%s], but your bag is full (%d/%d).%n",
+                newItem.getName(), player.getInventory().size(), player.getInventory().getCapacity());
+            player.getInventory().displayInventory();
+            System.out.print("Select a slot (1-" + player.getInventory().size() + ") to discard and replace, or 0 to leave it behind: ");
+            if (sc.hasNextInt()) {
+                int slot = sc.nextInt();
+                sc.nextLine();
+                if (slot >= 1 && slot <= player.getInventory().size()) {
+                    player.replaceItem(slot - 1, newItem);
+                } else {
+                    System.out.println("  [ABANDONED] Left " + newItem.getName() + " behind.");
+                }
+            } else {
+                if (sc.hasNext()) sc.nextLine();
+                System.out.println("  [ABANDONED] Left " + newItem.getName() + " behind.");
+            }
+        });
+
+        // Configure Interactive Item Barter Handler
+        EventChoice.setItemBarterHandler(player -> {
+            if (player.getInventory() == null || player.getInventory().isEmpty()) return null;
+            System.out.println("\nSelect an item to give to the merchant in trade:");
+            player.getInventory().displayInventory();
+            System.out.print("Choose slot to trade away (1-" + player.getInventory().size() + "): ");
+            if (sc.hasNextInt()) {
+                int slot = sc.nextInt();
+                sc.nextLine();
+                if (slot >= 1 && slot <= player.getInventory().size()) {
+                    return player.getInventory().removeItem(slot - 1);
+                }
+            } else {
+                if (sc.hasNext()) sc.nextLine();
+            }
+            return player.getInventory().removeItem(0);
+        });
 
         players = new ArrayList<>();
         createPlayer();
@@ -209,7 +249,7 @@ public class ConsoleTestGame {
             Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.SNAKE);
             int choice = 2; // Default to sliding if skipped
             if (event != null) {
-                eventManager.triggerEvent();
+                eventManager.triggerEvent(currentPlayer);
                 System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
                 if (sc.hasNextInt()) {
                     choice = sc.nextInt();
@@ -218,7 +258,7 @@ public class ConsoleTestGame {
                 }
             }
 
-            // If Choice 1 was selected and player survived, they resisted the drop!
+            // If Choice 1 was selected and player survived, they resisted the drop
             if (choice == 1 && currentPlayer.getHealth() > 0) {
                 System.out.println("  [RESISTED] You stood your ground and fought off the serpent, resisting the slide!");
             } else {
@@ -229,7 +269,7 @@ public class ConsoleTestGame {
             // Trigger Ladder Event before / during climb
             Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
             if (event != null) {
-                eventManager.triggerEvent();
+                eventManager.triggerEvent(currentPlayer);
                 System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
                 if (sc.hasNextInt()) {
                     int choice = sc.nextInt();
@@ -245,7 +285,7 @@ public class ConsoleTestGame {
             if (Math.random() < 0.35) {
                 Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
                 if (event != null) {
-                    eventManager.triggerEvent();
+                    eventManager.triggerEvent(currentPlayer);
                     System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
                     if (sc.hasNextInt()) {
                         int choice = sc.nextInt();
