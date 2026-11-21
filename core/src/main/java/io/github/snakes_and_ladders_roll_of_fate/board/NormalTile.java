@@ -8,6 +8,5 @@ public class NormalTile extends Tile {
     @Override
     public void onLand(Player player) {
         System.out.println(dialogue.createNormalDialogue());
-        // Safe tile, no changes to player
     }
 }

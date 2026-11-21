@@ -13,6 +13,10 @@ public class Player extends Entity {
         this.name = name;
         this.level = 1;
         this.experience = 0;
+<<<<<<< Updated upstream
+=======
+        this.inventory = new Inventory(4);
+>>>>>>> Stashed changes
     }
 
     public void useItem(Item item) {}
