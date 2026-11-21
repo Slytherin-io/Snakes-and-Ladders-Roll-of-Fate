@@ -8,6 +8,7 @@ public class Player extends Entity {
     private String name;
     private Inventory inventory;
     private int level;
+    private int expTresh;
     private int experience;
     private int tempAttack = 0;
     private int tempDefense = 0;
@@ -19,6 +20,7 @@ public class Player extends Entity {
         this.level = 1;
         this.experience = 0;
         this.inventory = new Inventory(4);
+        this.expTresh = 100;
     }
 
     public Player(String name, CharacterClass characterClass) {
@@ -129,15 +131,29 @@ public class Player extends Entity {
     }
 
     public void gainExperience(int exp) {
-        this.experience += exp;
-        if (this.experience >= 100) {
+        // Fetch the EXP bonus from the character class (defaults to 0 if no class is selected)
+        int bonusExp = (characterClass != null) ? characterClass.getExpBonus() : 0;
+        int totalExpGained = exp + bonusExp;
+
+        this.experience += totalExpGained;
+
+        // Optional: Notify the player that they received a class bonus
+        if (bonusExp > 0) {
+            System.out.printf("  [CLASS BONUS] %s earns +%d bonus EXP!%n",
+                characterClass.getName().trim(), bonusExp);
+        }
+
+        // Check for level up
+        if (this.experience >= expTresh) {
             levelUp();
+            setExperience(0);
+            this.expTresh += 20;
         }
     }
 
     public void levelUp() {
         this.level++;
-        setAttack(getBaseAttack() + 2);   // +2 Attack every level
+        setAttack(getBaseAttack() + 3);   // +2 Attack every level
         setDefense(getBaseDefense() + 1); // +1 Defense every level
         setHealth(getHealth() + 20);// Heal up on level up!
         System.out.println("Leveled Up!");//For level up tests

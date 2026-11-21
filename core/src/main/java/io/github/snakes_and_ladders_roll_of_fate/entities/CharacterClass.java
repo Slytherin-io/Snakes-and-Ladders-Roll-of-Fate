@@ -10,6 +10,7 @@ public enum CharacterClass {
         90,
         6,
         4,
+        3,
         "Feline Agility: High speed and quick strikes in mortal peril.",
         "Cat's Agility Charm",
         "Graceful leap: Advance 2 tiles forward"
@@ -20,6 +21,7 @@ public enum CharacterClass {
         120,
         4,
         7,
+        1,
         "Iron Shell: Heavy armor and natural resilience against hazards.",
         "Turtle Shell Buckler",
         "+3 DEF (1 Turn Buff)"
@@ -29,6 +31,7 @@ public enum CharacterClass {
         "Cunning Trickster",
         95,
         7,
+        3,
         3,
         "Silver Tongue: Sharp offensive instincts and keen survival senses.",
         "Fox's Hunting Fang",
@@ -40,6 +43,7 @@ public enum CharacterClass {
         85,
         5,
         4,
+        2,
         "Soaring Wings: Master of vertical elevation and aerial mobility.",
         "Feather of the Gale",
         "Wind gust: Soar 3 tiles forward"
@@ -50,17 +54,19 @@ public enum CharacterClass {
     private final int baseHealth;
     private final int baseAttack;
     private final int baseDefense;
+    private final int expBonus;
     private final String perkDescription;
     private final String startingItemName;
     private final String startingItemDescription;
 
-    CharacterClass(String name, String title, int baseHealth, int baseAttack, int baseDefense,
+    CharacterClass(String name, String title, int baseHealth, int baseAttack, int baseDefense, int expBonus,
                    String perkDescription, String startingItemName, String startingItemDescription) {
         this.name = name;
         this.title = title;
         this.baseHealth = baseHealth;
         this.baseAttack = baseAttack;
         this.baseDefense = baseDefense;
+        this.expBonus = expBonus;
         this.perkDescription = perkDescription;
         this.startingItemName = startingItemName;
         this.startingItemDescription = startingItemDescription;
@@ -71,6 +77,7 @@ public enum CharacterClass {
     public int getBaseHealth() { return baseHealth; }
     public int getBaseAttack() { return baseAttack; }
     public int getBaseDefense() { return baseDefense; }
+    public int getExpBonus(){return expBonus; }
     public String getPerkDescription() { return perkDescription; }
     public String getStartingItemName() { return startingItemName; }
     public String getStartingItemDescription() { return startingItemDescription; }
