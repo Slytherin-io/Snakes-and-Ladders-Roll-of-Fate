@@ -26,6 +26,7 @@ public class BattleSystem {
     public int calculateDamage(Entity attacker, Entity defender) {
         int roll = combatDice.roll();
         int baseDamage = Math.max(1, attacker.getAttack() - defender.getDefense());
+
         if (roll == 20) {
             System.out.println("  ⚔️ CRITICAL HIT (Rolled a 20)!");
             return Math.max(2, baseDamage * 2 + 5);
@@ -197,7 +198,9 @@ public class BattleSystem {
         this.battleState = "ENDED";
     }
 
+    // Getters & Setters
     public String getBattleState() {
         return battleState;
     }
+
 }

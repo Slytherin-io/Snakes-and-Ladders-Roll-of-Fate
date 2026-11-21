@@ -91,12 +91,14 @@ public class SnakeTile extends Tile {
                 // Game Over logic would go here
                 break;
         }
+
     }
 
     public void applyEffect(Player player) {
         player.setPosition(destination);
         System.out.println("  [SLIDE] You slid down to Tile " + destination);
     }
+
 
     public int getDestination() { return destination; }
     public void setDestination(int destination) { this.destination = destination; }
