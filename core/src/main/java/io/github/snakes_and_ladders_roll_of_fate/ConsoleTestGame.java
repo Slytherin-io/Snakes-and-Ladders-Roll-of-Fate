@@ -406,7 +406,7 @@ public class ConsoleTestGame {
             System.out.println("\n--- SELECT ANIMAL CHAMPION FOR PLAYER " + i + " ---");
             for (int c = 0; c < availableClasses.length; c++) {
                 CharacterClass cls = availableClasses[c];
-                System.out.printf("  [%d] %s (%s) - HP: %d | ATK: %d | DEF: %d | EXP Bonus: %d | Gear: %s%n",
+                System.out.printf("  [%d] %s (%s) - HP: %d | ATK: %d | DEF: %d | EXP Bonus: %d%%  | Gear: %s%n",
                     (c + 1), cls.getName(), cls.getTitle(), cls.getBaseHealth(), cls.getBaseAttack(), cls.getBaseDefense(),cls.getExpBonus(), cls.getStartingItemName());
             }
             int choice = 1;

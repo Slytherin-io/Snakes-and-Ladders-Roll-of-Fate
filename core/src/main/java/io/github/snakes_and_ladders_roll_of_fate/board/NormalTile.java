@@ -9,6 +9,6 @@ public class NormalTile extends Tile {
     @Override
     public void onLand(Player player) {
         System.out.println(dialogue.createNormalDialogue());
-        player.gainExperience(10 + getPosition() / 3);
+        player.gainExperience((int) (10 + getPosition() * 0.05)); // player gains 10 + 5% of tile position as exp
     }
 }

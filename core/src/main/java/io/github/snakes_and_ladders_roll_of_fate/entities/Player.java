@@ -8,7 +8,7 @@ public class Player extends Entity {
     private String name;
     private Inventory inventory;
     private int level;
-    private int expTresh;
+    private int expThresh;
     private int experience;
     private int tempAttack = 0;
     private int tempDefense = 0;
@@ -20,7 +20,7 @@ public class Player extends Entity {
         this.level = 1;
         this.experience = 0;
         this.inventory = new Inventory(4);
-        this.expTresh = 100;
+        this.expThresh = 100;
     }
 
     public Player(String name, CharacterClass characterClass) {
@@ -131,23 +131,26 @@ public class Player extends Entity {
     }
 
     public void gainExperience(int exp) {
-        // Fetch the EXP bonus from the character class (defaults to 0 if no class is selected)
-        int bonusExp = (characterClass != null) ? characterClass.getExpBonus() : 0;
+        // 1. Get the percentage (defaults to 0 if no class is selected)
+        int bonusPercent = (characterClass != null) ? characterClass.getExpBonus() : 0;
+
+        // 2. Calculate the bonus EXP using integer math (e.g., 50 * 20 / 100 = 10)
+        int bonusExp = (exp * bonusPercent) / 100;
         int totalExpGained = exp + bonusExp;
 
         this.experience += totalExpGained;
 
         // Optional: Notify the player that they received a class bonus
         if (bonusExp > 0) {
-            System.out.printf("  [CLASS BONUS] %s earns +%d bonus EXP!%n",
-                characterClass.getName().trim(), bonusExp);
+            System.out.printf("  [CLASS BONUS] %s earns +%d bonus EXP (%d%%)!%n",
+                characterClass.getName().trim(), bonusExp, bonusPercent);
         }
 
         // Check for level up
-        if (this.experience >= expTresh) {
+        if (this.experience >= expThresh) {
             levelUp();
             setExperience(0);
-            this.expTresh += 20;
+            this.expThresh = (int) (this.expThresh + (expThresh * 0.10));// Exp threshold is increased by 10% every level
         }
     }
 

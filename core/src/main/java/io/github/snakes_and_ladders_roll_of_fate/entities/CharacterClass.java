@@ -10,7 +10,7 @@ public enum CharacterClass {
         90,
         6,
         4,
-        3,
+        15,
         "Feline Agility: High speed and quick strikes in mortal peril.",
         "Cat's Agility Charm",
         "Graceful leap: Advance 2 tiles forward"
@@ -21,7 +21,7 @@ public enum CharacterClass {
         120,
         4,
         7,
-        1,
+        5,
         "Iron Shell: Heavy armor and natural resilience against hazards.",
         "Turtle Shell Buckler",
         "+3 DEF (1 Turn Buff)"
@@ -32,7 +32,7 @@ public enum CharacterClass {
         95,
         7,
         3,
-        3,
+        20,
         "Silver Tongue: Sharp offensive instincts and keen survival senses.",
         "Fox's Hunting Fang",
         "+3 ATK (1 Turn Buff)"
@@ -43,7 +43,7 @@ public enum CharacterClass {
         85,
         5,
         4,
-        2,
+        10,
         "Soaring Wings: Master of vertical elevation and aerial mobility.",
         "Feather of the Gale",
         "Wind gust: Soar 3 tiles forward"
