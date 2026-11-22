@@ -85,7 +85,7 @@ public class EventEffect {
                 break;
 
             case ITEM:
-                Item toGrant = isRandomLoot ? Item.createRandomLoot() : itemReward;
+                Item toGrant = isRandomLoot ? Item.createRandomLoot(player.getLevel()) : itemReward;
                 if (toGrant != null) {
                     boolean added = player.addItem(toGrant);
                     if (!added) {
