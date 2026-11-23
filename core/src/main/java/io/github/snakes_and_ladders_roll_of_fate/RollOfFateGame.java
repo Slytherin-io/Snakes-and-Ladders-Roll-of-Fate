@@ -41,13 +41,41 @@ public class RollOfFateGame extends Game {
     }
 
     public void startGame() {
-        setGameMode(GameMode.SINGLE_PLAYER); // Single Player (for testing only)
+        if (selectedGameMode == null) {
+            setGameMode(GameMode.SINGLE_PLAYER);
+        }
 
         players = new ArrayList<>();
         createPlayer();
 
         currentTurn = 0; // Player 1
 
+        board = new Board(100);
+        board.generateBoard();
+
+        gameState = "PLAYING";
+        setScreen(new BoardScreen(this));
+    }
+
+    public void startGame(GameMode mode) {
+        setGameMode(mode);
+        startGame();
+    }
+
+    /**
+     * Starts the game with each player assigned to their chosen CharacterClass.
+     */
+    public void startGameWithClasses(List<io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass> chosenClasses) {
+        this.totalPlayers = chosenClasses.size();
+        this.players = new ArrayList<>();
+
+        for (int i = 0; i < chosenClasses.size(); i++) {
+            Player player = new Player("Player " + (i + 1), chosenClasses.get(i));
+            player.setPosition(1);
+            players.add(player);
+        }
+
+        currentTurn = 0;
         board = new Board(100);
         board.generateBoard();
 
@@ -101,6 +129,7 @@ public class RollOfFateGame extends Game {
 
     @Override
     public void render() {
+        // Press F11 anytime to toggle between Movable Window and Fullscreen
         if (Gdx.input.isKeyJustPressed(Input.Keys.F11)) {
             if (Gdx.graphics.isFullscreen()) {
                 Gdx.graphics.setWindowedMode(1280, 720); // Switch to windowed
@@ -108,6 +137,15 @@ public class RollOfFateGame extends Game {
                 Gdx.graphics.setFullscreenMode(Gdx.graphics.getDisplayMode()); // Switch to fullscreen
             }
         }
+
+        // Press F12 or Print Screen anytime to save a clean, uncompressed PNG screenshot
+//        if (Gdx.input.isKeyJustPressed(Input.Keys.F12) || Gdx.input.isKeyJustPressed(Input.Keys.PRINT_SCREEN)) {
+//            com.badlogic.gdx.graphics.Pixmap pixmap = com.badlogic.gdx.utils.ScreenUtils.getFrameBufferPixmap(0, 0, Gdx.graphics.getBackBufferWidth(), Gdx.graphics.getBackBufferHeight());
+//            com.badlogic.gdx.files.FileHandle file = Gdx.files.local("screenshots/screenshot_" + System.currentTimeMillis() + ".png");
+//            com.badlogic.gdx.graphics.PixmapIO.writePNG(file, pixmap);
+//            pixmap.dispose();
+//            Gdx.app.log("Screenshot", "Saved to " + file.file().getAbsolutePath());
+//        }
 
         super.render();
     }
