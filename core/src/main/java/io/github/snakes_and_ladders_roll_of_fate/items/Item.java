@@ -45,24 +45,14 @@ public class Item {
         return new Item(name, ItemType.EQUIPMENT, rolledDurability, effectType, effectValue, effect);
     }
 
-    // Factory method for generating random loot drops
+    // Factory method for generating random loot drops (Defaults to Tier 1)
     public static Item createRandomLoot() {
-        int roll = random.nextInt(6);
-        switch (roll) {
-            case 0:
-                return createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP");
-            case 1:
-                return createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP");
-            case 2:
-                return createEquipment("Iron Sword", EventEffectType.ATTACK, 4, 2, 4, "+4 ATK (1 Turn Buff)");
-            case 3:
-                return createEquipment("Reinforced Shield", EventEffectType.DEFENSE, 4, 2, 5, "+4 DEF (1 Turn Buff)");
-            case 4:
-                return createConsumable("Hermes Feather", EventEffectType.MOVE, 3, "Advance 3 tiles forward");
-            case 5:
-            default:
-                return createEquipment("Serpent Fang Dagger", EventEffectType.ATTACK, 6, 2, 3, "+6 ATK (1 Turn Buff)");
-        }
+        return ItemGenerator.generateItem(1);
+    }
+
+    // Overloaded method to generate scaled loot based on a tier (e.g., Player Level or Board Position)
+    public static Item createRandomLoot(int tier) {
+        return ItemGenerator.generateItem(tier);
     }
 
     // Applies the item effect to the player and handles durability degradation
