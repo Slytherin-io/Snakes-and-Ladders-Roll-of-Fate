@@ -19,6 +19,9 @@ apply plugin: 'io.github.fourlastor.construo'
 import io.github.fourlastor.construo.Target
 
 sourceSets.main.resources.srcDirs += [ rootProject.file('assets').path ]
+processResources {
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
 application.mainClass = 'io.github.snakes_and_ladders_roll_of_fate.lwjgl3.Lwjgl3Launcher'
 application.applicationName = appName
 eclipse.project.name = appName + '-lwjgl3'

@@ -50,6 +50,11 @@ public class Player extends Entity {
         return characterClass != null ? characterClass.getBaseHealth() : 100;
     }
 
+    @Override
+    public void setHealth(int health) {
+        super.setHealth(Math.min(getMaxHealth(), Math.max(0, health)));
+    }
+
     public boolean useItem(int slotIndex) {
         if (inventory == null) return false;
         return inventory.useItem(slotIndex, this);
@@ -135,6 +140,8 @@ public class Player extends Entity {
     }
 
     public void gainExperience(int exp) {
+        if (exp <= 0) return;
+
         // 1. Get the percentage (defaults to 0 if no class is selected)
         int bonusPercent = (characterClass != null) ? characterClass.getExpBonus() : 0;
 
@@ -150,11 +157,11 @@ public class Player extends Entity {
                 characterClass.getName().trim(), bonusExp, bonusPercent);
         }
 
-        // Check for level up
-        if (this.experience >= expThresh) {
+        // Check for level up (preserve rollover surplus experience)
+        while (this.experience >= expThresh) {
+            this.experience -= expThresh;
             levelUp();
-            setExperience(0);
-            this.expThresh = (int) (this.expThresh + (expThresh * 0.10));// Exp threshold is increased by 10% every level
+            this.expThresh = (int) (this.expThresh + (this.expThresh * 0.10)); // Exp threshold is increased by 10% every level
         }
     }
 
@@ -174,7 +181,9 @@ public class Player extends Entity {
 
     public int getLevel() { return level; }
     public int getExperience() { return experience; }
-    public void setExperience(int experience) {this.experience = experience;}
+    public void setExperience(int experience) { this.experience = Math.max(0, experience); }
+    public int getExpThresh() { return expThresh; }
+    public void setExpThresh(int expThresh) { this.expThresh = expThresh; }
 
     public Inventory getInventory() { return inventory; }
     public void setInventory(Inventory inventory) { this.inventory = inventory; }

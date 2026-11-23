@@ -198,6 +198,18 @@ public class BattleSystem {
         this.battleState = "ENDED";
     }
 
+    public int getLastRoll() {
+        return combatDice.getValue();
+    }
+
+    public boolean isLastRollCritical() {
+        return combatDice.getValue() == 20;
+    }
+
+    public boolean isLastRollMiss() {
+        return combatDice.getValue() == 1;
+    }
+
     // Getters & Setters
     public String getBattleState() {
         return battleState;

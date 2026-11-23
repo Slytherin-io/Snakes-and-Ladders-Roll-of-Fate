@@ -16,56 +16,99 @@ public class EventRepository {
         int act = EventStoryGenerator.getAct(tilePosition);
         Event merchant = new Event(story[0], story[1], EventCategory.MERCHANT, 1, 100);
 
+        List<EventChoice> merchantDeck = new ArrayList<>();
+
         if (act == 1) {
-            // Act I: Gentle beginner trades
-            merchant.addChoice(EventChoice.createBloodCostChoice(
+            // Act I: Gentle beginner trades (Shuffled pool)
+            merchantDeck.add(EventChoice.createBloodCostChoice(
                 "Blood Rite: Cut your palm upon the merchant's ritual dagger",
                 10,
                 Item.createEquipment("Bronze Dagger", EventEffectType.ATTACK, 2, 2, 3, "+2 ATK (1 Turn Buff)")
             ));
-            merchant.addChoice(EventChoice.createExpCostChoice(
+            merchantDeck.add(EventChoice.createExpCostChoice(
                 "Knowledge Tribute: Recite ancient martial lore from memory",
                 20,
                 Item.createEquipment("Wooden Buckler", EventEffectType.DEFENSE, 2, 2, 4, "+2 DEF (1 Turn Buff)")
             ));
-            merchant.addChoice(EventChoice.createBarterChoice(
+            merchantDeck.add(EventChoice.createBarterChoice(
                 "Barter: Trade a relic from your pack for herbal medicine",
                 Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP")
             ));
+            merchantDeck.add(new EventChoice("Haggle: Negotiate sharply with the peddler", 10)
+                .onSuccess(Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 20, "Restores 20 HP"))
+                .onFailure(EventEffectType.EXPERIENCE, 8));
+            merchantDeck.add(EventChoice.createBloodCostChoice(
+                "Mystery Relic: Offer life essence for a sealed package",
+                8,
+                null
+            ).onSuccess(EventEffectType.ITEM));
+            merchantDeck.add(EventChoice.createExpCostChoice(
+                "Tribute for Provisions: Share field lore for refreshing spring water",
+                15,
+                null
+            ).onSuccess(EventEffectType.HEALTH, 15, 25));
         } else if (act == 2) {
-            // Act II: Substantial mid-game trades
-            merchant.addChoice(EventChoice.createBloodCostChoice(
+            // Act II: Substantial mid-game trades (Shuffled pool)
+            merchantDeck.add(EventChoice.createBloodCostChoice(
                 "Blood Rite: Swear a blood oath upon the tempered iron blade",
                 20,
                 Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 4, 2, 4, "+4 ATK (1 Turn Buff)")
             ));
-            merchant.addChoice(EventChoice.createExpCostChoice(
+            merchantDeck.add(EventChoice.createExpCostChoice(
                 "Knowledge Tribute: Impart strategic battlefield wisdom",
                 35,
                 Item.createEquipment("Reinforced Shield", EventEffectType.DEFENSE, 4, 2, 5, "+4 DEF (1 Turn Buff)")
             ));
-            merchant.addChoice(EventChoice.createBarterChoice(
+            merchantDeck.add(EventChoice.createBarterChoice(
                 "Barter: Relinquish gear in exchange for an alchemical elixir",
                 Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP")
             ));
+            merchantDeck.add(new EventChoice("Haggle: Pressure the stubborn cavern trader", 11)
+                .onSuccess(Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 40, "Restores 40 HP"))
+                .onFailure(EventEffectType.EXPERIENCE, 18));
+            merchantDeck.add(EventChoice.createBloodCostChoice(
+                "Mystery Relic: Bind your blood to an unsealed iron coffer",
+                16,
+                null
+            ).onSuccess(EventEffectType.ITEM));
+            merchantDeck.add(EventChoice.createExpCostChoice(
+                "Tribute for Concoction: Impart lost secrets for restorative draft",
+                30,
+                null
+            ).onSuccess(EventEffectType.HEALTH, 30, 45));
         } else {
-            // Act III: Mythic summit trades for high stakes
-            merchant.addChoice(EventChoice.createBloodCostChoice(
+            // Act III: Mythic summit trades for high stakes (Shuffled pool)
+            merchantDeck.add(EventChoice.createBloodCostChoice(
                 "Blood Rite: Offer deep life essence for the mythical dragon blade",
                 35,
                 Item.createEquipment("Dragon-Slayer Blade", EventEffectType.ATTACK, 6, 3, 5, "+6 ATK (1 Turn Buff)")
             ));
-            merchant.addChoice(EventChoice.createExpCostChoice(
+            merchantDeck.add(EventChoice.createExpCostChoice(
                 "Knowledge Tribute: Surrender memories of past triumphs for the summit's aegis",
                 60,
                 Item.createEquipment("Aegis of the Summit", EventEffectType.DEFENSE, 6, 3, 5, "+6 DEF (1 Turn Buff)")
             ));
-            merchant.addChoice(EventChoice.createBarterChoice(
+            merchantDeck.add(EventChoice.createBarterChoice(
                 "Barter: Sacrifice your finest inventory treasure for divine ambrosia",
                 Item.createConsumable("Celestial Ambrosia", EventEffectType.HEALTH, 80, "Restores 80 HP")
             ));
+            merchantDeck.add(new EventChoice("Haggle: Match wits against the celestial merchant", 13)
+                .onSuccess(Item.createConsumable("Celestial Ambrosia", EventEffectType.HEALTH, 65, "Restores 65 HP"))
+                .onFailure(EventEffectType.EXPERIENCE, 30));
+            merchantDeck.add(EventChoice.createBloodCostChoice(
+                "Mystery Relic: Pierce your heart's flame for an apex curiosity",
+                28,
+                null
+            ).onSuccess(EventEffectType.ITEM));
         }
 
+        Collections.shuffle(merchantDeck);
+        // Present 2-3 unpredictable wares/deals
+        merchant.addChoice(merchantDeck.get(0));
+        merchant.addChoice(merchantDeck.get(1));
+        if (merchantDeck.size() > 2) {
+            merchant.addChoice(merchantDeck.get(2));
+        }
         merchant.addChoice(new EventChoice("Decline and walk away safely"));
         return merchant;
     }

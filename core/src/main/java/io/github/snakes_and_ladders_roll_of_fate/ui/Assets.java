@@ -38,11 +38,9 @@ public class Assets {
     public static final AssetDescriptor<Texture> ICON_MULTI =
         new AssetDescriptor<>("img/icon_multi.png", Texture.class);
 
-    // =========================================================================
-    // Character sprites
-    // PLACEHOLDER NOTE: When your real character pixel sprites are ready,
-    // update the file paths below (e.g. "img/characters/cat.png")
-    // =========================================================================
+    // Character sprites (Frame 0: Idle / Portrait, 224x224 - 75% enlarged)
+    public static final int CHAR_FRAME_SIZE = 224;
+
     public static final AssetDescriptor<Texture> CHAR_CAT =
         new AssetDescriptor<>("img/char_cat.png", Texture.class);
     public static final AssetDescriptor<Texture> CHAR_TURTLE =
@@ -51,6 +49,16 @@ public class Assets {
         new AssetDescriptor<>("img/char_fox.png", Texture.class);
     public static final AssetDescriptor<Texture> CHAR_RACCOON =
         new AssetDescriptor<>("img/char_raccoon.png", Texture.class);
+
+    // Animated character walk spritesheets (224x224 per frame, 75% enlarged, grounded at common baseline)
+    public static final AssetDescriptor<Texture> CHAR_CAT_WALK =
+        new AssetDescriptor<>("img/char_cat_walk.png", Texture.class);
+    public static final AssetDescriptor<Texture> CHAR_TURTLE_WALK =
+        new AssetDescriptor<>("img/char_turtle_walk.png", Texture.class);
+    public static final AssetDescriptor<Texture> CHAR_FOX_WALK =
+        new AssetDescriptor<>("img/char_fox_walk.png", Texture.class);
+    public static final AssetDescriptor<Texture> CHAR_RACCOON_WALK =
+        new AssetDescriptor<>("img/char_raccoon_walk.png", Texture.class);
 
     // Animated loading spinner spritesheet (576x576, 6x6 grid, 96x96 per frame)
     public static final AssetDescriptor<Texture> LOADING_SNAKE =
@@ -77,6 +85,21 @@ public class Assets {
     // In-Game HUD Visuals
     public static final AssetDescriptor<Texture> ICON_DICE_D6 =
         new AssetDescriptor<>("img/icon_dice_d6.png", Texture.class);
+
+    // Dice Faces (dice_1.png through dice_6.png)
+    public static final AssetDescriptor<Texture> DICE_1 =
+        new AssetDescriptor<>("img/dice_1.png", Texture.class);
+    public static final AssetDescriptor<Texture> DICE_2 =
+        new AssetDescriptor<>("img/dice_2.png", Texture.class);
+    public static final AssetDescriptor<Texture> DICE_3 =
+        new AssetDescriptor<>("img/dice_3.png", Texture.class);
+    public static final AssetDescriptor<Texture> DICE_4 =
+        new AssetDescriptor<>("img/dice_4.png", Texture.class);
+    public static final AssetDescriptor<Texture> DICE_5 =
+        new AssetDescriptor<>("img/dice_5.png", Texture.class);
+    public static final AssetDescriptor<Texture> DICE_6 =
+        new AssetDescriptor<>("img/dice_6.png", Texture.class);
+
     public static final AssetDescriptor<Texture> ICON_SATCHEL =
         new AssetDescriptor<>("img/icon_bag.png", Texture.class);
     public static final AssetDescriptor<Texture> ICON_HEART =
@@ -101,12 +124,56 @@ public class Assets {
      * Helper to retrieve the texture descriptor for any CharacterClass enum.
      */
     public static AssetDescriptor<Texture> getCharacterTexture(io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass characterClass) {
+        if (characterClass == null) return CHAR_CAT;
         switch (characterClass) {
             case CAT: return CHAR_CAT;
             case TURTLE: return CHAR_TURTLE;
             case FOX: return CHAR_FOX;
             case RACCOON: return CHAR_RACCOON;
             default: return CHAR_CAT;
+        }
+    }
+
+    /**
+     * Helper to retrieve the animated walking spritesheet descriptor for any CharacterClass enum.
+     */
+    public static AssetDescriptor<Texture> getCharacterWalkSheet(io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass characterClass) {
+        if (characterClass == null) return CHAR_CAT_WALK;
+        switch (characterClass) {
+            case CAT: return CHAR_CAT_WALK;
+            case TURTLE: return CHAR_TURTLE_WALK;
+            case FOX: return CHAR_FOX_WALK;
+            case RACCOON: return CHAR_RACCOON_WALK;
+            default: return CHAR_CAT_WALK;
+        }
+    }
+
+    /**
+     * Number of frames in each character's walking cycle spritesheet.
+     */
+    public static int getCharacterWalkFrameCount(io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass characterClass) {
+        if (characterClass == null) return 4;
+        switch (characterClass) {
+            case CAT: return 3;
+            case TURTLE: return 4;
+            case FOX: return 6;
+            case RACCOON: return 6;
+            default: return 4;
+        }
+    }
+
+    /**
+     * Helper to retrieve the texture descriptor for a dice face value (1-6).
+     */
+    public static AssetDescriptor<Texture> getDiceTexture(int faceValue) {
+        switch (faceValue) {
+            case 1: return DICE_1;
+            case 2: return DICE_2;
+            case 3: return DICE_3;
+            case 4: return DICE_4;
+            case 5: return DICE_5;
+            case 6: return DICE_6;
+            default: return DICE_6;
         }
     }
 
@@ -140,6 +207,10 @@ public class Assets {
         manager.load(CHAR_TURTLE);
         manager.load(CHAR_FOX);
         manager.load(CHAR_RACCOON);
+        manager.load(CHAR_CAT_WALK);
+        manager.load(CHAR_TURTLE_WALK);
+        manager.load(CHAR_FOX_WALK);
+        manager.load(CHAR_RACCOON_WALK);
         manager.load(LOADING_SNAKE);
         manager.load(ACT1_BG);
         manager.load(ACT2_BG);
@@ -148,6 +219,12 @@ public class Assets {
         manager.load(TILE_STONE_SNAKE);
         manager.load(TILE_STONE_LADDER);
         manager.load(ICON_DICE_D6);
+        manager.load(DICE_1);
+        manager.load(DICE_2);
+        manager.load(DICE_3);
+        manager.load(DICE_4);
+        manager.load(DICE_5);
+        manager.load(DICE_6);
         manager.load(ICON_SATCHEL);
         manager.load(ICON_HEART);
         manager.load(ICON_SHIELD);
