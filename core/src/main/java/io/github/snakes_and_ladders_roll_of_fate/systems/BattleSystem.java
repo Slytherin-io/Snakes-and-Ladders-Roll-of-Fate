@@ -1,218 +1,171 @@
 package io.github.snakes_and_ladders_roll_of_fate.systems;
 
-import io.github.snakes_and_ladders_roll_of_fate.entities.*;
+import com.badlogic.gdx.utils.Timer;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Entity;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
-import java.util.Scanner;
+import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 
+/**
+ * UI-driven battle state machine for LibGDX.
+ * No Scanner, no while-loop: BattleScreen buttons call the onPlayerX() methods,
+ * and the enemy turn runs on a Timer so the 60 FPS render loop never freezes.
+ */
 public class BattleSystem {
-    private Entity attacker;
-    private Entity defender;
-    private String battleState;
-    private Dice combatDice = new Dice(20);
 
-    // Enum to track how the battle ended
+    public enum BattleState { PLAYER_TURN, ENEMY_TURN, BATTLE_END }
     public enum BattleOutcome { VICTORY, DEFEAT, ESCAPED, WEAKENED }
 
-    public BattleSystem() {
-        this.battleState = "IDLE";
-    }
+    private BattleState currentState = BattleState.BATTLE_END;
+    private BattleOutcome finalOutcome = null;
 
-    public void startBattle(Entity attacker, Entity defender) {
-        this.attacker = attacker;
-        this.defender = defender;
-        this.battleState = "IN_PROGRESS";
-    }
+    private Player player;
+    private Enemy enemy;
+    private final Dice combatDice = new Dice(20);
+    // 1. Add this field next to combatDice
+    private int lastRoll = 0;
 
+    // 2. Replace calculateDamage with this roll-recording version
     public int calculateDamage(Entity attacker, Entity defender) {
-        int roll = combatDice.roll();
+        lastRoll = combatDice.roll(); // remember the roll so the UI can report crits/misses
         int baseDamage = Math.max(1, attacker.getAttack() - defender.getDefense());
+        if (lastRoll == 20) return Math.max(2, baseDamage * 2 + 5);
+        if (lastRoll == 1)  return 0;
+        return baseDamage + ((lastRoll - 1) / 4);
+    }
 
-        if (roll == 20) {
-            System.out.println("  ⚔️ CRITICAL HIT (Rolled a 20)!");
-            return Math.max(2, baseDamage * 2 + 5);
-        } else if (roll == 1) {
-            System.out.println("  💨 CRITICAL MISS (Rolled a 1)!");
-            return 0;
+    // 3. Add these three getters anywhere in the class
+    public int getLastRoll()            { return lastRoll; }
+    public boolean isLastRollCritical() { return lastRoll == 20; }
+    public boolean isLastRollMiss()     { return lastRoll == 1; }
+
+    private int playerTempDef = 0;
+    private String battleLog = "";
+
+    public void startBattle(Player player, Enemy enemy) {
+        this.player = player;
+        this.enemy = enemy;
+        this.playerTempDef = 0;
+        this.finalOutcome = null;
+        this.currentState = BattleState.PLAYER_TURN;
+        this.battleLog = "A wild " + enemy.getEnemyType() + " blocks your path!";
+    }
+
+    // --- GETTERS FOR THE UI ---
+    public BattleState getCurrentState() { return currentState; }
+    public BattleOutcome getFinalOutcome() { return finalOutcome; }
+    public Player getPlayer() { return player; }
+    public Enemy getEnemy() { return enemy; }
+    public String getBattleLog() { return battleLog; }
+
+    // --- PLAYER ACTIONS (called by Scene2D buttons) ---
+    public void onPlayerAttack() {
+        if (currentState != BattleState.PLAYER_TURN) return;
+        int damage = calculateDamage(player, enemy);
+        enemy.setHealth(Math.max(0, enemy.getHealth() - damage));
+        if (enemy.getHealth() <= 0) {
+            battleLog = "You strike for " + damage + " damage! The " + enemy.getEnemyType() + " collapses!";
+            endBattle(BattleOutcome.VICTORY);
         } else {
-            int rollBonus = (roll - 1) / 4;
-            return baseDamage + rollBonus;
+            battleLog = "You strike for " + damage + " damage! (" + enemy.getEnemyType() + " HP: " + enemy.getHealth() + ")";
+            triggerEnemyTurn();
         }
     }
 
-    // Runs the turn-based battle loop
-    public BattleOutcome runBattle(Player player, Enemy enemy, Scanner scanner) {
-        startBattle(player, enemy);
-        System.out.println("\n=========================================");
-        System.out.println(" BATTLE START: " + player.getName() + " vs " + enemy.getEnemyType());
-        System.out.println(" Enemy Behavior: " + enemy.getBehavior());
-        System.out.println("=========================================");
-
-        while (player.getHealth() > 0 && enemy.getHealth() > 0) {
-            System.out.println("\n[ " + player.getName() + " | HP: " + player.getHealth() + " ]  vs  [ " + enemy.getEnemyType() + " | HP: " + enemy.getHealth() + " ]");
-            System.out.println("1. Attack");
-            System.out.println("2. Defend");
-            System.out.println("3. Use Item");
-            System.out.println("4. Escape");
-            System.out.print("Choose your action: ");
-
-            int choice = 0;
-            try {
-                choice = Integer.parseInt(scanner.nextLine());
-            } catch (NumberFormatException e) {
-                System.out.println("Invalid input. You hesitate, losing your turn!");
-                enemyTurn(player, enemy);
-                checkBattleEnd(player);
-                if (player.getHealth() == 0) return BattleOutcome.DEFEAT;
-                if (player.getHealth() <= 25) return BattleOutcome.WEAKENED;
-                continue;
-            }
-
-            boolean playerTurnEnded = false;
-
-            switch (choice) {
-                case 1: // Attack
-                    int playerDamage = calculateDamage(player, enemy);
-                    enemy.setHealth(Math.max(0, enemy.getHealth() - playerDamage));
-                    System.out.println("You strike the " + enemy.getEnemyType() + " for " + playerDamage + " damage!");
-                    playerTurnEnded = true;
-                    break;
-
-                case 2: // Defend
-                    int defendBonus = 5;
-                    player.addTempDefense(defendBonus);
-                    System.out.println("You brace yourself! (+ " + defendBonus + " DEF for this turn)");
-                    playerTurnEnded = true;
-                    break;
-
-                case 3: // Use Item
-                    playerTurnEnded = useItemMenu(player, scanner);
-                    if (!playerTurnEnded) {
-                        System.out.println("You fumbled with your items and lost your turn!");
-                    }
-                    break;
-
-                case 4: // Escape
-                    int escapeRoll = combatDice.roll();
-                    System.out.println("You attempt to escape... (Rolled: " + escapeRoll + ")");
-                    if (escapeRoll >= 10) {
-                        System.out.println("You successfully flee from the " + enemy.getEnemyType() + "!");
-                        endBattle();
-                        return BattleOutcome.ESCAPED;
-                    } else {
-                        System.out.println("Escape failed! The " + enemy.getEnemyType() + " blocks your path.");
-                        playerTurnEnded = true;
-                    }
-                    break;
-
-                default:
-                    System.out.println("Invalid choice. You hesitate, losing your turn!");
-                    playerTurnEnded = true;
-                    break;
-            }
-
-            // Check if enemy died from player's action
-            if (enemy.getHealth() <= 0) {
-                System.out.println("\n🏆 VICTORY! The " + enemy.getEnemyType() + " has been slain!");
-                endBattle();
-                return BattleOutcome.VICTORY;
-            }
-
-            // Enemy Turn (if player didn't escape)
-            if (playerTurnEnded) {
-                enemyTurn(player, enemy);
-
-                // Clear temporary defense buff after enemy attacks
-                player.clearTemporaryBuffs();
-
-                // Check battle end conditions
-                if (player.getHealth() == 0) {
-                    endBattle();
-                    return BattleOutcome.DEFEAT;
-                } else if (player.getHealth() <= 25) {
-                    System.out.println("\n⚠️ You are too weak to continue fighting!");
-                    endBattle();
-                    return BattleOutcome.WEAKENED;
-                }
-            }
-        }
-
-        endBattle();
-        return player.getHealth() > 0 ? BattleOutcome.VICTORY : BattleOutcome.DEFEAT;
+    public void onPlayerDefend() {
+        if (currentState != BattleState.PLAYER_TURN) return;
+        playerTempDef += 5;
+        battleLog = "You brace yourself! (+5 DEF against the next hit)";
+        triggerEnemyTurn();
     }
 
-    private void enemyTurn(Player player, Enemy enemy) {
-        System.out.println("\n-> " + enemy.getEnemyType() + " attacks!");
-        int enemyDamage = calculateDamage(enemy, player);
-        int newHealth = player.getHealth() - enemyDamage;
+    public void onPlayerEscape() {
+        if (currentState != BattleState.PLAYER_TURN) return;
+        int roll = combatDice.roll();
+        if (roll >= 10) {
+            battleLog = "Escape roll " + roll + " - you slip away!";
+            endBattle(BattleOutcome.ESCAPED);
+        } else {
+            battleLog = "Escape roll " + roll + " - the " + enemy.getEnemyType() + " cuts you off!";
+            triggerEnemyTurn();
+        }
+    }
 
+    /** Routes through your real Inventory/Player API; MOVE items are blocked mid-battle. */
+    // Update the signature to accept the slot index
+    // Update the signature to accept the slot index
+    public void onPlayerUseItem(int slotIndex) {
+        if (currentState != BattleState.PLAYER_TURN) return;
+
+        Inventory inv = player.getInventory();
+        if (inv == null || inv.size() == 0) {
+            battleLog = "Your satchel is empty!";
+            return;
+        }
+
+        Item item = inv.getItem(slotIndex);
+        if (item == null) {
+            battleLog = "That slot is empty!";
+            return;
+        }
+
+        // Block movement items during battle so they don't break the board state
+        if (item.getEffectType() == EventEffectType.MOVE) {
+            battleLog = "You cannot travel the board mid-battle!";
+            return;
+        }
+
+        // Use the item via the Player class (handles durability, consumption, etc.)
+        boolean success = player.useItem(slotIndex);
+
+        if (success) {
+            battleLog = "You used " + item.getName() + "! (" + item.getEffect() + ")";
+            triggerEnemyTurn(); // Using an item consumes the player's turn
+        } else {
+            battleLog = "You fumbled and cannot use " + item.getName() + "!";
+        }
+    }
+
+    // --- ENEMY TURN (delayed so the player can read the log) ---
+    private void triggerEnemyTurn() {
+        currentState = BattleState.ENEMY_TURN;
+        Timer.schedule(new Timer.Task() {
+            @Override public void run() { executeEnemyAttack(); }
+        }, 1.2f);
+    }
+
+    private void executeEnemyAttack() {
+        if (currentState != BattleState.ENEMY_TURN) return;
+        int raw = calculateDamage(enemy, player);
+        int damage = Math.max(0, raw - playerTempDef);
+        playerTempDef = 0;
+
+        int newHealth = player.getHealth() - damage;
         if (newHealth <= 0) {
-            // Mortal strike safeguard: Preserves your original logic where a lethal blow
-            // knocks you down the slope with 1 HP if you were previously healthy.
-            if (player.getHealth() > 25) {
+            if (player.getHealth() > 25) { // Mortal Strike Safeguard
                 player.setHealth(1);
-                System.out.println("The " + enemy.getEnemyType() + " dealt " + enemyDamage + " damage. Your HP: 1");
-                System.out.println("  [SURVIVAL INSTINCT] The massive blow hurls you backwards off the ledge!");
+                battleLog = enemy.getEnemyType() + " deals " + damage + " - SURVIVAL INSTINCT leaves you at 1 HP!";
+                endBattle(BattleOutcome.WEAKENED);
             } else {
                 player.setHealth(0);
-                System.out.println("The " + enemy.getEnemyType() + " dealt " + enemyDamage + " damage. You have been defeated...");
+                battleLog = enemy.getEnemyType() + " deals " + damage + " - you fall...";
+                endBattle(BattleOutcome.DEFEAT);
             }
+            return;
+        }
+        player.setHealth(newHealth);
+        if (player.getHealth() <= 25) {
+            battleLog = enemy.getEnemyType() + " deals " + damage + " - you are too weak to continue!";
+            endBattle(BattleOutcome.WEAKENED);
         } else {
-            player.setHealth(newHealth);
-            System.out.println("The " + enemy.getEnemyType() + " dealt " + enemyDamage + " damage. Your HP: " + player.getHealth());
+            battleLog = enemy.getEnemyType() + " deals " + damage + " damage! (Your HP: " + player.getHealth() + ")";
+            currentState = BattleState.PLAYER_TURN;
         }
     }
 
-    private void checkBattleEnd(Player player) {
-        // Helper to ensure we catch state changes from invalid inputs
+    private void endBattle(BattleOutcome outcome) {
+        this.finalOutcome = outcome;
+        this.currentState = BattleState.BATTLE_END;
     }
-
-    private boolean useItemMenu(Player player, Scanner scanner) {
-        // Uses your exact Inventory class structure
-        Inventory inventory = player.getInventory();
-
-        if (inventory == null || inventory.isEmpty()) {
-            System.out.println("Your inventory is empty!");
-            return false;
-        }
-
-        // Uses the built-in display method from your Inventory class
-        inventory.displayInventory();
-        System.out.println("0. Cancel");
-        System.out.print("Select item slot to use: ");
-
-        try {
-            int itemChoice = Integer.parseInt(scanner.nextLine());
-            if (itemChoice == 0) return false;
-
-            // Calls the Player's useItem method which safely routes to the Inventory class
-            // We subtract 1 because the UI shows 1-based indexing, but the List is 0-based
-            boolean used = player.useItem(itemChoice - 1);
-            return used;
-        } catch (Exception e) {
-            System.out.println("Invalid selection.");
-            return false;
-        }
-    }
-
-    public void endBattle() {
-        this.battleState = "ENDED";
-    }
-
-    public int getLastRoll() {
-        return combatDice.getValue();
-    }
-
-    public boolean isLastRollCritical() {
-        return combatDice.getValue() == 20;
-    }
-
-    public boolean isLastRollMiss() {
-        return combatDice.getValue() == 1;
-    }
-
-    // Getters & Setters
-    public String getBattleState() {
-        return battleState;
-    }
-
 }

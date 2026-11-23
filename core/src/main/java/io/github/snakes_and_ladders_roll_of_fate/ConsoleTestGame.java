@@ -1,4 +1,4 @@
-package io.github.snakes_and_ladders_roll_of_fate;
+/*package io.github.snakes_and_ladders_roll_of_fate;
 
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
@@ -531,3 +531,4 @@ public class ConsoleTestGame {
         } while(true);
     }
 }
+*/

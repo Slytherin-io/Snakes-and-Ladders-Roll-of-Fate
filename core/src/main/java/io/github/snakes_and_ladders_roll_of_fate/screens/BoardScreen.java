@@ -40,9 +40,13 @@ import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.board.LadderTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Entity;
+import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
+import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
@@ -1361,11 +1365,10 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#8a2424")));
         eventBadgeLabel.setText("SERPENT BATTLE  -  TILE " + tile.getPosition());
 
-        final int snakeMaxHp = tile.getSnakeHealth();
-        final int snakeAtk = tile.getSnakeAttack();
-        final Entity snake = new Enemy("SERPENT");
-        snake.setHealth(snakeMaxHp);
-        snake.setAttack(snakeAtk);
+        // Build the serpent from the SAME factory BattleScreen uses (balanced, 3 variants)
+        final Enemy snake = tile.createSnakeEnemy();
+        final int snakeMaxHp = snake.getHealth();
+        final int snakeAtk = snake.getAttack();
 
         final BattleSystem combatBattle = new BattleSystem();
         combatBattle.startBattle(player, snake);
@@ -1916,6 +1919,9 @@ public class BoardScreen implements Screen {
     /**
      * Handles event, snake, or ladder trigger when landing on a tile.
      */
+    /**
+     * Handles event, snake, or ladder trigger when landing on a tile.
+     */
     private void handleTileArrival(Player player, int tileIndex) {
         Tile tile = board.getTile(tileIndex);
         if (tile == null) return;
@@ -1927,12 +1933,14 @@ public class BoardScreen implements Screen {
             return;
         }
 
+        // 1. SNAKE TILE -> Launch BattleScreen
         if (tile instanceof SnakeTile) {
-            SnakeTile snake = (SnakeTile) tile;
-            Event event = eventManager.selectEventForTile(tileIndex, EventCategory.SNAKE);
-            topBannerLabel.setText("SERPENT AMBUSH ON TILE " + tileIndex + "!");
-            showEventChoiceView(event, snake);
-        } else if (tile instanceof LadderTile) {
+            SnakeTile snakeTile = (SnakeTile) tile;
+            game.setScreen(new BattleScreen(game, player, snakeTile));
+            return; // BattleScreen owns the encounter
+        }
+        // 2. LADDER TILE -> Handle climbing
+        else if (tile instanceof LadderTile) {
             LadderTile ladder = (LadderTile) tile;
             // 40% chance for an interactive climbing dilemma; 60% for smooth direct climb
             if (eventManager.shouldTriggerLadderEvent()) {
@@ -1949,8 +1957,9 @@ public class BoardScreen implements Screen {
                 actionPauseTimer = 0.9f;
                 updateHudDisplay();
             }
-        } else {
-            // Normal tile: Dynamic pacing check with cooldown & bad-luck protection
+        }
+        // 3. NORMAL TILE -> Ambient events or safe ground
+        else {
             if (eventManager.shouldTriggerAmbientEvent(player)) {
                 Event event = eventManager.selectEventForTile(tileIndex, EventCategory.NORMAL);
                 player.resetEventCooldown();
@@ -1973,7 +1982,6 @@ public class BoardScreen implements Screen {
             }
         }
     }
-
     /**
      * Smoothly pans the world camera to follow the active player, anchoring Y to viewport center.
      */
