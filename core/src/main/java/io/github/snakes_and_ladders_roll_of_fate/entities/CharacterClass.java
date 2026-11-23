@@ -34,15 +34,15 @@ public enum CharacterClass {
         "Fox's Hunting Fang",
         "+3 ATK (1 Turn Buff)"
     ),
-    BIRD(
-        "Bird",
-        "Wind Ascendant",
-        85,
+    RACCOON(
+        "Raccoon",
+        "Crafty Scavenger",
+        100,
         5,
-        4,
-        "Soaring Wings: Master of vertical elevation and aerial mobility.",
-        "Feather of the Gale",
-        "Wind gust: Soar 3 tiles forward"
+        5,
+        "Scavenger's Instinct: Resourceful survivor adept at finding remedies and salvaging supplies.",
+        "Scavenger's First Aid Kit",
+        "Field remedy: Restores 25 HP"
     );
 
     private final String name;
@@ -83,8 +83,8 @@ public enum CharacterClass {
                 return Item.createEquipment(startingItemName, EventEffectType.DEFENSE, 3, 3, 3, startingItemDescription);
             case FOX:
                 return Item.createEquipment(startingItemName, EventEffectType.ATTACK, 3, 3, 3, startingItemDescription);
-            case BIRD:
-                return Item.createConsumable(startingItemName, EventEffectType.MOVE, 3, startingItemDescription);
+            case RACCOON:
+                return Item.createConsumable(startingItemName, EventEffectType.HEALTH, 25, startingItemDescription);
             default:
                 return null;
         }

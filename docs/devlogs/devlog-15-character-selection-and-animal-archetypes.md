@@ -9,7 +9,7 @@
 
 ## Objectives
 - Introduce a pre-board character selection system allowing players to select their playable animal champion prior to embarking onto the board.
-- Establish four playable animal archetypes: **Cat**, **Turtle**, **Fox**, and **Bird**, each with distinct base attribute distributions, thematic roles, and starting gear.
+- Establish four playable animal archetypes: **Cat**, **Turtle**, **Fox**, and **Raccoon**, each with distinct base attribute distributions, thematic roles, and starting gear.
 - Integrate interactive character selection into the console gameplay simulation (`ConsoleTestGame`).
 - Verify character class initialization, stat assignments, and starting inventory loadouts via automated integration tests.
 - Maintain clean separation between backend mechanics and graphical screens, preparing the data model for the eventual unified GUI migration phase.
@@ -33,10 +33,10 @@
        - Base Stats: HP 95 | ATK 7 | DEF 3
        - Trait: Silver Tongue (Sharp offensive instincts and keen survival senses).
        - Starting Asset: *Fox's Hunting Fang* (Equipment: +3 ATK for 1 turn, 3 uses).
-    4. **The Bird (Wind Ascendant):**
-       - Base Stats: HP 85 | ATK 5 | DEF 4
-       - Trait: Soaring Wings (Master of vertical elevation and aerial mobility).
-       - Starting Asset: *Feather of the Gale* (Consumable: Advances 3 tiles forward).
+    4. **The Raccoon (Crafty Scavenger):**
+       - Base Stats: HP 100 | ATK 5 | DEF 5
+       - Trait: Scavenger's Instinct (Resourceful survivor adept at finding remedies and salvaging supplies).
+       - Starting Asset: *Scavenger's First Aid Kit* (Consumable: Restores 25 HP).
   - Added factory helper `getStartingItem()` to populate character loadouts on spawn.
 
 ### 2. Player Entity Integration
@@ -54,8 +54,8 @@
 - **`items/InventoryTest.java`**:
   - Added **Test 19** verifying:
     - 4 playable animal classes are present.
-    - Stat assignments for Turtle (120 HP, 4 ATK, 7 DEF), Cat (90 HP, 6 ATK, 4 DEF), Fox (95 HP, 7 ATK, 3 DEF), and Bird (85 HP, 5 ATK, 4 DEF).
-    - Starting inventory gear generation (Buckler, Agility Charm, Hunting Fang, Gale Feather).
+    - Stat assignments for Turtle (120 HP, 4 ATK, 7 DEF), Cat (90 HP, 6 ATK, 4 DEF), Fox (95 HP, 7 ATK, 3 DEF), and Raccoon (100 HP, 5 ATK, 5 DEF).
+    - Starting inventory gear generation (Buckler, Agility Charm, Hunting Fang, First Aid Kit).
     - Proper equipment activation and turn defense buff expiration for class gear.
   - 19/19 automated integration tests passing cleanly.
 
@@ -63,7 +63,7 @@
 
 ## Challenges & Solutions
 
-- **Cosmetic Skins vs. Meaningful Gameplay Choices:** Making characters purely visual risks player disinterest. Giving each animal distinct base stats and a signature starting item immediately provides asymmetric advantages (e.g., Turtle can immediately block early hazards, while Cat and Bird have early movement agility).
+- **Cosmetic Skins vs. Meaningful Gameplay Choices:** Making characters purely visual risks player disinterest. Giving each animal distinct base stats and a signature starting item immediately provides asymmetric advantages (e.g., Turtle can immediately block early hazards, Cat has movement agility, Fox has martial attack buffs, and Raccoon provides essential field healing).
 - **Phased Implementation Discipline:** In alignment with project strategy, all character selection mechanics and archetype configurations are fully implemented and verified in the backend and console simulation first, deferring GUI screens and Scene2D layouts until all core systems are complete.
 
 ---
