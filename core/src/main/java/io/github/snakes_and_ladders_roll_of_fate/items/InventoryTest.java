@@ -365,13 +365,13 @@ public class InventoryTest {
             throw new AssertionError("Fox should start with Fox's Hunting Fang");
         }
 
-        // Test Bird Archetype (Ascendant)
-        Player birdPlayer = new Player("Gale", CharacterClass.BIRD);
-        if (birdPlayer.getHealth() != 85) throw new AssertionError("Bird HP should be 85, was: " + birdPlayer.getHealth());
-        if (birdPlayer.getAttack() != 5) throw new AssertionError("Bird ATK should be 5, was: " + birdPlayer.getAttack());
-        if (birdPlayer.getDefense() != 4) throw new AssertionError("Bird DEF should be 4, was: " + birdPlayer.getDefense());
-        if (!"Feather of the Gale".equals(birdPlayer.getInventory().getItems().get(0).getName())) {
-            throw new AssertionError("Bird should start with Feather of the Gale");
+        // Test Raccoon Archetype (Scavenger)
+        Player raccoonPlayer = new Player("Bandit", CharacterClass.RACCOON);
+        if (raccoonPlayer.getHealth() != 100) throw new AssertionError("Raccoon HP should be 100, was: " + raccoonPlayer.getHealth());
+        if (raccoonPlayer.getAttack() != 5) throw new AssertionError("Raccoon ATK should be 5, was: " + raccoonPlayer.getAttack());
+        if (raccoonPlayer.getDefense() != 5) throw new AssertionError("Raccoon DEF should be 5, was: " + raccoonPlayer.getDefense());
+        if (!"Scavenger's First Aid Kit".equals(raccoonPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Raccoon should start with Scavenger's First Aid Kit");
         }
 
         // Test using Turtle's starting equipment in combat stance

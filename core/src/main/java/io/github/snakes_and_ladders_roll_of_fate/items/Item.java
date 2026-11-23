@@ -58,7 +58,7 @@ public class Item {
             case 3:
                 return createEquipment("Reinforced Shield", EventEffectType.DEFENSE, 4, 2, 5, "+4 DEF (1 Turn Buff)");
             case 4:
-                return createConsumable("Hermes Feather", EventEffectType.MOVE, 3, "Advances 3 tiles forward");
+                return createConsumable("Hermes Feather", EventEffectType.MOVE, 3, "Advance 3 tiles forward");
             case 5:
             default:
                 return createEquipment("Serpent Fang Dagger", EventEffectType.ATTACK, 6, 2, 3, "+6 ATK (1 Turn Buff)");
@@ -70,7 +70,7 @@ public class Item {
         if (effectType != null) {
             switch (effectType) {
                 case HEALTH:
-                    int newHealth = Math.max(0, player.getHealth() + effectValue);
+                    int newHealth = Math.min(player.getMaxHealth(), Math.max(0, player.getHealth() + effectValue));
                     player.setHealth(newHealth);
                     System.out.printf("  [HP] %s%d (Current: %d)%n", (effectValue >= 0 ? "+" : ""), effectValue, player.getHealth());
                     break;
