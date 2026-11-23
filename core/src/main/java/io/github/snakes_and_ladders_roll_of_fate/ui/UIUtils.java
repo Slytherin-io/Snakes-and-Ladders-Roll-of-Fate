@@ -52,24 +52,31 @@ public class UIUtils {
     }
 
     /**
-     * Generates a rounded rectangle 9-patch so it can stretch to any button or banner size.
+     * Generates a solid rounded rectangle 9-patch so it can stretch to any button or banner size.
      */
     public static Drawable createRoundedDrawable(int width, int height, int radius, Color color) {
+        return createRoundedDrawable(width, height, radius, color, null, 0);
+    }
+
+    /**
+     * Generates a solid rounded rectangle 9-patch with a crisp solid border.
+     * Uses Pixmap.Blending.None to eliminate any double-blending or corner circular artifacts.
+     */
+    public static Drawable createRoundedDrawable(int width, int height, int radius, Color fillColor, Color borderColor, int borderWidth) {
         Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
         pixmap.setColor(Color.CLEAR);
         pixmap.fill(); // Clear with transparency to prevent dirty pixels
 
-        pixmap.setColor(color);
-
-        // Fill center rectangles
-        pixmap.fillRectangle(radius, 0, width - 2 * radius, height);
-        pixmap.fillRectangle(0, radius, width, height - 2 * radius);
-
-        // Round off the 4 corners
-        pixmap.fillCircle(radius, radius, radius);
-        pixmap.fillCircle(width - radius, radius, radius);
-        pixmap.fillCircle(radius, height - radius, radius);
-        pixmap.fillCircle(width - radius, height - radius, radius);
+        if (borderColor != null && borderWidth > 0) {
+            // 1. Draw outer solid rounded rectangle with border color
+            drawRoundedRect(pixmap, 0, 0, width, height, radius, borderColor);
+            // 2. Draw inner solid rounded rectangle with fill color
+            int innerR = Math.max(1, radius - borderWidth);
+            drawRoundedRect(pixmap, borderWidth, borderWidth, width - 2 * borderWidth, height - 2 * borderWidth, innerR, fillColor);
+        } else {
+            drawRoundedRect(pixmap, 0, 0, width, height, radius, fillColor);
+        }
 
         Texture texture = new Texture(pixmap);
         pixmap.dispose();
@@ -77,6 +84,16 @@ public class UIUtils {
         // 9-patch keeps the corners sharp while allowing the middle to stretch cleanly
         NinePatch patch = new NinePatch(texture, radius, radius, radius, radius);
         return new NinePatchDrawable(patch);
+    }
+
+    private static void drawRoundedRect(Pixmap pixmap, int x, int y, int width, int height, int radius, Color color) {
+        pixmap.setColor(color);
+        pixmap.fillRectangle(x + radius, y, width - 2 * radius, height);
+        pixmap.fillRectangle(x, y + radius, width, height - 2 * radius);
+        pixmap.fillCircle(x + radius, y + radius, radius);
+        pixmap.fillCircle(x + width - radius, y + radius, radius);
+        pixmap.fillCircle(x + radius, y + height - radius, radius);
+        pixmap.fillCircle(x + width - radius, y + height - radius, radius);
     }
 
     /**

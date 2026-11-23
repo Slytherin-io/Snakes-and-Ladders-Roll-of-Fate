@@ -44,6 +44,10 @@ public class Player extends Entity {
         return characterClass;
     }
 
+    public int getMaxHealth() {
+        return characterClass != null ? characterClass.getBaseHealth() : 100;
+    }
+
     public boolean useItem(int slotIndex) {
         if (inventory == null) return false;
         return inventory.useItem(slotIndex, this);

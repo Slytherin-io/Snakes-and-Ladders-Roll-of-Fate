@@ -12,7 +12,7 @@ public enum CharacterClass {
         4,
         "Feline Agility: High speed and quick strikes in mortal peril.",
         "Cat's Agility Charm",
-        "Graceful leap: Advance 2 tiles forward"
+        "Advance 2 tiles forward"
     ),
     TURTLE(
         "Turtle",
@@ -42,7 +42,7 @@ public enum CharacterClass {
         5,
         "Scavenger's Instinct: Resourceful survivor adept at finding remedies and salvaging supplies.",
         "Scavenger's First Aid Kit",
-        "Field remedy: Restores 25 HP"
+        "Restores 25 HP"
     );
 
     private final String name;

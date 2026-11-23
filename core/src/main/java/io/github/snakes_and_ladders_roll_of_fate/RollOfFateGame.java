@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 import io.github.snakes_and_ladders_roll_of_fate.screens.BoardScreen;
+import io.github.snakes_and_ladders_roll_of_fate.screens.LoadingScreen;
 import io.github.snakes_and_ladders_roll_of_fate.screens.MainMenuScreen;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
@@ -54,7 +55,7 @@ public class RollOfFateGame extends Game {
         board.generateBoard();
 
         gameState = "PLAYING";
-        setScreen(new BoardScreen(this));
+        setScreen(new LoadingScreen(this, () -> setScreen(new BoardScreen(this))));
     }
 
     public void startGame(GameMode mode) {
@@ -72,6 +73,10 @@ public class RollOfFateGame extends Game {
         for (int i = 0; i < chosenClasses.size(); i++) {
             Player player = new Player("Player " + (i + 1), chosenClasses.get(i));
             player.setPosition(1);
+            // Give an additional minor health potion alongside class starter item
+            player.addItem(io.github.snakes_and_ladders_roll_of_fate.items.Item.createConsumable(
+                "Minor Health Potion", io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.HEALTH, 25, "Restores 25 HP"
+            ));
             players.add(player);
         }
 
@@ -80,7 +85,7 @@ public class RollOfFateGame extends Game {
         board.generateBoard();
 
         gameState = "PLAYING";
-        setScreen(new BoardScreen(this));
+        setScreen(new LoadingScreen(this, () -> setScreen(new BoardScreen(this))));
     }
 
     public void createPlayer() {
@@ -91,6 +96,12 @@ public class RollOfFateGame extends Game {
             player.setPosition(1);
             player.setAttack(5);
             player.setDefense(5);
+            player.addItem(io.github.snakes_and_ladders_roll_of_fate.items.Item.createConsumable(
+                "Minor Health Potion", io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.HEALTH, 25, "Restores 25 HP"
+            ));
+            player.addItem(io.github.snakes_and_ladders_roll_of_fate.items.Item.createEquipment(
+                "Iron Sword", io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.ATTACK, 4, 2, 4, "+4 ATK (1 Turn Buff)"
+            ));
             players.add(player);
         }
     }
