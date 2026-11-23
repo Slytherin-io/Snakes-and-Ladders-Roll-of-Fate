@@ -62,7 +62,7 @@ public class Item {
                 case HEALTH:
                     int newHealth = Math.min(player.getMaxHealth(), Math.max(0, player.getHealth() + effectValue));
                     player.setHealth(newHealth);
-                    System.out.printf("  [HP] %s%d (Current: %d)%n", (effectValue >= 0 ? "+" : ""), effectValue, player.getHealth());
+                    System.out.printf("  [HP] %s%d (Current: %d/%d)%n", (effectValue >= 0 ? "+" : ""), effectValue, player.getHealth(), player.getMaxHealth());
                     break;
                 case ATTACK:
                     if (itemType == ItemType.EQUIPMENT) {

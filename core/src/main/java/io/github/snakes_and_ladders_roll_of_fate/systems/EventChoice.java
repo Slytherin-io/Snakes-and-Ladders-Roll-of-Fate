@@ -203,11 +203,28 @@ public class EventChoice {
         }
     }
 
+    public static class EventResult {
+        public boolean checkSucceeded = true;
+        public int d20Roll = 0;
+        public int difficultyClass = 0;
+        public List<String> consequences = new ArrayList<>();
+        public boolean shieldDeflected = false;
+        public Item brokenItem = null;
+        public Item tradedItem = null;
+    }
+
     // Executes the choice, checking requirements and rolling a D20 if a DC is present
     public void execute(Player player) {
+        executeWithResult(player);
+    }
+
+    public EventResult executeWithResult(Player player) {
+        EventResult result = new EventResult();
         if (!isAvailable(player)) {
             System.out.println("  [UNAVAILABLE] You do not meet the requirement: " + getRequirementDescription());
-            return;
+            result.checkSucceeded = false;
+            result.consequences.add("Unavailable: " + getRequirementDescription());
+            return result;
         }
 
         // Apply resource requirement / payment
@@ -215,10 +232,12 @@ public class EventChoice {
             case MIN_HEALTH:
                 player.setHealth(player.getHealth() - requirementValue);
                 System.out.printf("  [BLOOD SACRIFICE] Paid %d HP (Remaining HP: %d)%n", requirementValue, player.getHealth());
+                result.consequences.add(String.format("Sacrifice: -%d HP (Current: %d)", requirementValue, player.getHealth()));
                 break;
             case MIN_EXPERIENCE:
                 player.setExperience(player.getExperience() - requirementValue);
                 System.out.printf("  [KNOWLEDGE TRIBUTE] Paid %d EXP (Remaining EXP: %d)%n", requirementValue, player.getExperience());
+                result.consequences.add(String.format("Tribute: -%d EXP (Total: %d)", requirementValue, player.getExperience()));
                 break;
             case CONSUME_ANY_ITEM:
                 Item traded = null;
@@ -228,17 +247,24 @@ public class EventChoice {
                     traded = player.getInventory().removeItem(0);
                 }
                 if (traded != null) {
+                    result.tradedItem = traded;
                     System.out.println("  [BARTER] Traded away " + traded.getName() + " in exchange.");
+                    result.consequences.add("Traded away: " + traded.getName());
                 }
                 break;
             case EQUIPMENT_DURABILITY:
                 Item eq = player.findItemByType(requiredItemType != null ? requiredItemType : ItemType.EQUIPMENT);
                 if (eq != null) {
                     eq.reduceDurability();
+                    result.shieldDeflected = true;
                     System.out.printf("  [DEFLECTED] %s absorbed the blow! Remaining uses: %d/%d%n",
                         eq.getName(), eq.getDurability(), eq.getMaxDurability());
+                    result.consequences.add(String.format("Deflected: %s absorbed the impact! (%d/%d uses)",
+                        eq.getName(), eq.getDurability(), eq.getMaxDurability()));
                     if (eq.isBroken()) {
+                        result.brokenItem = eq;
                         System.out.println("  [BROKEN] " + eq.getName() + " shattered from the impact!");
+                        result.consequences.add("Shattered: " + eq.getName() + " broke from the strain!");
                         player.getInventory().removeItem(eq);
                     }
                 }
@@ -250,32 +276,47 @@ public class EventChoice {
 
         if (difficultyClass > 0) {
             int roll = d20.roll();
+            result.d20Roll = roll;
+            result.difficultyClass = difficultyClass;
             System.out.printf("  [D20 ROLL] Rolled %d against DC %d...%n", roll, difficultyClass);
 
             if (roll >= difficultyClass) {
                 lastCheckSucceeded = true;
+                result.checkSucceeded = true;
                 System.out.println("  [SUCCESS] You passed the check!");
-                applyEffects(player, successEffects);
+                applyEffects(player, successEffects, result.consequences);
             } else {
                 lastCheckSucceeded = false;
+                result.checkSucceeded = false;
                 System.out.println("  [FAILURE] You failed the check!");
-                applyEffects(player, failureEffects);
+                applyEffects(player, failureEffects, result.consequences);
             }
         } else {
             // Guaranteed choice
             lastCheckSucceeded = true;
-            applyEffects(player, successEffects);
+            result.checkSucceeded = true;
+            applyEffects(player, successEffects, result.consequences);
         }
+
+        if (result.consequences.isEmpty()) {
+            result.consequences.add("You safely proceed on your path.");
+        }
+
+        return result;
     }
 
-    private void applyEffects(Player player, List<EventEffect> effectsList) {
+    private void applyEffects(Player player, List<EventEffect> effectsList, List<String> logMessages) {
         if (effectsList.isEmpty()) {
             System.out.println("  Nothing happens. You safely proceed.");
             return;
         }
         for (EventEffect effect : effectsList) {
-            effect.apply(player);
+            effect.apply(player, logMessages);
         }
+    }
+
+    private void applyEffects(Player player, List<EventEffect> effectsList) {
+        applyEffects(player, effectsList, null);
     }
 
     // Formats choice label purely as narrative text, keeping difficulty and consequences hidden

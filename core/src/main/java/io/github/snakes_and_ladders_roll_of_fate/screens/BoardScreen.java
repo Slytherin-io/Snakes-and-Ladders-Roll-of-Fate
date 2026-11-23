@@ -8,13 +8,16 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.Button;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
@@ -28,18 +31,29 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.board.LadderTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
+import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Entity;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
+import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
+import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventChoice;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffect;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventManager;
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 import io.github.snakes_and_ladders_roll_of_fate.ui.UIUtils;
 
@@ -72,6 +86,7 @@ public class BoardScreen implements Screen {
     private BitmapFont rollSubFont;
     private BitmapFont hudNameFont;
     private BitmapFont hudHpFont;
+    private BitmapFont hudExpFont;
     private BitmapFont hudStatsFont;
     private BitmapFont tileNumFont;
     private BitmapFont tileBadgeFont;
@@ -101,21 +116,48 @@ public class BoardScreen implements Screen {
         WAITING_FOR_ROLL,
         ROLLING_DICE,
         STEPPING_TILES,
+        RESOLVING_TILE_EVENT,
         TILE_ACTION_PAUSE,
         TURN_TRANSITION
     }
     private TurnState turnState = TurnState.WAITING_FOR_ROLL;
 
+    // Event System & Modals
+    private final EventManager eventManager = new EventManager();
+    private boolean isEventModalActive = false;
+    private Table eventModalTable;
+    private Table eventBadgeTable;
+    private Label eventBadgeLabel;
+    private Table eventContentTable;
+    private TextButton.TextButtonStyle eventChoiceBtnStyle;
+    private TextButton.TextButtonStyle disabledEventChoiceBtnStyle;
+    private TextButton.TextButtonStyle combatStrikeBtnStyle;
+    private Event activeCurrentEvent;
+    private Tile activeCurrentTile;
+
     // Dice & Animation State
     private int currentRollValue = 6;
     private float diceTumbleTimer = 0f;
+    private float diceFaceShuffleTimer = 0f;
     private float stateTime = 0f;
+    private Image diceIcon;
+    private final TextureRegionDrawable[] diceDrawables = new TextureRegionDrawable[7];
 
-    // Step-by-Step Hopping State
+    // Step-by-Step Walking State
     private int hopCurrentTile = 1;
     private int hopTargetTile = 1;
     private float stepTimer = 0f;
     private static final float STEP_DURATION = 0.26f;
+
+    // Character Walking Animations & Sizing (75% enlarged: 120f * 1.75 = 210f)
+    private static final float CHAR_DISPLAY_SIZE = 210f;
+    private static final float CHAR_INACTIVE_SIZE = 186f;
+    // Ground alignment: with feet at Y=183 in 224px cell (41px above cell bottom),
+    // and stone slab top walking surface at Y=282f, drawY = 282 - (41/224)*210 = 243.56f => TILE_BOTTOM_Y + 14f.
+    private static final float CHAR_DRAW_Y = TILE_BOTTOM_Y + 14f;
+    private static final float CHAR_DRAW_Y_INACTIVE_SHARED = TILE_BOTTOM_Y + 18f;
+    private final Map<CharacterClass, Animation<TextureRegion>> walkAnimations = new HashMap<>();
+    private float walkStateTime = 0f;
 
     // Action Pause Timer (Ladders / Snakes)
     private float actionPauseTimer = 0f;
@@ -127,6 +169,7 @@ public class BoardScreen implements Screen {
     private Label diceLabel;
     private Label hudPlayerName;
     private Label hudPlayerHp;
+    private Label hudPlayerExp;
     private Label hudPlayerStats;
     private Image hudPlayerAvatar;
     private Label miniMapProgressLabel;
@@ -134,7 +177,10 @@ public class BoardScreen implements Screen {
     private Table inventorySlotsTable;
     private Label inventoryTitleLabel;
     private Label inventoryCapacityLabel;
+    private Label inventoryTipLabel;
     private TextButton inventoryLootBtn;
+    private boolean itemUsedThisTurn = false;
+    private boolean isItemMovement = false;
 
     // Pause, Settings, & Leave Game Modals
     private boolean isPaused = false;
@@ -177,6 +223,7 @@ public class BoardScreen implements Screen {
         Color goldLight = Color.valueOf("#f6eedb");
         Color crimson   = Color.valueOf("#a81717");
         Color warmBrown = Color.valueOf("#5c2f0f");
+        Color expBrown  = Color.valueOf("#693708");
 
         titleFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, Color.WHITE);
         topBannerFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 32, Color.valueOf("#fffdfa"));
@@ -184,20 +231,29 @@ public class BoardScreen implements Screen {
         topPauseFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 25, Color.WHITE);
         rollBigFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.WHITE);
         rollSubFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 21, Color.valueOf("#fbf2dc"));
-        hudNameFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 25, nameBrown);
-        hudHpFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, crimson);
-        hudStatsFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 19, warmBrown);
+        hudNameFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, nameBrown);
+        hudHpFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, crimson);
+        hudExpFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, expBrown);
+        hudStatsFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, warmBrown);
         playerTagFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 19, Color.WHITE);
         badgeFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
         tileNumFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, goldLight);
         tileBadgeFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 15, Color.WHITE);
-        miniFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 16, darkBrown);
+        miniFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 16, Color.WHITE);
         sliderFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, darkBrown);
         modalTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
         modalBodyFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, darkBrown);
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();
+
+        // --- Initialize Character Walking Animations ---
+        initCharacterAnimations();
+
+        // Initialize dice face drawables (dice_1.png through dice_6.png)
+        for (int i = 1; i <= 6; i++) {
+            diceDrawables[i] = new TextureRegionDrawable(game.getAssetManager().get(Assets.getDiceTexture(i)));
+        }
 
         // --- Build In-Game HUD Overlay ---
         buildPauseButton();
@@ -206,6 +262,15 @@ public class BoardScreen implements Screen {
         buildBottomHud();
         buildInventoryPopup();
         buildPauseAndSettingsModals(darkBrown, pillBrown);
+        buildEventModal(darkBrown, pillBrown);
+
+        // Configure global item swap handler for full satchel situations
+        EventEffect.setItemSwapHandler(new EventEffect.ItemSwapHandler() {
+            @Override
+            public void handleSwap(Player player, Item newItem) {
+                showItemSwapPrompt(player, newItem);
+            }
+        });
 
         // Initial camera placement on active player
         Player current = game.getCurrentPlayer();
@@ -244,6 +309,25 @@ public class BoardScreen implements Screen {
     }
 
     /**
+     * Initializes walking animations for all character classes from their 224x224 spritesheet strips.
+     */
+    private void initCharacterAnimations() {
+        for (CharacterClass cls : CharacterClass.values()) {
+            Texture sheet = game.getAssetManager().get(Assets.getCharacterWalkSheet(cls));
+            int frameCount = Assets.getCharacterWalkFrameCount(cls);
+            TextureRegion[][] grid = TextureRegion.split(sheet, Assets.CHAR_FRAME_SIZE, Assets.CHAR_FRAME_SIZE);
+            TextureRegion[] frames = new TextureRegion[frameCount];
+            for (int i = 0; i < frameCount; i++) {
+                frames[i] = grid[0][i];
+            }
+            float frameDur = (cls == CharacterClass.CAT) ? 0.09f : ((cls == CharacterClass.TURTLE) ? 0.07f : 0.06f);
+            Animation<TextureRegion> anim = new Animation<>(frameDur, frames);
+            anim.setPlayMode(Animation.PlayMode.LOOP);
+            walkAnimations.put(cls, anim);
+        }
+    }
+
+    /**
      * Top Ribbon Banner showing current turn guidance and live tile events.
      */
     private void buildTopBanner() {
@@ -269,7 +353,7 @@ public class BoardScreen implements Screen {
         Table miniMapTable = new Table();
         miniMapTable.setBackground(UIUtils.createRoundedDrawable(390, 70, 18, Color.valueOf("#4a2307dd")));
 
-        miniMapProgressLabel = new Label("ACT I   |   TILE 1 / 100", new Label.LabelStyle(topActFont, Color.valueOf("#fdf5e2")));
+        miniMapProgressLabel = new Label("ACT I   -   TILE 1 / 100", new Label.LabelStyle(topActFont, Color.valueOf("#fdf5e2")));
         miniMapProgressLabel.setAlignment(Align.center);
 
         // Visual 3-act progress bar track
@@ -306,6 +390,7 @@ public class BoardScreen implements Screen {
         Color nameBrown = Color.valueOf("#361704");
         Color crimson   = Color.valueOf("#a81717");
         Color warmBrown = Color.valueOf("#5c2f0f");
+        Color expBrown  = Color.valueOf("#693708");
 
         Color leatherSolid    = Color.valueOf("#c89259");
         Color leatherHover    = Color.valueOf("#d8a46f");
@@ -334,6 +419,10 @@ public class BoardScreen implements Screen {
         inventoryBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                // Prevent opening inventory during dice rolling, tile stepping, combat/event modal, or turn pause
+                if (turnState != TurnState.WAITING_FOR_ROLL || isEventModalActive) {
+                    return;
+                }
                 if (inventoryPopup != null) {
                     boolean willShow = !inventoryPopup.isVisible();
                     if (willShow) {
@@ -352,8 +441,10 @@ public class BoardScreen implements Screen {
         rollButton = new Button(rollStyle);
         UIUtils.addScaleHoverEffect(rollButton);
 
-        Image diceIcon = new Image(game.getAssetManager().get(Assets.ICON_DICE_D6));
+        diceIcon = new Image(diceDrawables[6]);
         diceIcon.setScaling(Scaling.fit);
+        diceIcon.setSize(60, 60);
+        diceIcon.setOrigin(30, 30);
 
         Table diceInner = new Table();
         Label rollWord = new Label("ROLL", new Label.LabelStyle(rollBigFont, Color.WHITE));
@@ -385,7 +476,7 @@ public class BoardScreen implements Screen {
 
         // Level 1: Primary Header - Bold Player Name
         hudPlayerName = new Label("PLAYER 1", new Label.LabelStyle(hudNameFont, nameBrown));
-        statsTextTable.add(hudPlayerName).left().padBottom(3).row();
+        statsTextTable.add(hudPlayerName).left().padBottom(2).row();
 
         // Level 2: Secondary Vital - Health with Heart Icon
         Table hpRow = new Table();
@@ -393,19 +484,26 @@ public class BoardScreen implements Screen {
         Image heartIcon = new Image(game.getAssetManager().get(Assets.ICON_HEART));
         heartIcon.setScaling(Scaling.fit);
         hudPlayerHp = new Label("HP: 120 / 120", new Label.LabelStyle(hudHpFont, crimson));
-        hpRow.add(heartIcon).size(20, 20).padRight(6).center();
+        hpRow.add(heartIcon).size(18, 18).padRight(6).center();
         hpRow.add(hudPlayerHp).left().center();
-        statsTextTable.add(hpRow).left().padBottom(3).row();
+        statsTextTable.add(hpRow).left().padBottom(2).row();
 
-        // Level 3: Tertiary Supporting Attributes - Attack & Defense
+        // Level 3: Progression - Level & Experience
+        Table expRow = new Table();
+        expRow.left();
+        hudPlayerExp = new Label("LVL 1    -    EXP: 0 / 100", new Label.LabelStyle(hudExpFont, expBrown));
+        expRow.add(hudPlayerExp).left().center();
+        statsTextTable.add(expRow).left().padBottom(2).row();
+
+        // Level 4: Supporting Combat Attributes - Attack & Defense
         Table statsRow = new Table();
         statsRow.left();
-        hudPlayerStats = new Label("ATK  4    |    DEF  7", new Label.LabelStyle(hudStatsFont, warmBrown));
+        hudPlayerStats = new Label("ATK  4    -    DEF  7", new Label.LabelStyle(hudStatsFont, warmBrown));
         statsRow.add(hudPlayerStats).left().center();
         statsTextTable.add(statsRow).left();
 
-        statusCard.add(hudPlayerAvatar).size(68, 68).padLeft(18).padRight(16).center();
-        statusCard.add(statsTextTable).expandX().left().padRight(18).center();
+        statusCard.add(hudPlayerAvatar).size(110, 90).padLeft(16).padRight(14).center();
+        statusCard.add(statsTextTable).expandX().left().padRight(16).center();
 
         // --- Assemble Bottom Bar Layout ---
         Table bottomBar = new Table();
@@ -433,7 +531,7 @@ public class BoardScreen implements Screen {
 
         // Header Table
         Table headerTable = new Table();
-        inventoryTitleLabel = new Label("PLAYER 1'S SATCHEL", new Label.LabelStyle(titleFont, Color.WHITE));
+        inventoryTitleLabel = new Label("PLAYER 1'S INVENTORY", new Label.LabelStyle(titleFont, Color.WHITE));
         inventoryCapacityLabel = new Label("0 / 4 SLOTS", new Label.LabelStyle(playerTagFont, Color.valueOf("#ffd54f")));
 
         Table badgeTable = new Table();
@@ -446,10 +544,10 @@ public class BoardScreen implements Screen {
 
         inventoryPopup.add(headerTable).width(570).padTop(20).padBottom(6).center().row();
 
-        Label tip = new Label("Carry limit: 4 items per player. Tap USE to activate an item.", new Label.LabelStyle(miniFont, Color.WHITE));
-        tip.setWrap(true);
-        tip.setAlignment(Align.center);
-        inventoryPopup.add(tip).width(570).padBottom(14).center().row();
+        inventoryTipLabel = new Label("Limit: 1 item per turn. Tap USE before rolling the dice.", new Label.LabelStyle(miniFont, Color.valueOf("#fffdfa")));
+        inventoryTipLabel.setWrap(true);
+        inventoryTipLabel.setAlignment(Align.center);
+        inventoryPopup.add(inventoryTipLabel).width(570).padBottom(14).center().row();
 
         // Slots container (holds the 4 slots)
         inventorySlotsTable = new Table();
@@ -512,22 +610,39 @@ public class BoardScreen implements Screen {
         Player player = game.getCurrentPlayer();
         if (player == null || player.getInventory() == null) return;
 
-        inventoryTitleLabel.setText(player.getName().toUpperCase() + "'S SATCHEL");
+        inventoryTitleLabel.setText(player.getName().toUpperCase() + "'S INVENTORY");
 
         int itemCount = player.getInventory().size();
         int capacity = player.getInventory().getCapacity(); // strictly 4
         inventoryCapacityLabel.setText(itemCount + " / " + capacity + " SLOTS");
 
-        if (player.getInventory().isFull()) {
+        if (inventoryTipLabel != null) {
+            if (itemUsedThisTurn) {
+                inventoryTipLabel.setText("Item already used this turn. (Limit: 1 item per turn)");
+                inventoryTipLabel.setColor(Color.valueOf("#ffd54f"));
+            } else {
+                inventoryTipLabel.setText("Limit: 1 item per turn. Tap USE before rolling the dice.");
+                inventoryTipLabel.setColor(Color.valueOf("#fffdfa"));
+            }
+        }
+
+        if (itemUsedThisTurn) {
+            inventoryLootBtn.setText("1 / TURN");
+            inventoryLootBtn.setColor(0.6f, 0.6f, 0.6f, 0.4f);
+            inventoryLootBtn.setDisabled(true);
+            inventoryLootBtn.setTouchable(Touchable.disabled);
+        } else if (player.getInventory().isFull()) {
             inventoryCapacityLabel.setColor(Color.valueOf("#ff6b6b"));
             inventoryLootBtn.setText("FULL (4/4)");
             inventoryLootBtn.setColor(0.6f, 0.6f, 0.6f, 0.5f);
             inventoryLootBtn.setDisabled(true);
+            inventoryLootBtn.setTouchable(Touchable.disabled);
         } else {
             inventoryCapacityLabel.setColor(Color.valueOf("#ffd54f"));
             inventoryLootBtn.setText("+ LOOT");
             inventoryLootBtn.setColor(Color.WHITE);
             inventoryLootBtn.setDisabled(false);
+            inventoryLootBtn.setTouchable(Touchable.enabled);
         }
 
         // Render exactly 4 slots (Slot 0..3)
@@ -565,12 +680,12 @@ public class BoardScreen implements Screen {
                     ? "[CONSUMABLE]"
                     : "[DUR: " + item.getDurability() + "/" + item.getMaxDurability() + "]";
                 Color typeColor = (item.getItemType() == ItemType.CONSUMABLE)
-                    ? Color.valueOf("#69f0ae")  // Luminous mint green
-                    : Color.valueOf("#40c4ff"); // Luminous sky cyan
+                    ? Color.valueOf("#86efac")  // Lighter, highly visible pastel mint green
+                    : Color.valueOf("#93c5fd"); // Lighter, highly visible pastel sky blue
                 Label typeLbl = new Label(typeStr, new Label.LabelStyle(miniFont, typeColor));
 
-                Label dotLbl = new Label(" • ", new Label.LabelStyle(miniFont, Color.valueOf("#ffd54f")));
-                Label effectLbl = new Label(item.getEffect(), new Label.LabelStyle(miniFont, Color.WHITE));
+                Label dotLbl = new Label(" - ", new Label.LabelStyle(miniFont, Color.valueOf("#fef08a"))); // Clean hyphen separator, no [] missing glyph
+                Label effectLbl = new Label(item.getEffect(), new Label.LabelStyle(miniFont, Color.valueOf("#fffdfa"))); // Crisp warm white
                 effectLbl.setEllipsis(true);
 
                 subInfo.add(typeLbl).left();
@@ -599,9 +714,16 @@ public class BoardScreen implements Screen {
                     }
                 });
 
-                if (turnState != TurnState.WAITING_FOR_ROLL) {
+                if (turnState != TurnState.WAITING_FOR_ROLL || itemUsedThisTurn) {
+                    useBtn.setText(itemUsedThisTurn ? "USED" : "WAIT");
                     useBtn.setDisabled(true);
-                    useBtn.setColor(1f, 1f, 1f, 0.4f);
+                    useBtn.setTouchable(Touchable.disabled);
+                    useBtn.setColor(1f, 1f, 1f, 0.35f);
+                } else {
+                    useBtn.setText("USE");
+                    useBtn.setDisabled(false);
+                    useBtn.setTouchable(Touchable.enabled);
+                    useBtn.setColor(Color.WHITE);
                 }
 
                 slotRow.add(useBtn).size(88, 42).right();
@@ -629,6 +751,11 @@ public class BoardScreen implements Screen {
      * Uses the item in the specified inventory slot for the active player.
      */
     private void handleUseInventoryItem(int slotIndex) {
+        if (itemUsedThisTurn || turnState != TurnState.WAITING_FOR_ROLL) {
+            topBannerLabel.setText("LIMIT REACHED: ONLY 1 ITEM CAN BE USED PER TURN!");
+            return;
+        }
+
         Player player = game.getCurrentPlayer();
         if (player == null || player.getInventory() == null) return;
 
@@ -638,20 +765,40 @@ public class BoardScreen implements Screen {
         String itemName = item.getName();
         EventEffectType type = item.getEffectType();
         String effectDesc = item.getEffect();
+        int effectVal = item.getEffectValue();
+
+        // Prevent consuming health items when already at max health
+        if (type == EventEffectType.HEALTH && player.getHealth() >= player.getMaxHealth()) {
+            topBannerLabel.setText(player.getName().toUpperCase() + " IS ALREADY AT FULL HEALTH (" + player.getMaxHealth() + " HP)!");
+            return;
+        }
+
+        int startPos = player.getPosition();
 
         // Use the item via player
         boolean success = player.useItem(slotIndex);
         if (!success) return;
 
+        itemUsedThisTurn = true;
+
+        // Auto-close inventory popup so player returns to the action!
+        if (inventoryPopup != null) {
+            inventoryPopup.setVisible(false);
+        }
+
         // Banner feedback
         topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! (" + effectDesc + ")");
 
-        // If it was a movement item, advance player
+        // If it was a movement item, advance player with walking animation
         if (type == EventEffectType.MOVE) {
-            int newPos = Math.min(100, Math.max(1, player.getPosition()));
-            player.setPosition(newPos);
-            updateMiniMapProgress();
-            handleTileArrival(player, newPos);
+            int targetPos = Math.min(100, Math.max(1, startPos + effectVal));
+            player.setPosition(startPos);
+            hopCurrentTile = startPos;
+            hopTargetTile = targetPos;
+            stepTimer = 0f;
+            isItemMovement = true;
+            turnState = TurnState.STEPPING_TILES;
+            topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! ADVANCING " + effectVal + " TILES...");
         }
 
         // Update active player stats & mini-map
@@ -665,11 +812,15 @@ public class BoardScreen implements Screen {
      * Adds random loot to active player for testing/adventure reward, strictly obeying 4-item capacity.
      */
     private void handleFindLoot() {
+        if (itemUsedThisTurn || turnState != TurnState.WAITING_FOR_ROLL) {
+            topBannerLabel.setText("CANNOT ACQUIRE LOOT AFTER USING AN ITEM THIS TURN!");
+            return;
+        }
         Player player = game.getCurrentPlayer();
         if (player == null || player.getInventory() == null) return;
 
         if (player.getInventory().isFull()) {
-            topBannerLabel.setText("SATCHEL IS FULL! (" + player.getInventory().size() + "/4 SLOTS)");
+            topBannerLabel.setText("INVENTORY IS FULL! (" + player.getInventory().size() + "/4 SLOTS)");
             return;
         }
 
@@ -938,15 +1089,21 @@ public class BoardScreen implements Screen {
     private void pauseGame() {
         isPaused = true;
         if (inventoryPopup != null) inventoryPopup.setVisible(false);
+        if (eventModalTable != null && isEventModalActive) eventModalTable.setVisible(false);
         showPauseMenu();
     }
 
     private void resumeGame() {
         isPaused = false;
-        modalScrim.setVisible(false);
         pauseModalTable.setVisible(false);
         settingsModalTable.setVisible(false);
         leaveConfirmModalTable.setVisible(false);
+        if (isEventModalActive && eventModalTable != null) {
+            modalScrim.setVisible(true);
+            eventModalTable.setVisible(true);
+        } else {
+            modalScrim.setVisible(false);
+        }
     }
 
     private void showPauseMenu() {
@@ -974,14 +1131,609 @@ public class BoardScreen implements Screen {
         game.setScreen(new MainMenuScreen(game));
     }
 
+    // =========================================================================
+    // INTERACTIVE EVENT MODAL SYSTEM (Tile Landing Events, Combat, Barter)
+    // =========================================================================
+
+    /**
+     * Builds the unified Parchment Scroll Event Modal for tile landing encounters.
+     * Scroll asset is enlarged to 940x690 and inner content cards are constrained to 530px,
+     * ensuring choices, combat logs, and barter items never overlap the scroll's end or roller spindles.
+     */
+    private void buildEventModal(Color darkBrown, Color pillBrown) {
+        eventChoiceBtnStyle = new TextButton.TextButtonStyle();
+        eventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
+        eventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
+        eventChoiceBtnStyle.font = playerTagFont;
+        eventChoiceBtnStyle.fontColor = Color.valueOf("#fff8ea");
+
+        disabledEventChoiceBtnStyle = new TextButton.TextButtonStyle();
+        disabledEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#554338aa"), Color.valueOf("#443329aa"), 2);
+        disabledEventChoiceBtnStyle.font = playerTagFont;
+        disabledEventChoiceBtnStyle.fontColor = Color.valueOf("#a89688");
+
+        combatStrikeBtnStyle = new TextButton.TextButtonStyle();
+        combatStrikeBtnStyle.up = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#8a2424"), Color.valueOf("#5a1414"), 2);
+        combatStrikeBtnStyle.over = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#a63232"), Color.valueOf("#5a1414"), 2);
+        combatStrikeBtnStyle.font = badgeFont;
+        combatStrikeBtnStyle.fontColor = Color.WHITE;
+
+        // Top Event Badge (Positioned to comfortably overlap the top of the enlarged scroll)
+        eventBadgeLabel = new Label("EVENT", new Label.LabelStyle(badgeFont, Color.WHITE));
+        eventBadgeLabel.setAlignment(Align.center);
+        eventBadgeLabel.setWrap(true);
+        eventBadgeTable = new Table();
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, pillBrown));
+        eventBadgeTable.add(eventBadgeLabel).width(440).pad(6, 16, 6, 16);
+
+        // Content Table inside the parchment scroll
+        eventContentTable = new Table();
+        eventContentTable.center();
+
+        Image eventScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
+        eventScrollBg.setScaling(Scaling.stretch);
+
+        Stack eventScrollStack = new Stack();
+        eventScrollStack.add(eventScrollBg);
+        eventScrollStack.add(eventContentTable);
+
+        eventModalTable = new Table();
+        eventModalTable.setFillParent(true);
+        eventModalTable.setVisible(false);
+        eventModalTable.add(eventBadgeTable).size(480, 60).padBottom(-26).center().row();
+        eventModalTable.add(eventScrollStack).size(940, 690).center().row();
+
+        hudStage.addActor(eventModalTable);
+    }
+
+    /**
+     * Displays the interactive choices for the tile landing event.
+     * All choices show pure thematic narrative text with zero spoiled numbers or consequences.
+     * Spaced and framed inside the enlarged scroll with ample headroom above the bottom curled edge.
+     */
+    private void showEventChoiceView(final Event event, final Tile tile) {
+        if (event == null || tile == null) return;
+        activeCurrentEvent = event;
+        activeCurrentTile = tile;
+        isEventModalActive = true;
+        if (inventoryPopup != null) {
+            inventoryPopup.setVisible(false);
+        }
+
+        final Player player = game.getCurrentPlayer();
+        eventContentTable.clear();
+
+        // 1. Color-coded category badge
+        Color badgeBgColor;
+        String badgePrefix;
+        switch (event.getCategory()) {
+            case SNAKE:
+                badgeBgColor = Color.valueOf("#8a2424");
+                badgePrefix = "SERPENT AMBUSH";
+                break;
+            case MERCHANT:
+                badgeBgColor = Color.valueOf("#9c6818");
+                badgePrefix = "WANDERING MERCHANT";
+                break;
+            case SHRINE:
+            case BLESSING:
+                badgeBgColor = Color.valueOf("#2b4c7e");
+                badgePrefix = "ANCIENT SHRINE";
+                break;
+            case LADDER:
+                badgeBgColor = Color.valueOf("#1d5c3a");
+                badgePrefix = "LADDER ASCENT";
+                break;
+            case TRAP:
+            default:
+                badgeBgColor = Color.valueOf("#7e3b18");
+                badgePrefix = "HAZARDOUS TRAIL";
+                break;
+        }
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, badgeBgColor));
+        eventBadgeLabel.setText(badgePrefix + "  -  TILE " + tile.getPosition());
+
+        // 2. Event Title & Atmospheric Narrative Lore
+        Label titleLbl = new Label(event.getTitle(), new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        titleLbl.setAlignment(Align.center);
+        eventContentTable.add(titleLbl).padTop(14).padBottom(6).center().row();
+
+        Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+        descLbl.setAlignment(Align.center);
+        descLbl.setWrap(true);
+        eventContentTable.add(descLbl).width(530).padBottom(18).center().row();
+
+        // 3. Dynamic Choices (Hybrid Model: Strategic/tactical actions visible with requirements; unaffordable merchant stock hidden)
+        List<EventChoice> choices = event.getChoices();
+        for (int i = 0; i < choices.size(); i++) {
+            final int choiceIndex = i;
+            final EventChoice choice = choices.get(i);
+            boolean available = choice.isAvailable(player);
+
+            // In the Hybrid model:
+            // 1. Hide Barter choice if inventory is empty
+            // 2. Hide unaffordable optional merchant purchases (MIN_EXPERIENCE or MIN_HEALTH at merchant)
+            if (!available) {
+                if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.CONSUME_ANY_ITEM) {
+                    continue;
+                }
+                if (event.getCategory() == EventCategory.MERCHANT) {
+                    continue;
+                }
+            }
+
+            String buttonText = choice.getText();
+            if (!available) {
+                String reqTag;
+                switch (choice.getRequirementType()) {
+                    case EQUIPMENT_DURABILITY:
+                        reqTag = " [Requires Shield]";
+                        break;
+                    case MIN_HEALTH:
+                        reqTag = " [Requires >" + choice.getRequirementValue() + " HP]";
+                        break;
+                    case MIN_EXPERIENCE:
+                        reqTag = " [Requires " + choice.getRequirementValue() + " EXP]";
+                        break;
+                    default:
+                        reqTag = " (Unavailable)";
+                        break;
+                }
+                buttonText = buttonText + reqTag;
+            }
+
+            TextButton choiceBtn = new TextButton(buttonText, available ? eventChoiceBtnStyle : disabledEventChoiceBtnStyle);
+            choiceBtn.getLabel().setWrap(true);
+            choiceBtn.getLabel().setAlignment(Align.center);
+            choiceBtn.pad(4, 16, 4, 16);
+            choiceBtn.getLabelCell().width(480);
+
+            if (available) {
+                UIUtils.addScaleHoverEffect(choiceBtn);
+                choiceBtn.addListener(new ChangeListener() {
+                    @Override
+                    public void changed(ChangeEvent evt, Actor actor) {
+                        handleChoiceSelected(choice, choiceIndex, event, tile, player);
+                    }
+                });
+            }
+
+            eventContentTable.add(choiceBtn).size(530, 46).padBottom(6).center().row();
+        }
+
+        modalScrim.setVisible(true);
+        eventModalTable.setVisible(true);
+        turnState = TurnState.RESOLVING_TILE_EVENT;
+    }
+
+    /**
+     * Dispatches the player's selected choice to combat, barter, or direct resolution.
+     */
+    private void handleChoiceSelected(EventChoice choice, int choiceIndex, Event event, Tile tile, Player player) {
+        if (event.getCategory() == EventCategory.SNAKE) {
+            if (choiceIndex == 0) {
+                // Choice 0: Draw weapon and engage in turn-by-turn combat!
+                showCombatView(player, (SnakeTile) tile);
+                return;
+            } else if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY) {
+                // Shield deflection: hold ground and ward off snake!
+                specialSlideTarget = -1;
+                EventChoice.EventResult res = choice.executeWithResult(player);
+                showOutcomeView(choice.getText(), res, false);
+                return;
+            } else {
+                // Flee / retreat down the slope!
+                specialSlideTarget = ((SnakeTile) tile).getDestination();
+                EventChoice.EventResult res = choice.executeWithResult(player);
+                showOutcomeView(choice.getText(), res, true);
+                return;
+            }
+        }
+
+        if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.CONSUME_ANY_ITEM) {
+            // Barter choice: Open satchel item selection picker!
+            showBarterItemSelector(player, choice, tile);
+            return;
+        }
+
+        // Standard event choice resolution
+        EventChoice.EventResult res = choice.executeWithResult(player);
+
+        if (event.getCategory() == EventCategory.LADDER) {
+            if (choice.getDifficultyClass() > 0 && !res.checkSucceeded) {
+                specialSlideTarget = -1; // Slipped off, cannot ascend!
+            } else {
+                specialSlideTarget = ((LadderTile) tile).getDestination();
+            }
+        }
+
+        showOutcomeView(choice.getText(), res, false);
+    }
+
+    /**
+     * Option A: Interactive Turn-by-Turn Combat Clash against the Serpent.
+     * Player taps [STRIKE] each round to roll combat dice, watching HP bars and log update dynamically.
+     * Stays strictly within the enlarged scroll and features light, high-readability container styling.
+     */
+    private void showCombatView(final Player player, final SnakeTile tile) {
+        eventContentTable.clear();
+
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#8a2424")));
+        eventBadgeLabel.setText("SERPENT BATTLE  -  TILE " + tile.getPosition());
+
+        final int snakeMaxHp = tile.getSnakeHealth();
+        final int snakeAtk = tile.getSnakeAttack();
+        final Entity snake = new Enemy("SERPENT");
+        snake.setHealth(snakeMaxHp);
+        snake.setAttack(snakeAtk);
+
+        final BattleSystem combatBattle = new BattleSystem();
+        combatBattle.startBattle(player, snake);
+
+        // Header: Player vs Serpent Status Card (Light Warm Parchment Container with Crisp 3px Mahogany Border)
+        Table combatantsTable = new Table();
+        combatantsTable.setBackground(UIUtils.createRoundedDrawable(530, 80, 14, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
+        combatantsTable.pad(8, 18, 8, 18);
+
+        // Player Info Box
+        Table playerBox = new Table();
+        Label pName = new Label(player.getName().toUpperCase(), new Label.LabelStyle(hudNameFont, Color.valueOf("#361704")));
+        final Label pHp = new Label("HP: " + player.getHealth() + " / " + player.getMaxHealth(), new Label.LabelStyle(hudHpFont, Color.valueOf("#a81717")));
+        Label pAtk = new Label("ATK " + player.getAttack() + "  *  DEF " + player.getDefense(), new Label.LabelStyle(miniFont, Color.valueOf("#54280e")));
+        playerBox.add(pName).left().row();
+        playerBox.add(pHp).left().row();
+        playerBox.add(pAtk).left();
+
+        Label vsLabel = new Label("VS", new Label.LabelStyle(modalTitleFont, Color.valueOf("#8a2424")));
+
+        // Serpent Info Box
+        Table snakeBox = new Table();
+        String snakeNameStr = (tile.getPosition() <= 30) ? "EMERALD VIPER" : ((tile.getPosition() <= 70) ? "CRAG ASP" : "APEX WYRM");
+        Label sName = new Label(snakeNameStr, new Label.LabelStyle(hudNameFont, Color.valueOf("#361704")));
+        final Label sHp = new Label("HP: " + snake.getHealth() + " / " + snakeMaxHp, new Label.LabelStyle(hudHpFont, Color.valueOf("#a81717")));
+        Label sAtk = new Label("ATK " + snakeAtk + "  *  DEF 0", new Label.LabelStyle(miniFont, Color.valueOf("#54280e")));
+        snakeBox.add(sName).right().row();
+        snakeBox.add(sHp).right().row();
+        snakeBox.add(sAtk).right();
+
+        combatantsTable.add(playerBox).width(205).left();
+        combatantsTable.add(vsLabel).width(80).center();
+        combatantsTable.add(snakeBox).width(205).right();
+
+        eventContentTable.add(combatantsTable).size(530, 80).padTop(10).padBottom(14).center().row();
+
+        // Combat Narrative Log Inset (Light Cream Container with Crisp Dark Mahogany Text for Maximum Readability)
+        Table logContainer = new Table();
+        logContainer.setBackground(UIUtils.createRoundedDrawable(530, 140, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
+        logContainer.pad(10, 18, 10, 18);
+
+        final Label combatLog = new Label("The coiled serpent lunges from the foliage!\nTap [STRIKE] to roll your combat dice!", new Label.LabelStyle(modalBodyFont, Color.valueOf("#361704")));
+        combatLog.setAlignment(Align.center);
+        combatLog.setWrap(true);
+        logContainer.add(combatLog).width(490).center();
+
+        eventContentTable.add(logContainer).size(530, 140).padBottom(16).center().row();
+
+        // Action Button: STRIKE (ROLL D20)
+        final TextButton actionBtn = new TextButton("STRIKE (ROLL D20)", combatStrikeBtnStyle);
+        UIUtils.addScaleHoverEffect(actionBtn);
+
+        final boolean[] combatOver = new boolean[]{false};
+
+        actionBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent evt, Actor actor) {
+                if (combatOver[0]) {
+                    closeEventModal();
+                    return;
+                }
+
+                // 1. Player Attack Round
+                int pDamage = combatBattle.calculateDamage(player, snake);
+                int pRoll = combatBattle.getLastRoll();
+                boolean pCrit = combatBattle.isLastRollCritical();
+                boolean pMiss = combatBattle.isLastRollMiss();
+
+                int sHealth = Math.max(0, snake.getHealth() - pDamage);
+                snake.setHealth(sHealth);
+                sHp.setText("HP: " + sHealth + " / " + snakeMaxHp);
+
+                // Check Snake Slain
+                if (sHealth <= 0) {
+                    combatOver[0] = true;
+                    int exp = 15 + (tile.getPosition() / 2);
+                    player.gainExperience(exp);
+                    Item loot = Item.createRandomLoot();
+                    boolean added = player.addItem(loot);
+                    specialSlideTarget = -1; // Slain! Hold ground!
+
+                    String hitPrefix = pCrit ? "CRITICAL STRIKE (D20: 20)!" : (pMiss ? "GRAZING BLOW (D20: 1)!" : "DIRECT HIT (D20: " + pRoll + ")!");
+                    combatLog.setText(hitPrefix + " You dealt " + pDamage + " damage and slew the beast!\n"
+                        + "+" + exp + " EXP gained! Loot: " + loot.getName()
+                        + (added ? " (Added to satchel)" : " (Satchel full!)"));
+                    actionBtn.setText("CLAIM VICTORY & CONTINUE");
+                    updateHudDisplay();
+                    return;
+                }
+
+                // 2. Serpent Retaliation Round
+                int sDamage = combatBattle.calculateDamage(snake, player);
+                int sRoll = combatBattle.getLastRoll();
+                boolean sCrit = combatBattle.isLastRollCritical();
+
+                int pHealth = player.getHealth() - sDamage;
+
+                if (pHealth <= 0) {
+                    combatOver[0] = true;
+                    if (player.getHealth() > 25) {
+                        // Mortal strike safeguard: clinging to life, slides down slope
+                        player.setHealth(1);
+                        pHp.setText("HP: 1 / " + player.getMaxHealth());
+                        specialSlideTarget = tile.getDestination();
+                        combatLog.setText("You struck for " + pDamage + " damage! (Serpent HP: " + sHealth + ")\n"
+                            + "[SERPENT D20: " + sRoll + "] The beast lands a MORTAL BLOW for " + sDamage + " damage!\n"
+                            + "SURVIVAL INSTINCT: Cast backward down the slope!");
+                        actionBtn.setText("FLEE DOWN THE SLOPE");
+                    } else {
+                        player.setHealth(0);
+                        pHp.setText("HP: 0 / " + player.getMaxHealth());
+                        combatLog.setText("You struck for " + pDamage + " damage! (Serpent HP: " + sHealth + ")\n"
+                            + "[SERPENT D20: " + sRoll + "] The serpent delivered a lethal bite for " + sDamage + " damage!\n"
+                            + "You have fallen in battle...");
+                        actionBtn.setText("ACCEPT DEFEAT");
+                    }
+                    updateHudDisplay();
+                    return;
+                } else if (pHealth <= 25) {
+                    combatOver[0] = true;
+                    player.setHealth(pHealth);
+                    pHp.setText("HP: " + pHealth + " / " + player.getMaxHealth());
+                    specialSlideTarget = tile.getDestination();
+                    combatLog.setText("You struck for " + pDamage + " damage! (Serpent HP: " + sHealth + ")\n"
+                        + "[SERPENT D20: " + sRoll + "] Serpent struck for " + sDamage + " damage! (Your HP: " + pHealth + ")\n"
+                        + "You are critically wounded and slide down the slope to safety!");
+                    actionBtn.setText("SLIDE DOWN TO SAFETY");
+                    updateHudDisplay();
+                    return;
+                } else {
+                    player.setHealth(pHealth);
+                    pHp.setText("HP: " + pHealth + " / " + player.getMaxHealth());
+                    String playerLog = pCrit ? "CRITICAL HIT (D20: 20)! You dealt " + pDamage + " damage!" : "[D20: " + pRoll + "] You struck for " + pDamage + " damage!";
+                    String snakeLog = sCrit ? "\n[SERPENT CRITICAL D20: 20!] Serpent struck back for " + sDamage + " damage!" : "\n[SERPENT D20: " + sRoll + "] Serpent struck back for " + sDamage + " damage! (Your HP: " + pHealth + ")";
+                    combatLog.setText(playerLog + snakeLog);
+                    updateHudDisplay();
+                }
+            }
+        });
+
+        eventContentTable.add(actionBtn).size(380, 52).center().row();
+    }
+
+    /**
+     * Interactive Barter Satchel Slot Selector for trading an item with the merchant.
+     */
+    private void showBarterItemSelector(final Player player, final EventChoice choice, final Tile tile) {
+        eventContentTable.clear();
+
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#9c6818")));
+        eventBadgeLabel.setText("BARTER  -  SELECT AN ITEM");
+
+        Label titleLbl = new Label("Select Item to Trade", new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        titleLbl.setAlignment(Align.center);
+        eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
+
+        Label subLbl = new Label("The merchant inspects your inventory. Choose which relic to trade away:", new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+        subLbl.setAlignment(Align.center);
+        subLbl.setWrap(true);
+        eventContentTable.add(subLbl).width(530).padBottom(12).center().row();
+
+        int itemCount = (player.getInventory() != null) ? player.getInventory().size() : 0;
+        for (int i = 0; i < itemCount; i++) {
+            final int slotIndex = i;
+            final Item it = player.getInventory().getItem(i);
+
+            String itDesc = it.getName() + "  -  " + (it.getItemType() == ItemType.CONSUMABLE ? "[Consumable]" : "[Dur: " + it.getDurability() + "/" + it.getMaxDurability() + "]");
+            TextButton itemBtn = new TextButton(itDesc, eventChoiceBtnStyle);
+            itemBtn.getLabel().setWrap(true);
+            itemBtn.getLabel().setAlignment(Align.center);
+            itemBtn.pad(4, 16, 4, 16);
+            itemBtn.getLabelCell().width(480);
+            UIUtils.addScaleHoverEffect(itemBtn);
+            itemBtn.addListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent evt, Actor actor) {
+                    Item traded = player.getInventory().removeItem(slotIndex);
+                    EventChoice.EventResult res = new EventChoice.EventResult();
+                    res.tradedItem = traded;
+                    res.consequences.add("Traded away: " + (traded != null ? traded.getName() : "Item"));
+                    for (EventEffect eff : choice.getSuccessEffects()) {
+                        eff.apply(player, res.consequences);
+                    }
+                    showOutcomeView("Barter Trade Completed", res, false);
+                }
+            });
+            eventContentTable.add(itemBtn).size(530, 46).padBottom(6).center().row();
+        }
+
+        TextButton cancelBtn = new TextButton("CANCEL & RETURN", disabledEventChoiceBtnStyle);
+        UIUtils.addScaleHoverEffect(cancelBtn);
+        cancelBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent evt, Actor actor) {
+                showEventChoiceView(activeCurrentEvent, tile);
+            }
+        });
+        eventContentTable.add(cancelBtn).size(260, 44).padTop(6).center().row();
+    }
+
+    /**
+     * Interactive Satchel Full Item Swap Prompt when receiving loot with 4/4 capacity.
+     */
+    private void showItemSwapPrompt(final Player player, final Item newItem) {
+        eventContentTable.clear();
+
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#a63232")));
+        eventBadgeLabel.setText("INVENTORY FULL (4/4)  -  ITEM SWAP");
+
+        Label titleLbl = new Label("Inventory Full!", new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        titleLbl.setAlignment(Align.center);
+        eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
+
+        Label subLbl = new Label("You discovered [" + newItem.getName() + "], but your inventory is full.\nSelect an item to discard and replace, or leave it behind:",
+            new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+        subLbl.setAlignment(Align.center);
+        subLbl.setWrap(true);
+        eventContentTable.add(subLbl).width(530).padBottom(10).center().row();
+
+        for (int i = 0; i < player.getInventory().size(); i++) {
+            final int slot = i;
+            final Item existing = player.getInventory().getItem(i);
+            String label = "Replace: " + existing.getName() + " (" + existing.getEffect() + ")";
+            TextButton swapSlotBtn = new TextButton(label, eventChoiceBtnStyle);
+            swapSlotBtn.getLabel().setWrap(true);
+            swapSlotBtn.getLabel().setAlignment(Align.center);
+            swapSlotBtn.pad(4, 16, 4, 16);
+            swapSlotBtn.getLabelCell().width(480);
+            UIUtils.addScaleHoverEffect(swapSlotBtn);
+            swapSlotBtn.addListener(new ChangeListener() {
+                @Override
+                public void changed(ChangeEvent evt, Actor actor) {
+                    player.replaceItem(slot, newItem);
+                    EventChoice.EventResult res = new EventChoice.EventResult();
+                    res.consequences.add("Replaced [" + existing.getName() + "] with [" + newItem.getName() + "].");
+                    showOutcomeView("Item Swapped", res, false);
+                }
+            });
+            eventContentTable.add(swapSlotBtn).size(530, 46).padBottom(6).center().row();
+        }
+
+        TextButton leaveBtn = new TextButton("LEAVE " + newItem.getName().toUpperCase() + " BEHIND", disabledEventChoiceBtnStyle);
+        UIUtils.addScaleHoverEffect(leaveBtn);
+        leaveBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent evt, Actor actor) {
+                EventChoice.EventResult res = new EventChoice.EventResult();
+                res.consequences.add("Left [" + newItem.getName() + "] behind.");
+                showOutcomeView("Discovery Left Behind", res, false);
+            }
+        });
+        eventContentTable.add(leaveBtn).size(400, 44).padTop(6).center().row();
+
+        modalScrim.setVisible(true);
+        eventModalTable.setVisible(true);
+        turnState = TurnState.RESOLVING_TILE_EVENT;
+    }
+
+    /**
+     * Outcome feedback screen revealing the true consequences and D20 check outcome AFTER selection.
+     */
+    private void showOutcomeView(String choiceTitle, EventChoice.EventResult res, boolean isRetreat) {
+        eventContentTable.clear();
+
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#7a4823")));
+        eventBadgeLabel.setText("EVENT RESOLUTION");
+
+        Label titleLbl = new Label(choiceTitle, new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        titleLbl.setAlignment(Align.center);
+        titleLbl.setWrap(true);
+        eventContentTable.add(titleLbl).width(530).padTop(12).padBottom(6).center().row();
+
+        // D20 Skill Check Outcome Banner (if applicable)
+        if (res.difficultyClass > 0) {
+            Color d20Color = res.checkSucceeded ? Color.valueOf("#1d5c3a") : Color.valueOf("#8a2424");
+            Color d20Border = res.checkSucceeded ? Color.valueOf("#113b24") : Color.valueOf("#5e1414");
+            String d20Text = String.format("D20 CHECK: ROLLED %d (DC %d) - %s",
+                res.d20Roll, res.difficultyClass, (res.checkSucceeded ? "SUCCESS!" : "FAILED!"));
+
+            Table d20Badge = new Table();
+            d20Badge.setBackground(UIUtils.createRoundedDrawable(480, 40, 10, d20Color, d20Border, 2));
+            // Use playerTagFont (baked in pure white) so text pops with high contrast on red/green backgrounds
+            Label d20Lbl = new Label(d20Text, new Label.LabelStyle(playerTagFont, Color.WHITE));
+            d20Lbl.setAlignment(Align.center);
+            d20Lbl.setWrap(true);
+            d20Badge.add(d20Lbl).width(460).center();
+
+            eventContentTable.add(d20Badge).size(480, 40).padBottom(12).center().row();
+        }
+
+        // Consequences List Inset Box (Light Cream Container with Dark Mahogany Text)
+        Table outcomeBox = new Table();
+        outcomeBox.setBackground(UIUtils.createRoundedDrawable(530, 135, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
+        outcomeBox.pad(10, 20, 10, 20);
+
+        Table linesTable = new Table();
+        linesTable.center();
+
+        for (String msg : res.consequences) {
+            Label lineLbl = new Label(msg, new Label.LabelStyle(modalBodyFont, Color.valueOf("#361704")));
+            lineLbl.setAlignment(Align.center);
+            lineLbl.setWrap(true);
+            linesTable.add(lineLbl).width(460).padBottom(6).center().row();
+        }
+
+        outcomeBox.add(linesTable).width(460).center();
+        eventContentTable.add(outcomeBox).size(530, 135).padBottom(16).center().row();
+
+        // Action Button: CONTINUE
+        TextButton continueBtn = new TextButton("CONTINUE", eventChoiceBtnStyle);
+        continueBtn.getLabel().setWrap(true);
+        UIUtils.addScaleHoverEffect(continueBtn);
+        continueBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent evt, Actor actor) {
+                closeEventModal();
+            }
+        });
+        eventContentTable.add(continueBtn).size(280, 48).center().row();
+    }
+
+    /**
+     * Closes the active event modal and smoothly transitions turn or handles movement.
+     */
+    private void closeEventModal() {
+        modalScrim.setVisible(false);
+        eventModalTable.setVisible(false);
+        isEventModalActive = false;
+        updateHudDisplay();
+        updateMiniMapProgress();
+
+        Player player = game.getCurrentPlayer();
+        if (player != null && player.getHealth() <= 0) {
+            topBannerLabel.setText(player.getName().toUpperCase() + " DIED! GAME OVER.");
+            turnState = TurnState.TURN_TRANSITION;
+            actionPauseTimer = 1.0f;
+            return;
+        }
+
+        if (specialSlideTarget != -1) {
+            turnState = TurnState.TILE_ACTION_PAUSE;
+            actionPauseTimer = 0.8f;
+        } else {
+            if (player != null && player.getPosition() >= 100) {
+                topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " CLAIMS THE THRONE OF FATE!");
+            } else if (isItemMovement) {
+                isItemMovement = false;
+                turnState = TurnState.WAITING_FOR_ROLL;
+                topBannerLabel.setText(player.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
+            } else {
+                turnState = TurnState.TURN_TRANSITION;
+                actionPauseTimer = 0.6f;
+            }
+        }
+    }
+
     /**
      * Starts the dice tumbling sequence.
      */
     private void triggerRoll() {
         turnState = TurnState.ROLLING_DICE;
-        diceTumbleTimer = 0.55f;
-        rollButton.setColor(1f, 1f, 1f, 0.5f);
-
+        diceTumbleTimer = 0.75f;
+        diceFaceShuffleTimer = 0f;
+        rollButton.setColor(1f, 1f, 1f, 0.65f);
+        if (diceIcon != null) {
+            diceIcon.clearActions();
+        }
+        diceLabel.setText("ROLLING...");
         topBannerLabel.setText("ROLLING THE DICE OF FATE...");
     }
 
@@ -1003,6 +1755,11 @@ public class BoardScreen implements Screen {
         // 1. Update Game Physics & Camera only when NOT paused
         if (!isPaused) {
             stateTime += delta;
+            if (turnState == TurnState.STEPPING_TILES) {
+                walkStateTime += delta;
+            } else {
+                walkStateTime = 0f;
+            }
             updateTurnLogic(delta);
             updateCameraTracking(delta);
         }
@@ -1047,11 +1804,33 @@ public class BoardScreen implements Screen {
         switch (turnState) {
             case ROLLING_DICE:
                 diceTumbleTimer -= delta;
-                currentRollValue = 1 + (int) ((stateTime * 15f) % 6);
-                diceLabel.setText("ROLL: " + currentRollValue);
+                diceFaceShuffleTimer -= delta;
+
+                // High-framerate tumbling face cycle with rotation wobble and scale pulse
+                if (diceFaceShuffleTimer <= 0f) {
+                    diceFaceShuffleTimer = 0.055f;
+                    int randomFace = MathUtils.random(1, 6);
+                    if (diceIcon != null && diceDrawables[randomFace] != null) {
+                        diceIcon.setDrawable(diceDrawables[randomFace]);
+                        diceIcon.setRotation(MathUtils.random(-18f, 18f));
+                        diceIcon.setScale(MathUtils.random(0.92f, 1.15f));
+                    }
+                    diceLabel.setText("ROLL: " + randomFace);
+                }
 
                 if (diceTumbleTimer <= 0f) {
                     currentRollValue = movementDice.roll();
+                    if (diceIcon != null && diceDrawables[currentRollValue] != null) {
+                        diceIcon.setDrawable(diceDrawables[currentRollValue]);
+                        diceIcon.setRotation(0f);
+                        diceIcon.setScale(1f);
+                        diceIcon.clearActions();
+                        // Punchy landing bounce animation
+                        diceIcon.addAction(Actions.sequence(
+                            Actions.scaleTo(1.35f, 1.35f, 0.08f, Interpolation.pow2Out),
+                            Actions.scaleTo(1.0f, 1.0f, 0.12f, Interpolation.bounceOut)
+                        ));
+                    }
                     diceLabel.setText("ROLLED: " + currentRollValue);
 
                     hopCurrentTile = player.getPosition();
@@ -1072,11 +1851,13 @@ public class BoardScreen implements Screen {
                     updateMiniMapProgress();
 
                     if (hopCurrentTile >= hopTargetTile) {
-                        turnState = TurnState.TILE_ACTION_PAUSE;
-                        actionPauseTimer = 0.8f;
                         handleTileArrival(player, hopTargetTile);
                     }
                 }
+                break;
+
+            case RESOLVING_TILE_EVENT:
+                // Paused waiting for user interaction on the interactive event modal
                 break;
 
             case TILE_ACTION_PAUSE:
@@ -1086,10 +1867,20 @@ public class BoardScreen implements Screen {
                         player.setPosition(specialSlideTarget);
                         updateMiniMapProgress();
                         specialSlideTarget = -1;
-                        actionPauseTimer = 0.7f;
+                        if (isItemMovement) {
+                            isItemMovement = false;
+                            turnState = TurnState.WAITING_FOR_ROLL;
+                            topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + player.getPosition() + "! ROLL THE DICE!");
+                        } else {
+                            actionPauseTimer = 0.7f;
+                        }
                     } else {
                         if (player.getPosition() >= 100) {
                             topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " CLAIMS THE THRONE OF FATE!");
+                        } else if (isItemMovement) {
+                            isItemMovement = false;
+                            turnState = TurnState.WAITING_FOR_ROLL;
+                            topBannerLabel.setText(player.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
                         } else {
                             turnState = TurnState.TURN_TRANSITION;
                             actionPauseTimer = 0.6f;
@@ -1102,8 +1893,15 @@ public class BoardScreen implements Screen {
                 actionPauseTimer -= delta;
                 if (actionPauseTimer <= 0f) {
                     game.nextTurn();
+                    itemUsedThisTurn = false;
                     updateHudDisplay();
+                    refreshInventoryUI();
                     rollButton.setColor(Color.WHITE);
+                    if (diceIcon != null) {
+                        diceIcon.setRotation(0f);
+                        diceIcon.setScale(1f);
+                    }
+                    diceLabel.setText("D6");
                     turnState = TurnState.WAITING_FOR_ROLL;
                     topBannerLabel.setText(game.getCurrentPlayer().getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
                 }
@@ -1122,18 +1920,57 @@ public class BoardScreen implements Screen {
         Tile tile = board.getTile(tileIndex);
         if (tile == null) return;
 
+        if (tileIndex >= 100) {
+            topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " REACHED THE THRONE OF FATE!");
+            turnState = TurnState.TILE_ACTION_PAUSE;
+            actionPauseTimer = 1.0f;
+            return;
+        }
+
         if (tile instanceof SnakeTile) {
             SnakeTile snake = (SnakeTile) tile;
-            int dest = Math.max(1, tileIndex - 12);
-            specialSlideTarget = dest;
-            topBannerLabel.setText("SERPENT AMBUSH ON TILE " + tileIndex + "! RETREATING TO TILE " + dest + "!");
+            Event event = eventManager.selectEventForTile(tileIndex, EventCategory.SNAKE);
+            topBannerLabel.setText("SERPENT AMBUSH ON TILE " + tileIndex + "!");
+            showEventChoiceView(event, snake);
         } else if (tile instanceof LadderTile) {
             LadderTile ladder = (LadderTile) tile;
-            int dest = Math.min(100, tileIndex + 14);
-            specialSlideTarget = dest;
-            topBannerLabel.setText("LADDER ASCENT ON TILE " + tileIndex + "! CLIMBING UP TO TILE " + dest + "!");
+            // 40% chance for an interactive climbing dilemma; 60% for smooth direct climb
+            if (eventManager.shouldTriggerLadderEvent()) {
+                Event event = eventManager.selectEventForTile(tileIndex, EventCategory.LADDER);
+                topBannerLabel.setText("LADDER ASCENT ON TILE " + tileIndex + "! A CLIMBING DILEMMA ARISES...");
+                showEventChoiceView(event, ladder);
+            } else {
+                int dest = ladder.getDestination();
+                specialSlideTarget = dest;
+                int expEarned = 10 + (tileIndex / 3);
+                player.gainExperience(expEarned);
+                topBannerLabel.setText("STABLE ASCENT ON TILE " + tileIndex + "! CLIMBING UP TO TILE " + dest + "! (+" + expEarned + " EXP)");
+                turnState = TurnState.TILE_ACTION_PAUSE;
+                actionPauseTimer = 0.9f;
+                updateHudDisplay();
+            }
         } else {
-            topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + tileIndex + " - SAFE GROUND.");
+            // Normal tile: Dynamic pacing check with cooldown & bad-luck protection
+            if (eventManager.shouldTriggerAmbientEvent(player)) {
+                Event event = eventManager.selectEventForTile(tileIndex, EventCategory.NORMAL);
+                player.resetEventCooldown();
+                topBannerLabel.setText("AN ENCOUNTER ON TILE " + tileIndex + "!");
+                showEventChoiceView(event, tile);
+            } else {
+                player.incrementTurnsSinceLastEvent();
+                int expEarned = (int) (10 + tileIndex * 0.05f);
+                player.gainExperience(expEarned);
+                if (isItemMovement) {
+                    isItemMovement = false;
+                    topBannerLabel.setText(player.getName().toUpperCase() + " ADVANCED TO TILE " + tileIndex + " - SAFE GROUND. ROLL THE DICE!");
+                    turnState = TurnState.WAITING_FOR_ROLL;
+                } else {
+                    topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + tileIndex + " - SAFE GROUND. (+" + expEarned + " EXP)");
+                    turnState = TurnState.TILE_ACTION_PAUSE;
+                    actionPauseTimer = 0.8f;
+                }
+                updateHudDisplay();
+            }
         }
     }
 
@@ -1293,14 +2130,16 @@ public class BoardScreen implements Screen {
             Player player = players.get(p);
             if (player == activePlayer) continue; // Active player rendered last on the topmost layer
 
+            Animation<TextureRegion> anim = walkAnimations.get(player.getCharacterClass());
             Texture charTex = game.getAssetManager().get(Assets.getCharacterTexture(player.getCharacterClass()));
+            TextureRegion idleFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
             float tileCenterX = getTileCenterX(player.getPosition());
 
             // If sharing a tile with the active player, offset slightly behind
             boolean sharesWithActive = (player.getPosition() == activePos && turnState != TurnState.STEPPING_TILES);
-            float drawX = sharesWithActive ? (tileCenterX - 85f) : (tileCenterX - 60f);
-            float drawY = TILE_BOTTOM_Y + 36f;
-            float size = sharesWithActive ? 106f : 120f;
+            float drawX = sharesWithActive ? (tileCenterX - 145f) : (tileCenterX - (CHAR_DISPLAY_SIZE / 2f));
+            float drawY = sharesWithActive ? CHAR_DRAW_Y_INACTIVE_SHARED : CHAR_DRAW_Y;
+            float size = sharesWithActive ? CHAR_INACTIVE_SIZE : CHAR_DISPLAY_SIZE;
 
             if (sharesWithActive) {
                 // Subtle depth tint so the active player in front pops prominently
@@ -1309,30 +2148,33 @@ public class BoardScreen implements Screen {
                 batch.setColor(Color.WHITE);
             }
 
-            batch.draw(charTex, drawX, drawY, size, size);
+            batch.draw(idleFrame, drawX, drawY, size, size);
             batch.setColor(Color.WHITE);
         }
 
         // 2. Render ACTIVE player LAST (guaranteed on the topmost layer and fully visible)
         if (activePlayer != null) {
+            Animation<TextureRegion> anim = walkAnimations.get(activePlayer.getCharacterClass());
             Texture charTex = game.getAssetManager().get(Assets.getCharacterTexture(activePlayer.getCharacterClass()));
             float drawX;
-            float drawY = TILE_BOTTOM_Y + 36f;
+            float drawY = CHAR_DRAW_Y;
+            TextureRegion activeFrame;
 
             if (turnState == TurnState.STEPPING_TILES) {
                 float fromX = getTileCenterX(hopCurrentTile);
                 float toX = getTileCenterX(Math.min(100, hopCurrentTile + 1));
                 float progress = MathUtils.clamp(stepTimer / STEP_DURATION, 0f, 1f);
 
-                drawX = MathUtils.lerp(fromX, toX, progress) - 60f;
-                float hopArc = (float) Math.sin(progress * Math.PI) * 55f;
-                drawY += hopArc;
+                // Smooth ground-level walking stride between stepping stones (no parabolic hopping arc)
+                drawX = MathUtils.lerp(fromX, toX, progress) - (CHAR_DISPLAY_SIZE / 2f);
+                activeFrame = (anim != null) ? anim.getKeyFrame(walkStateTime, true) : new TextureRegion(charTex);
             } else {
-                drawX = getTileCenterX(activePlayer.getPosition()) - 60f;
+                drawX = getTileCenterX(activePlayer.getPosition()) - (CHAR_DISPLAY_SIZE / 2f);
+                activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
             }
 
             batch.setColor(Color.WHITE);
-            batch.draw(charTex, drawX, drawY, 120f, 120f);
+            batch.draw(activeFrame, drawX, drawY, CHAR_DISPLAY_SIZE, CHAR_DISPLAY_SIZE);
         }
     }
 
@@ -1346,7 +2188,8 @@ public class BoardScreen implements Screen {
         hudPlayerName.setText("P" + (game.getCurrentTurn() + 1) + ": " + player.getName().toUpperCase());
         int maxHp = (player.getCharacterClass() != null ? player.getCharacterClass().getBaseHealth() : 100);
         hudPlayerHp.setText("HP: " + player.getHealth() + " / " + maxHp);
-        hudPlayerStats.setText("ATK  " + player.getAttack() + "    |    DEF  " + player.getDefense());
+        hudPlayerExp.setText("LVL " + player.getLevel() + "    -    EXP: " + player.getExperience() + " / " + player.getExpThresh());
+        hudPlayerStats.setText("ATK  " + player.getAttack() + "    -    DEF  " + player.getDefense());
 
         Texture avatarTex = game.getAssetManager().get(Assets.getCharacterTexture(player.getCharacterClass()));
         hudPlayerAvatar.setDrawable(new TextureRegionDrawable(new TextureRegion(avatarTex)));
@@ -1364,7 +2207,7 @@ public class BoardScreen implements Screen {
 
         int pos = player.getPosition();
         String actStr = (pos <= 30) ? "ACT I" : ((pos <= 70) ? "ACT II" : "ACT III");
-        miniMapProgressLabel.setText(actStr + "   |   TILE " + pos + " / 100");
+        miniMapProgressLabel.setText(actStr + "   -   TILE " + pos + " / 100");
     }
 
     private float getTileCenterX(int tileIndex) {
@@ -1407,6 +2250,7 @@ public class BoardScreen implements Screen {
         if (rollSubFont != null) rollSubFont.dispose();
         if (hudNameFont != null) hudNameFont.dispose();
         if (hudHpFont != null) hudHpFont.dispose();
+        if (hudExpFont != null) hudExpFont.dispose();
         if (hudStatsFont != null) hudStatsFont.dispose();
         if (tileNumFont != null) tileNumFont.dispose();
         if (tileBadgeFont != null) tileBadgeFont.dispose();

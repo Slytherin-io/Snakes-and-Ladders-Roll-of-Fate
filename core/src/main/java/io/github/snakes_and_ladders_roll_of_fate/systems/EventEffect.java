@@ -55,44 +55,65 @@ public class EventEffect {
 
     // Resolves the effect with math variance and bounds checking
     public void apply(Player player) {
+        apply(player, null);
+    }
+
+    public void apply(Player player, java.util.List<String> logMessages) {
         int resolvedValue = calculateResolvedValue();
 
         switch (type) {
             case HEALTH:
-                int newHealth = Math.max(0, player.getHealth() + resolvedValue);
+                int newHealth = Math.min(player.getMaxHealth(), Math.max(0, player.getHealth() + resolvedValue));
                 player.setHealth(newHealth);
-                System.out.printf("  [HP] %s%d (Current: %d)%n", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getHealth());
+                String hpMsg = String.format("Vitality: %s%d HP (Current: %d/%d)", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getHealth(), player.getMaxHealth());
+                System.out.println("  [HP] " + hpMsg);
+                if (logMessages != null) logMessages.add(hpMsg);
                 break;
 
             case ATTACK:
                 player.setAttack(player.getAttack() + resolvedValue);
-                System.out.printf("  [Attack] %s%d (Current: %d)%n", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getAttack());
+                String atkMsg = String.format("Martial Might: %s%d ATK (Current: %d)", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getAttack());
+                System.out.println("  [Attack] " + atkMsg);
+                if (logMessages != null) logMessages.add(atkMsg);
                 break;
 
             case DEFENSE:
                 player.setDefense(player.getDefense() + resolvedValue);
-                System.out.printf("  [Defense] %s%d (Current: %d)%n", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getDefense());
+                String defMsg = String.format("Ward Fortitude: %s%d DEF (Current: %d)", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getDefense());
+                System.out.println("  [Defense] " + defMsg);
+                if (logMessages != null) logMessages.add(defMsg);
                 break;
 
             case EXPERIENCE:
-                player.gainExperience(resolvedValue);
-                System.out.printf("  [EXP] +%d (Current: %d)%n", resolvedValue, player.getExperience());
+                int expGain = Math.max(0, Math.abs(resolvedValue));
+                player.gainExperience(expGain);
+                String expMsg = String.format("Knowledge: +%d EXP (Total: %d)", expGain, player.getExperience());
+                System.out.println("  [EXP] " + expMsg);
+                if (logMessages != null) logMessages.add(expMsg);
                 break;
 
             case MOVE:
                 player.move(resolvedValue);
-                System.out.printf("  [Move] %s%d tiles (New Position: Tile %d)%n", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getPosition());
+                String mvMsg = String.format("Stride: %s%d tiles (Position: Tile %d)", (resolvedValue >= 0 ? "+" : ""), resolvedValue, player.getPosition());
+                System.out.println("  [Move] " + mvMsg);
+                if (logMessages != null) logMessages.add(mvMsg);
                 break;
 
             case ITEM:
                 Item toGrant = isRandomLoot ? Item.createRandomLoot(player.getLevel()) : itemReward;
                 if (toGrant != null) {
                     boolean added = player.addItem(toGrant);
-                    if (!added) {
+                    if (added) {
+                        String itemMsg = "Acquired Relic: " + toGrant.getName() + " (" + toGrant.getEffect() + ")";
+                        System.out.println("  " + itemMsg);
+                        if (logMessages != null) logMessages.add(itemMsg);
+                    } else {
                         if (itemSwapHandler != null) {
                             itemSwapHandler.handleSwap(player, toGrant);
                         } else {
-                            System.out.println("  [INVENTORY FULL] Bag is full! Could not take " + toGrant.getName() + ".");
+                            String fullMsg = "Satchel full! Left " + toGrant.getName() + " behind.";
+                            System.out.println("  [INVENTORY FULL] " + fullMsg);
+                            if (logMessages != null) logMessages.add(fullMsg);
                         }
                     }
                 }

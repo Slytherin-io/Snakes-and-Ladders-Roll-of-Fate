@@ -6,6 +6,7 @@ import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
@@ -29,7 +30,9 @@ import com.badlogic.gdx.video.VideoPlayer;
 import com.badlogic.gdx.video.VideoPlayerCreator;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
@@ -78,6 +81,8 @@ public class MainMenuScreen implements Screen {
     private List<CharacterClass> chosenClasses = new ArrayList<>();
 
     // Character Select UI references for live updates
+    private final Map<CharacterClass, Animation<TextureRegion>> charAnimations = new HashMap<>();
+    private float charAnimTimer = 0f;
     private Label characterBadge;
     private Image characterImage;
     private Label charNameLabel;
@@ -195,6 +200,7 @@ public class MainMenuScreen implements Screen {
         menuTable.add(exitButton).size(400, 80).center().row();
 
         // --- Build Dialog Modals ---
+        initCharacterAnimations();
         buildSettingsDialog(darkBrown, pillBrown);
         buildGameModeDialog(darkBrown, pillBrown);
         buildPlayerCountDialog(darkBrown, pillBrown);
@@ -490,6 +496,25 @@ public class MainMenuScreen implements Screen {
     }
 
     /**
+     * Initializes animated walking spritesheets for each character class (224x224 enlarged frames).
+     */
+    private void initCharacterAnimations() {
+        for (CharacterClass cls : CharacterClass.values()) {
+            Texture sheet = game.getAssetManager().get(Assets.getCharacterWalkSheet(cls));
+            int frameCount = Assets.getCharacterWalkFrameCount(cls);
+            TextureRegion[][] grid = TextureRegion.split(sheet, Assets.CHAR_FRAME_SIZE, Assets.CHAR_FRAME_SIZE);
+            TextureRegion[] frames = new TextureRegion[frameCount];
+            for (int i = 0; i < frameCount; i++) {
+                frames[i] = grid[0][i];
+            }
+            float frameDur = (cls == CharacterClass.CAT) ? 0.12f : 0.10f;
+            Animation<TextureRegion> anim = new Animation<>(frameDur, frames);
+            anim.setPlayMode(Animation.PlayMode.LOOP);
+            charAnimations.put(cls, anim);
+        }
+    }
+
+    /**
      * Builds the Character Selection dialog: carousel with character preview,
      * stats, locking mechanism (Approach A), and confirmation buttons.
      */
@@ -543,7 +568,7 @@ public class MainMenuScreen implements Screen {
 
         characterImage = new Image(game.getAssetManager().get(Assets.CHAR_TURTLE));
         characterImage.setScaling(Scaling.fit);
-        frameBox.add(characterImage).size(130, 130).center();
+        frameBox.add(characterImage).size(175, 175).center();
 
         // Lock Banner (Displayed directly over the character if already taken by Player 1)
         lockBanner = new Label("LOCKED BY PLAYER 1", new Label.LabelStyle(modeSubtitleFont, Color.valueOf("#ff5252")));
@@ -684,10 +709,15 @@ public class MainMenuScreen implements Screen {
         }
         charPerkLabel.setText("Perk: " + perk + "\n(" + cls.getStartingItemName() + ")");
 
-        // 2. Character sprite texture
-        // PLACEHOLDER: Loads texture registered in Assets.getCharacterTexture(cls)
-        Texture charTex = game.getAssetManager().get(Assets.getCharacterTexture(cls));
-        characterImage.setDrawable(new TextureRegionDrawable(new TextureRegion(charTex)));
+        // 2. Character sprite texture & initial frame
+        charAnimTimer = 0f;
+        Animation<TextureRegion> anim = charAnimations.get(cls);
+        if (anim != null) {
+            characterImage.setDrawable(new TextureRegionDrawable(anim.getKeyFrames()[0]));
+        } else {
+            Texture charTex = game.getAssetManager().get(Assets.getCharacterTexture(cls));
+            characterImage.setDrawable(new TextureRegionDrawable(new TextureRegion(charTex)));
+        }
 
         // 3. Top badge title: indicates which player is choosing
         if (totalSelectingPlayers == 1) {
@@ -835,6 +865,16 @@ public class MainMenuScreen implements Screen {
                 batch.begin();
                 batch.draw(frame, 0, 0, screenW, screenH);
                 batch.end();
+            }
+        }
+
+        if (characterSelectTable != null && characterSelectTable.isVisible()) {
+            charAnimTimer += delta;
+            CharacterClass currentCls = CharacterClass.values()[currentCharacterIndex];
+            Animation<TextureRegion> charAnim = charAnimations.get(currentCls);
+            if (charAnim != null && characterImage != null) {
+                TextureRegion frame = charAnim.getKeyFrame(charAnimTimer, true);
+                characterImage.setDrawable(new TextureRegionDrawable(frame));
             }
         }
 
