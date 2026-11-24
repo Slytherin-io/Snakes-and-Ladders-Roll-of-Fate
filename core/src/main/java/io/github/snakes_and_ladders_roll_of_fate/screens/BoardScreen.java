@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
 import io.github.snakes_and_ladders_roll_of_fate.screens.GameSummaryScreen;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.board.LadderTile;
@@ -100,9 +101,22 @@ public class BoardScreen implements Screen {
     private BitmapFont badgeFont;
     private BitmapFont miniFont;
     private BitmapFont sliderFont;
-    private BitmapFont modalTitleFont;
-    private BitmapFont modalBodyFont;
-    private BitmapFont modalChoiceFont;
+    // Pause, Settings, & Leave Menu Fonts (Decoupled from Event Choices)
+    private BitmapFont pauseBadgeFont;
+    private BitmapFont pauseTitleFont;
+    private BitmapFont pauseSubFont;
+    private BitmapFont pauseBodyFont;
+    private BitmapFont pauseBtnFont;
+    private BitmapFont pauseTipFont;
+
+    // Event & Choice System Fonts (Decoupled from Pause Menu)
+    private BitmapFont eventBadgeFont;
+    private BitmapFont eventTitleFont;
+    private BitmapFont eventDescFont;
+    private BitmapFont choiceBtnFont;
+    private BitmapFont choiceOutcomeTitleFont;
+    private BitmapFont choiceOutcomeBodyFont;
+    private BitmapFont choiceD20Font;
 
     // Parallax Slices for the 3 Acts (Far Canopy, Mid Silhouettes, Foreground Ground)
     private TextureRegion act1Far, act1Mid, act1Ground;
@@ -242,6 +256,7 @@ public class BoardScreen implements Screen {
 
     @Override
     public void show() {
+        updateActMusic();
         batch = new SpriteBatch();
 
         // Responsive World Viewport: extends cleanly without stretching on any resolution
@@ -275,18 +290,31 @@ public class BoardScreen implements Screen {
         rollBigFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.WHITE);
         rollSubFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 21, Color.valueOf("#fbf2dc"));
         hudNameFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, nameBrown);
-        hudHpFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, crimson);
-        hudExpFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, expBrown);
-        hudStatsFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, warmBrown);
+        hudHpFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, crimson);
+        hudExpFont     = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, expBrown);
+        hudStatsFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, warmBrown);
         playerTagFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 19, Color.WHITE);
         badgeFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
         tileNumFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, goldLight);
         tileBadgeFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 15, Color.WHITE);
         miniFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 16, Color.WHITE);
         sliderFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, darkBrown);
-        modalTitleFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 34, darkBrown);
-        modalBodyFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
-        modalChoiceFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
+        // Pause, Settings, & Leave Menu Fonts (Decoupled from Event Choices)
+        pauseBadgeFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
+        pauseTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, darkBrown);
+        pauseSubFont   = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, darkBrown);
+        pauseBodyFont  = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, darkBrown);
+        pauseBtnFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
+        pauseTipFont   = UIUtils.createFont("ui/Sniglet-Regular.ttf", 18, Color.valueOf("#54280e"));
+
+        // Event & Choice System Fonts (Decoupled from Pause Menu)
+        eventBadgeFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
+        eventTitleFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 35, Color.valueOf("#361704"));
+        eventDescFont          = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, Color.valueOf("#4a2c11"));
+        choiceBtnFont          = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, Color.valueOf("#fff8ea"));
+        choiceOutcomeTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, Color.valueOf("#361704"));
+        choiceOutcomeBodyFont  = UIUtils.createFont("ui/Sniglet-Regular.ttf", 21, Color.valueOf("#361704"));
+        choiceD20Font          = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, Color.WHITE);
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();
@@ -580,6 +608,9 @@ public class BoardScreen implements Screen {
         inventoryBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 // Prevent opening inventory during dice rolling, tile stepping, combat/event modal, or turn pause
                 if (turnState != TurnState.WAITING_FOR_ROLL || isEventModalActive) {
                     return;
@@ -620,6 +651,9 @@ public class BoardScreen implements Screen {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
                 if (turnState == TurnState.WAITING_FOR_ROLL) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
                     triggerRoll();
                 }
             }
@@ -631,6 +665,7 @@ public class BoardScreen implements Screen {
 
         hudPlayerAvatar = new Image(game.getAssetManager().get(Assets.CHAR_TURTLE));
         hudPlayerAvatar.setScaling(Scaling.fit);
+        hudPlayerAvatar.setAlign(Align.center);
 
         Table statsTextTable = new Table();
         statsTextTable.left();
@@ -728,6 +763,9 @@ public class BoardScreen implements Screen {
         inventoryLootBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 handleFindLoot();
             }
         });
@@ -743,6 +781,9 @@ public class BoardScreen implements Screen {
         closeBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 inventoryPopup.setVisible(false);
             }
         });
@@ -871,6 +912,9 @@ public class BoardScreen implements Screen {
                 useBtn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
                         handleUseInventoryItem(slotIndex);
                     }
                 });
@@ -954,6 +998,18 @@ public class BoardScreen implements Screen {
         // Banner feedback
         topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! (" + effectDesc + ")");
 
+        if (game.getAudioManager() != null) {
+            if (type == EventEffectType.HEALTH) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.POTION_DRINK);
+            } else if (type == EventEffectType.ATTACK || type == EventEffectType.DEFENSE) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP);
+            } else if (type == EventEffectType.SCOUT) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.SCOUT_FLARE);
+            } else if (type == EventEffectType.MOVE) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP);
+            }
+        }
+
         // If it was a movement item, advance player with walking animation
         if (type == EventEffectType.MOVE) {
             int targetPos = Math.min(100, Math.max(1, startPos + effectVal));
@@ -1025,6 +1081,9 @@ public class BoardScreen implements Screen {
         pauseBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 if (!isPaused) {
                     pauseGame();
                 } else {
@@ -1054,36 +1113,37 @@ public class BoardScreen implements Screen {
         hudStage.addActor(modalScrim);
 
         TextButton.TextButtonStyle menuBtnStyle = new TextButton.TextButtonStyle();
-        menuBtnStyle.up = UIUtils.createRoundedDrawable(360, 58, 16, pillBrown);
-        menuBtnStyle.over = UIUtils.createRoundedDrawable(360, 58, 16, Color.valueOf("#9c572b"));
-        menuBtnStyle.font = badgeFont;
+        menuBtnStyle.up = UIUtils.createRoundedDrawable(340, 52, 16, pillBrown);
+        menuBtnStyle.over = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#9c572b"));
+        menuBtnStyle.font = pauseBtnFont;
         menuBtnStyle.fontColor = Color.WHITE;
 
         TextButton.TextButtonStyle dangerBtnStyle = new TextButton.TextButtonStyle();
-        dangerBtnStyle.up = UIUtils.createRoundedDrawable(360, 58, 16, Color.valueOf("#8a2424"));
-        dangerBtnStyle.over = UIUtils.createRoundedDrawable(360, 58, 16, Color.valueOf("#a63232"));
-        dangerBtnStyle.font = badgeFont;
+        dangerBtnStyle.up = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#8a2424"));
+        dangerBtnStyle.over = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#a63232"));
+        dangerBtnStyle.font = pauseBtnFont;
         dangerBtnStyle.fontColor = Color.WHITE;
 
         // =====================================================================
         // 1. PAUSE MODAL
         // =====================================================================
-        Label pauseBadge = new Label("GAME PAUSED", new Label.LabelStyle(badgeFont, Color.WHITE));
+        Label pauseBadge = new Label("GAME PAUSED", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
         pauseBadge.setAlignment(Align.center);
         Table pauseBadgeTable = new Table();
         pauseBadgeTable.setBackground(UIUtils.createRoundedDrawable(340, 58, 18, pillBrown));
         pauseBadgeTable.add(pauseBadge).pad(6, 36, 6, 36);
 
         Table pauseContent = new Table();
-        Label pauseSub = new Label("The journey awaits your command.", new Label.LabelStyle(modalBodyFont, darkBrown));
+        Label pauseSub = new Label("The journey awaits your command.", new Label.LabelStyle(pauseSubFont, darkBrown));
         pauseSub.setAlignment(Align.center);
-        pauseContent.add(pauseSub).padBottom(28).center().row();
+        pauseContent.add(pauseSub).padTop(12).padBottom(20).center().row();
 
         TextButton resumeBtn = new TextButton("RESUME", menuBtnStyle);
         UIUtils.addScaleHoverEffect(resumeBtn);
         resumeBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 resumeGame();
             }
         });
@@ -1093,6 +1153,7 @@ public class BoardScreen implements Screen {
         settingsBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showSettingsMenu();
             }
         });
@@ -1102,17 +1163,18 @@ public class BoardScreen implements Screen {
         leaveBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showLeaveConfirmMenu();
             }
         });
 
-        pauseContent.add(resumeBtn).size(360, 58).padBottom(14).center().row();
-        pauseContent.add(settingsBtn).size(360, 58).padBottom(14).center().row();
-        pauseContent.add(leaveBtn).size(360, 58).padBottom(18).center().row();
+        pauseContent.add(resumeBtn).size(340, 52).padBottom(12).center().row();
+        pauseContent.add(settingsBtn).size(340, 52).padBottom(12).center().row();
+        pauseContent.add(leaveBtn).size(340, 52).padBottom(16).center().row();
 
-        Label escTip = new Label("Press ESC or P to resume", new Label.LabelStyle(miniFont, Color.valueOf("#7a4823")));
+        Label escTip = new Label("Press ESC or P to resume", new Label.LabelStyle(pauseTipFont, Color.valueOf("#54280e")));
         escTip.setAlignment(Align.center);
-        pauseContent.add(escTip).center();
+        pauseContent.add(escTip).padTop(4).padBottom(10).center();
 
         Image pauseScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
         pauseScrollBg.setScaling(Scaling.stretch);
@@ -1125,14 +1187,14 @@ public class BoardScreen implements Screen {
         pauseModalTable.setFillParent(true);
         pauseModalTable.setVisible(false);
         pauseModalTable.add(pauseBadgeTable).size(340, 58).padBottom(-22).center().row();
-        pauseModalTable.add(pauseScrollStack).size(740, 540).center().row();
+        pauseModalTable.add(pauseScrollStack).size(800, 580).center().row();
 
         hudStage.addActor(pauseModalTable);
 
         // =====================================================================
         // 2. SETTINGS MODAL
         // =====================================================================
-        Label settingsBadge = new Label("SETTINGS", new Label.LabelStyle(badgeFont, Color.WHITE));
+        Label settingsBadge = new Label("SETTINGS", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
         settingsBadge.setAlignment(Align.center);
         Table settingsBadgeTable = new Table();
         settingsBadgeTable.setBackground(UIUtils.createRoundedDrawable(280, 58, 18, pillBrown));
@@ -1141,22 +1203,33 @@ public class BoardScreen implements Screen {
         Slider.SliderStyle sliderStyle = UIUtils.createSliderStyle(darkBrown, darkBrown);
 
         Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
-        musicSlider.setValue(10);
-        Label musicNum = new Label("10", new Label.LabelStyle(sliderFont, darkBrown));
+        int musicVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getMusicVolume() * 10f) : 7;
+        musicSlider.setValue(musicVal);
+        Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(sliderFont, darkBrown));
         musicSlider.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                musicNum.setText(String.valueOf((int) musicSlider.getValue()));
+                int val = (int) musicSlider.getValue();
+                musicNum.setText(String.valueOf(val));
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().setMusicVolume(val / 10f);
+                }
             }
         });
 
         Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
-        sfxSlider.setValue(10);
-        Label sfxNum = new Label("10", new Label.LabelStyle(sliderFont, darkBrown));
+        int sfxVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getSfxVolume() * 10f) : 8;
+        sfxSlider.setValue(sfxVal);
+        Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(sliderFont, darkBrown));
         sfxSlider.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                sfxNum.setText(String.valueOf((int) sfxSlider.getValue()));
+                int val = (int) sfxSlider.getValue();
+                sfxNum.setText(String.valueOf(val));
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().setSfxVolume(val / 10f);
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
             }
         });
 
@@ -1165,15 +1238,15 @@ public class BoardScreen implements Screen {
 
         Table settingsContent = new Table();
 
-        Label musicLabel = new Label("MUSIC VOLUME", new Label.LabelStyle(modalTitleFont, darkBrown));
+        Label musicLabel = new Label("MUSIC VOLUME", new Label.LabelStyle(pauseTitleFont, darkBrown));
         settingsContent.add(musicLabel).colspan(3).center().padBottom(10).row();
-        settingsContent.add(soundIcon).size(38, 38).padRight(16);
+        settingsContent.add(musicIcon).size(38, 38).padRight(16);
         settingsContent.add(musicSlider).width(340).padRight(16);
         settingsContent.add(musicNum).width(44).left().padBottom(26).row();
 
-        Label sfxLabel = new Label("SFX VOLUME", new Label.LabelStyle(modalTitleFont, darkBrown));
+        Label sfxLabel = new Label("SFX VOLUME", new Label.LabelStyle(pauseTitleFont, darkBrown));
         settingsContent.add(sfxLabel).colspan(3).center().padBottom(10).row();
-        settingsContent.add(musicIcon).size(38, 38).padRight(16);
+        settingsContent.add(soundIcon).size(38, 38).padRight(16);
         settingsContent.add(sfxSlider).width(340).padRight(16);
         settingsContent.add(sfxNum).width(44).left().row();
 
@@ -1189,6 +1262,7 @@ public class BoardScreen implements Screen {
         backSettingsBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showPauseMenu();
             }
         });
@@ -1197,7 +1271,7 @@ public class BoardScreen implements Screen {
         settingsModalTable.setFillParent(true);
         settingsModalTable.setVisible(false);
         settingsModalTable.add(settingsBadgeTable).size(280, 58).padBottom(-22).center().row();
-        settingsModalTable.add(settingsScrollStack).size(740, 540).center().row();
+        settingsModalTable.add(settingsScrollStack).size(800, 580).center().row();
         settingsModalTable.add(backSettingsBtn).size(180, 52).padTop(-22).center().row();
 
         hudStage.addActor(settingsModalTable);
@@ -1205,7 +1279,7 @@ public class BoardScreen implements Screen {
         // =====================================================================
         // 3. LEAVE GAME CONFIRMATION MODAL
         // =====================================================================
-        Label leaveBadge = new Label("LEAVE GAME?", new Label.LabelStyle(badgeFont, Color.WHITE));
+        Label leaveBadge = new Label("LEAVE GAME?", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
         leaveBadge.setAlignment(Align.center);
         Table leaveBadgeTable = new Table();
         leaveBadgeTable.setBackground(UIUtils.createRoundedDrawable(300, 58, 18, Color.valueOf("#8a2424")));
@@ -1213,14 +1287,14 @@ public class BoardScreen implements Screen {
 
         Table leaveContent = new Table();
 
-        Label leaveWarningTitle = new Label("Abandon Current Adventure?", new Label.LabelStyle(modalTitleFont, darkBrown));
+        Label leaveWarningTitle = new Label("Abandon Current Adventure?", new Label.LabelStyle(pauseTitleFont, darkBrown));
         leaveWarningTitle.setAlignment(Align.center);
-        leaveContent.add(leaveWarningTitle).padBottom(14).center().row();
+        leaveContent.add(leaveWarningTitle).padTop(10).padBottom(16).center().row();
 
-        Label leaveWarningBody = new Label("Are you sure you want to return to the main menu?\nAny unsaved progress on this board will be lost.", new Label.LabelStyle(modalBodyFont, darkBrown));
+        Label leaveWarningBody = new Label("Are you sure you want to return to the main menu?\nAny unsaved progress on this board will be lost.", new Label.LabelStyle(pauseBodyFont, darkBrown));
         leaveWarningBody.setAlignment(Align.center);
         leaveWarningBody.setWrap(true);
-        leaveContent.add(leaveWarningBody).width(460).padBottom(36).center().row();
+        leaveContent.add(leaveWarningBody).width(500).padBottom(28).center().row();
 
         Table leaveBtnRow = new Table();
         TextButton stayBtn = new TextButton("STAY", menuBtnStyle);
@@ -1228,6 +1302,7 @@ public class BoardScreen implements Screen {
         stayBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showPauseMenu();
             }
         });
@@ -1237,13 +1312,14 @@ public class BoardScreen implements Screen {
         confirmLeaveBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 leaveGameToMainMenu();
             }
         });
 
-        leaveBtnRow.add(stayBtn).size(180, 56).padRight(24);
-        leaveBtnRow.add(confirmLeaveBtn).size(180, 56);
-        leaveContent.add(leaveBtnRow).center();
+        leaveBtnRow.add(stayBtn).size(170, 52).padRight(20);
+        leaveBtnRow.add(confirmLeaveBtn).size(170, 52);
+        leaveContent.add(leaveBtnRow).padBottom(12).center();
 
         Image leaveScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
         leaveScrollBg.setScaling(Scaling.stretch);
@@ -1256,7 +1332,7 @@ public class BoardScreen implements Screen {
         leaveConfirmModalTable.setFillParent(true);
         leaveConfirmModalTable.setVisible(false);
         leaveConfirmModalTable.add(leaveBadgeTable).size(300, 58).padBottom(-22).center().row();
-        leaveConfirmModalTable.add(leaveScrollStack).size(740, 540).center().row();
+        leaveConfirmModalTable.add(leaveScrollStack).size(800, 580).center().row();
 
         hudStage.addActor(leaveConfirmModalTable);
     }
@@ -1319,22 +1395,22 @@ public class BoardScreen implements Screen {
         eventChoiceBtnStyle = new TextButton.TextButtonStyle();
         eventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
         eventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
-        eventChoiceBtnStyle.font = modalChoiceFont;
+        eventChoiceBtnStyle.font = choiceBtnFont;
         eventChoiceBtnStyle.fontColor = Color.valueOf("#fff8ea");
 
         disabledEventChoiceBtnStyle = new TextButton.TextButtonStyle();
         disabledEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#554338aa"), Color.valueOf("#443329aa"), 2);
-        disabledEventChoiceBtnStyle.font = modalChoiceFont;
+        disabledEventChoiceBtnStyle.font = choiceBtnFont;
         disabledEventChoiceBtnStyle.fontColor = Color.valueOf("#a89688");
 
         combatStrikeBtnStyle = new TextButton.TextButtonStyle();
         combatStrikeBtnStyle.up = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#8a2424"), Color.valueOf("#5a1414"), 2);
         combatStrikeBtnStyle.over = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#a63232"), Color.valueOf("#5a1414"), 2);
-        combatStrikeBtnStyle.font = badgeFont;
+        combatStrikeBtnStyle.font = choiceBtnFont;
         combatStrikeBtnStyle.fontColor = Color.WHITE;
 
         // Top Event Badge (Positioned to comfortably overlap the top of the enlarged scroll)
-        eventBadgeLabel = new Label("EVENT", new Label.LabelStyle(badgeFont, Color.WHITE));
+        eventBadgeLabel = new Label("EVENT", new Label.LabelStyle(eventBadgeFont, Color.WHITE));
         eventBadgeLabel.setAlignment(Align.center);
         eventBadgeLabel.setWrap(true);
         eventBadgeTable = new Table();
@@ -1409,15 +1485,15 @@ public class BoardScreen implements Screen {
         eventBadgeLabel.setText(badgePrefix + "  -  TILE " + tile.getPosition());
 
         // 2. Event Title & Atmospheric Narrative Lore
-        Label titleLbl = new Label(event.getTitle(), new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label(event.getTitle(), new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         titleLbl.setWrap(true);
-        eventContentTable.add(titleLbl).width(530).padTop(10).padBottom(4).center().row();
+        eventContentTable.add(titleLbl).width(580).padTop(10).padBottom(6).center().row();
 
-        Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+        Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         descLbl.setAlignment(Align.center);
         descLbl.setWrap(true);
-        eventContentTable.add(descLbl).width(530).padBottom(14).center().row();
+        eventContentTable.add(descLbl).width(580).padBottom(16).center().row();
 
         // 3. Dynamic Choices (Hybrid Model: Strategic/tactical actions visible with requirements; unaffordable merchant stock hidden)
         List<EventChoice> choices = event.getChoices();
@@ -1469,6 +1545,9 @@ public class BoardScreen implements Screen {
                 choiceBtn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent evt, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
                         handleChoiceSelected(choice, choiceIndex, event, tile, player);
                     }
                 });
@@ -1562,7 +1641,7 @@ public class BoardScreen implements Screen {
         playerBox.add(pHp).left().row();
         playerBox.add(pAtk).left();
 
-        Label vsLabel = new Label("VS", new Label.LabelStyle(modalTitleFont, Color.valueOf("#8a2424")));
+        Label vsLabel = new Label("VS", new Label.LabelStyle(eventTitleFont, Color.valueOf("#8a2424")));
 
         // Serpent Info Box
         Table snakeBox = new Table();
@@ -1585,7 +1664,7 @@ public class BoardScreen implements Screen {
         logContainer.setBackground(UIUtils.createRoundedDrawable(530, 140, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
         logContainer.pad(10, 18, 10, 18);
 
-        final Label combatLog = new Label("The coiled serpent lunges from the foliage!\nTap [STRIKE] to roll your combat dice!", new Label.LabelStyle(modalBodyFont, Color.valueOf("#361704")));
+        final Label combatLog = new Label("The coiled serpent lunges from the foliage!\nTap [STRIKE] to roll your combat dice!", new Label.LabelStyle(eventDescFont, Color.valueOf("#361704")));
         combatLog.setAlignment(Align.center);
         combatLog.setWrap(true);
         logContainer.add(combatLog).width(490).center();
@@ -1601,6 +1680,9 @@ public class BoardScreen implements Screen {
         actionBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 if (combatOver[0]) {
                     closeEventModal();
                     return;
@@ -1686,11 +1768,11 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#9c6818")));
         eventBadgeLabel.setText("BARTER  -  SELECT AN ITEM");
 
-        Label titleLbl = new Label("Select Item to Trade", new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label("Select Item to Trade", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
 
-        Label subLbl = new Label("The merchant inspects your inventory. Choose which relic to trade away:", new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+        Label subLbl = new Label("The merchant inspects your inventory. Choose which relic to trade away:", new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
         eventContentTable.add(subLbl).width(530).padBottom(12).center().row();
@@ -1710,6 +1792,9 @@ public class BoardScreen implements Screen {
             itemBtn.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent evt, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
                     Item traded = player.getInventory().removeItem(slotIndex);
                     EventChoice.EventResult res = new EventChoice.EventResult();
                     res.tradedItem = traded;
@@ -1728,6 +1813,9 @@ public class BoardScreen implements Screen {
         cancelBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 showEventChoiceView(activeCurrentEvent, tile);
             }
         });
@@ -1743,12 +1831,12 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#a63232")));
         eventBadgeLabel.setText("INVENTORY FULL (4/4)  -  ITEM SWAP");
 
-        Label titleLbl = new Label("Inventory Full!", new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label("Inventory Full!", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
 
         Label subLbl = new Label("You discovered [" + newItem.getName() + "], but your inventory is full.\nSelect an item to discard and replace, or leave it behind:",
-            new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+            new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
         eventContentTable.add(subLbl).width(530).padBottom(10).center().row();
@@ -1766,6 +1854,9 @@ public class BoardScreen implements Screen {
             swapSlotBtn.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent evt, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
                     player.replaceItem(slot, newItem);
                     EventChoice.EventResult res = new EventChoice.EventResult();
                     res.consequences.add("Replaced [" + existing.getName() + "] with [" + newItem.getName() + "].");
@@ -1780,6 +1871,9 @@ public class BoardScreen implements Screen {
         leaveBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 EventChoice.EventResult res = new EventChoice.EventResult();
                 res.consequences.add("Left [" + newItem.getName() + "] behind.");
                 showOutcomeView("Discovery Left Behind", res, false);
@@ -1801,10 +1895,10 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#7a4823")));
         eventBadgeLabel.setText("EVENT RESOLUTION");
 
-        Label titleLbl = new Label(choiceTitle, new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label(choiceTitle, new Label.LabelStyle(choiceOutcomeTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         titleLbl.setWrap(true);
-        eventContentTable.add(titleLbl).width(530).padTop(12).padBottom(6).center().row();
+        eventContentTable.add(titleLbl).width(580).padTop(10).padBottom(12).center().row();
 
         // D20 Skill Check Outcome Banner (if applicable)
         if (res.difficultyClass > 0) {
@@ -1815,8 +1909,7 @@ public class BoardScreen implements Screen {
 
             Table d20Badge = new Table();
             d20Badge.setBackground(UIUtils.createRoundedDrawable(480, 44, 10, d20Color, d20Border, 2));
-            // Use modalChoiceFont (baked in pure white) so text pops with high contrast on red/green backgrounds
-            Label d20Lbl = new Label(d20Text, new Label.LabelStyle(modalChoiceFont, Color.WHITE));
+            Label d20Lbl = new Label(d20Text, new Label.LabelStyle(choiceD20Font, Color.WHITE));
             d20Lbl.setAlignment(Align.center);
             d20Lbl.setWrap(true);
             d20Badge.add(d20Lbl).width(460).center();
@@ -1833,7 +1926,7 @@ public class BoardScreen implements Screen {
         linesTable.center();
 
         for (String msg : res.consequences) {
-            Label lineLbl = new Label(msg, new Label.LabelStyle(modalBodyFont, Color.valueOf("#361704")));
+            Label lineLbl = new Label(msg, new Label.LabelStyle(choiceOutcomeBodyFont, Color.valueOf("#361704")));
             lineLbl.setAlignment(Align.center);
             lineLbl.setWrap(true);
             linesTable.add(lineLbl).width(460).padBottom(6).center().row();
@@ -1849,6 +1942,9 @@ public class BoardScreen implements Screen {
         continueBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 closeEventModal();
             }
         });
@@ -1906,10 +2002,31 @@ public class BoardScreen implements Screen {
         }
     }
 
+    private void updateActMusic() {
+        if (game.getAudioManager() == null) return;
+        Player player = game.getCurrentPlayer();
+        int pos = (player != null) ? player.getPosition() : 1;
+        AudioManager.MusicTrack track;
+        if (pos <= 30) {
+            track = AudioManager.MusicTrack.ACT1;
+        } else if (pos <= 70) {
+            track = AudioManager.MusicTrack.ACT2;
+        } else {
+            track = AudioManager.MusicTrack.ACT3;
+        }
+        boolean immediate = (game.getAudioManager().getCurrentTrack() != AudioManager.MusicTrack.ACT1 &&
+                             game.getAudioManager().getCurrentTrack() != AudioManager.MusicTrack.ACT2 &&
+                             game.getAudioManager().getCurrentTrack() != AudioManager.MusicTrack.ACT3);
+        game.getAudioManager().playMusic(track, true, immediate);
+    }
+
     /**
      * Starts the dice tumbling sequence.
      */
     private void triggerRoll() {
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playSound(AudioManager.SoundEffect.DICE_ROLL);
+        }
         turnState = TurnState.ROLLING_DICE;
         diceTumbleTimer = 0.75f;
         diceFaceShuffleTimer = 0f;
@@ -2051,6 +2168,9 @@ public class BoardScreen implements Screen {
                     stepTimer = 0f;
                     hopCurrentTile++;
                     player.setPosition(hopCurrentTile);
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.STEP, 0.65f, 0.08f);
+                    }
                     if (game.getRunTracker() != null) {
                         game.getRunTracker().recordSteps(player, 1, hopCurrentTile);
                     }
@@ -2084,6 +2204,13 @@ public class BoardScreen implements Screen {
                             if (specialMovePhaseTimer <= 0f) {
                                 specialMovePhase = SpecialMovePhase.IN_FLIGHT;
                                 specialMoveElapsed = 0f;
+                                if (game.getAudioManager() != null) {
+                                    if (isLadderMove) {
+                                        game.getAudioManager().playSound(AudioManager.SoundEffect.LADDER_SOAR);
+                                    } else {
+                                        game.getAudioManager().playSound(AudioManager.SoundEffect.SNAKE_SLIDE);
+                                    }
+                                }
                             }
                             break;
 
@@ -2150,6 +2277,9 @@ public class BoardScreen implements Screen {
 
                                 specialMovePhase = SpecialMovePhase.LANDED;
                                 specialMovePhaseTimer = 0.65f; // Touchdown landing pause
+                                if (game.getAudioManager() != null && isLadderMove) {
+                                    game.getAudioManager().playSound(AudioManager.SoundEffect.LADDER_LAND);
+                                }
                             }
                             break;
 
@@ -2229,6 +2359,7 @@ public class BoardScreen implements Screen {
                     }
                     diceLabel.setText("D6");
                     turnState = TurnState.WAITING_FOR_ROLL;
+                    updateActMusic();
                     topBannerLabel.setText(game.getCurrentPlayer().getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
                 }
                 break;
@@ -2254,6 +2385,9 @@ public class BoardScreen implements Screen {
             tile.setRevealed(true);
             revealFlashTile = tileIndex;
             revealFlashTimer = 1.0f;
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.FOG_REVEAL);
+            }
         }
 
         if (tileIndex >= 100) {
@@ -2326,8 +2460,14 @@ public class BoardScreen implements Screen {
                     turnState = TurnState.WAITING_FOR_ROLL;
                 } else {
                     if (tileIndex == 30) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
+                        }
                         topBannerLabel.setText(player.getName().toUpperCase() + " REACHED SANCTUARY (ACT I FINALE)! REST BEFORE ENTERING THE SUNKEN RUINS.");
                     } else if (tileIndex == 70) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
+                        }
                         topBannerLabel.setText(player.getName().toUpperCase() + " REACHED THE ABYSS GATE (ACT II FINALE)! GIRD RESOLVE FOR THE INFERNAL VOID.");
                     } else if (wasUnrevealed) {
                         topBannerLabel.setText(player.getName().toUpperCase() + " UNCOVERED TILE " + tileIndex + " - SAFE GROUND. (+" + expEarned + " EXP)");
@@ -2991,6 +3131,8 @@ public class BoardScreen implements Screen {
 
         Texture avatarTex = game.getAssetManager().get(Assets.getCharacterTexture(player.getCharacterClass()));
         hudPlayerAvatar.setDrawable(new TextureRegionDrawable(new TextureRegion(avatarTex)));
+        hudPlayerAvatar.setScaling(Scaling.fit);
+        hudPlayerAvatar.setAlign(Align.center);
 
         updateMiniMapProgress();
 
@@ -3045,6 +3187,13 @@ public class BoardScreen implements Screen {
      * 3. Touchdown recovery on destination tile
      */
     private void startSpecialMove(int startTile, int destTile, boolean isLadder) {
+        if (game.getAudioManager() != null) {
+            if (isLadder) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.LADDER_WINDUP);
+            } else {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.SNAKE_HISS);
+            }
+        }
         this.specialMoveStartTile = startTile;
         this.specialMoveDestTile = destTile;
         this.isLadderMove = isLadder;
@@ -3114,8 +3263,19 @@ public class BoardScreen implements Screen {
         if (badgeFont != null) badgeFont.dispose();
         if (miniFont != null) miniFont.dispose();
         if (sliderFont != null) sliderFont.dispose();
-        if (modalTitleFont != null) modalTitleFont.dispose();
-        if (modalBodyFont != null) modalBodyFont.dispose();
-        if (modalChoiceFont != null) modalChoiceFont.dispose();
+        if (pauseBadgeFont != null) pauseBadgeFont.dispose();
+        if (pauseTitleFont != null) pauseTitleFont.dispose();
+        if (pauseSubFont != null) pauseSubFont.dispose();
+        if (pauseBodyFont != null) pauseBodyFont.dispose();
+        if (pauseBtnFont != null) pauseBtnFont.dispose();
+        if (pauseTipFont != null) pauseTipFont.dispose();
+
+        if (eventBadgeFont != null) eventBadgeFont.dispose();
+        if (eventTitleFont != null) eventTitleFont.dispose();
+        if (eventDescFont != null) eventDescFont.dispose();
+        if (choiceBtnFont != null) choiceBtnFont.dispose();
+        if (choiceOutcomeTitleFont != null) choiceOutcomeTitleFont.dispose();
+        if (choiceOutcomeBodyFont != null) choiceOutcomeBodyFont.dispose();
+        if (choiceD20Font != null) choiceD20Font.dispose();
     }
 }
