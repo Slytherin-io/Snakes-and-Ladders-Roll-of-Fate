@@ -24,6 +24,7 @@ import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
 import io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
@@ -296,6 +297,9 @@ public class BattleScreen implements Screen {
 
     @Override
     public void show() {
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playMusic(AudioManager.MusicTrack.BATTLE);
+        }
         batch = new SpriteBatch();
         worldCamera = new OrthographicCamera();
         worldViewport = new ExtendViewport(1920, 1080, worldCamera);
@@ -488,6 +492,7 @@ public class BattleScreen implements Screen {
         btnAttack.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
                     playerLungeTimer = PLAYER_LUNGE_DURATION;
                     playerAttackLanded = false;
                     syncUi();
@@ -497,6 +502,7 @@ public class BattleScreen implements Screen {
         btnDefend.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
                     spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
                     spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "+5 DEF GUARD", Color.valueOf("#ffd54f"), false);
                     battleSystem.onPlayerDefend();
@@ -507,6 +513,7 @@ public class BattleScreen implements Screen {
         btnEscape.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     battleSystem.onPlayerEscape();
                     syncUi();
                 }
@@ -516,6 +523,7 @@ public class BattleScreen implements Screen {
             @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
                 // Only open if it's the player's turn and no animations are playing
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     if (!itemPopup.isVisible()) {
                         refreshItemPopup(); // Rebuild the list so it's always fresh
                     }
@@ -598,6 +606,9 @@ public class BattleScreen implements Screen {
         UIUtils.addScaleHoverEffect(continueBtn);
         continueBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 if (player.getHealth() <= 0) {
                     if (game.getRunTracker() != null) {
                         game.getRunTracker().recordPlayerFallen(player);
@@ -698,7 +709,13 @@ public class BattleScreen implements Screen {
                 continueBtn.getStyle().over = UIUtils.createRoundedDrawable(260, 62, 14, Color.valueOf("#388e3c"), Color.valueOf("#2e7d32"), 2);
 
                 spawnCelebrationSparks(960f, 540f);
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
+                }
             } else if (o == BattleOutcome.DEFEAT) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.PLAYER_HURT);
+                }
                 if (game.getRunTracker() != null) {
                     game.getRunTracker().recordPlayerFallen(player);
                 }
@@ -796,6 +813,9 @@ public class BattleScreen implements Screen {
             useBtn.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
                     spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
                     spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, item.getName().toUpperCase(), Color.valueOf("#81c784"), false);
                     battleSystem.onPlayerUseItem(slotIndex);
@@ -817,6 +837,9 @@ public class BattleScreen implements Screen {
         TextButton closeBtn = new TextButton("CLOSE", closeStyle);
         closeBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 itemPopup.setVisible(false);
             }
         });
@@ -834,6 +857,9 @@ public class BattleScreen implements Screen {
             float progress = 1.0f - (playerLungeTimer / PLAYER_LUNGE_DURATION);
             if (progress >= 0.48f && !playerAttackLanded) {
                 playerAttackLanded = true;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                }
                 battleSystem.onPlayerAttack();
                 syncUi();
             }
@@ -847,6 +873,9 @@ public class BattleScreen implements Screen {
             float progress = 1.0f - (enemyLungeTimer / ENEMY_LUNGE_DURATION);
             if (progress >= 0.48f && !enemyAttackLanded) {
                 enemyAttackLanded = true;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.PLAYER_HURT);
+                }
                 battleSystem.executeEnemyAttack();
                 syncUi();
             }

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker;
@@ -102,6 +103,9 @@ public class GameSummaryScreen implements Screen {
 
     @Override
     public void show() {
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playMusic(isVictory ? AudioManager.MusicTrack.VICTORY : AudioManager.MusicTrack.DEFEAT, false);
+        }
         batch = new SpriteBatch();
         stage = new Stage(new ExtendViewport(1920, 1080));
         Gdx.input.setInputProcessor(stage);
@@ -509,6 +513,10 @@ public class GameSummaryScreen implements Screen {
         playAgainBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
+                }
                 if (game.getLastChosenClasses() != null && !game.getLastChosenClasses().isEmpty()) {
                     game.startGameWithClasses(game.getLastChosenClasses());
                 } else {
@@ -529,6 +537,9 @@ public class GameSummaryScreen implements Screen {
         menuBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 game.setScreen(new MainMenuScreen(game));
             }
         });

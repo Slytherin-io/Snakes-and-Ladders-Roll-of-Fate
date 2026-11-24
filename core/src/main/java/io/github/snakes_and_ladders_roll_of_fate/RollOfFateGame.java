@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import io.github.snakes_and_ladders_roll_of_fate.screens.BoardScreen;
 import io.github.snakes_and_ladders_roll_of_fate.screens.LoadingScreen;
 import io.github.snakes_and_ladders_roll_of_fate.screens.MainMenuScreen;
+import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
@@ -31,6 +32,7 @@ public class RollOfFateGame extends Game {
     private GameMode selectedGameMode;
     private RunTracker runTracker = new RunTracker();
     private List<io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass> lastChosenClasses = new ArrayList<>();
+    private AudioManager audioManager = new AudioManager();
 
     @Override
     public void create() {
@@ -39,6 +41,8 @@ public class RollOfFateGame extends Game {
         Assets.loadAll(assetManager);
 
         assetManager.finishLoading();
+
+        audioManager.init();
 
         gameState = "MENU";
         setScreen(new MainMenuScreen(this));
@@ -182,18 +186,26 @@ public class RollOfFateGame extends Game {
 //            Gdx.app.log("Screenshot", "Saved to " + file.file().getAbsolutePath());
 //        }
 
+        if (audioManager != null) {
+            audioManager.update(Gdx.graphics.getDeltaTime());
+        }
+
         super.render();
     }
 
     @Override
     public void dispose() {
         super.dispose();
+        if (audioManager != null) {
+            audioManager.dispose();
+        }
         if (assetManager != null) {
             assetManager.dispose();
         }
     }
 
     // Getters & Setters
+    public AudioManager getAudioManager() { return audioManager; }
     public AssetManager getAssetManager() { return assetManager; }
     public Screen getCurrentScreen() { return currentScreen; }
     public Board getBoard() { return board; }
