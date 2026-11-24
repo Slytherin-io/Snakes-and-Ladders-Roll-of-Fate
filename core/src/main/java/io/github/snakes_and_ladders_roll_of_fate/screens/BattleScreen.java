@@ -32,6 +32,7 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.screens.MainMenuScreen;
+import io.github.snakes_and_ladders_roll_of_fate.screens.GameSummaryScreen;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome;
@@ -326,12 +327,18 @@ public class BattleScreen implements Screen {
         // Register Battle Listeners for Dynamic FX
         battleSystem.setBattleListener((attacker, defender, damage, isCrit, isMiss) -> {
             if (attacker == player) {
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordSnakeCombat(player, damage, false, isCrit);
+                }
                 spawnSlash(ENEMY_X, ENEMY_DRAW_Y + 70f, false, isCrit);
                 spawnHitSparks(ENEMY_X, ENEMY_DRAW_Y + 70f, false, isCrit ? 26 : 16, isCrit);
                 enemyFlinchTimer = FLINCH_DURATION;
                 spawnDamageNumber(ENEMY_X, ENEMY_DRAW_Y + 140f, damage, isCrit, isMiss);
                 triggerScreenShake(isCrit ? 15f : 8f, isCrit ? 0.28f : 0.18f);
             } else {
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordDamageTaken(player, damage);
+                }
                 spawnSlash(PLAYER_X, CHAR_DRAW_Y + 90f, true, isCrit);
                 spawnHitSparks(PLAYER_X, CHAR_DRAW_Y + 90f, true, isCrit ? 26 : 16, isCrit);
                 playerFlinchTimer = FLINCH_DURATION;
@@ -591,12 +598,17 @@ public class BattleScreen implements Screen {
         UIUtils.addScaleHoverEffect(continueBtn);
         continueBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (player.getHealth() <= 0 && game.getPlayers().size() <= 1) {
-                    game.setScreen(new MainMenuScreen(game));
-                } else {
-                    game.nextTurn();
-                    game.setScreen(new BoardScreen(game));
+                if (player.getHealth() <= 0) {
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordPlayerFallen(player);
+                    }
+                    if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                        game.setScreen(new GameSummaryScreen(game, false, player));
+                        return;
+                    }
                 }
+                game.nextTurn();
+                game.setScreen(new BoardScreen(game));
             }
         });
         victoryCard.add(continueBtn).size(260, 62).center();
@@ -643,6 +655,9 @@ public class BattleScreen implements Screen {
             }
 
             if (o == BattleOutcome.VICTORY) {
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordSnakeCombat(player, 0, true, false);
+                }
                 topBannerLabel.setText("VICTORY!");
                 modalTitleLabel.setText("VICTORY!");
                 modalTitleLabel.setColor(Color.valueOf("#ffd54f"));
@@ -653,6 +668,9 @@ public class BattleScreen implements Screen {
                 rewardExpLabel.setColor(Color.valueOf("#ffd54f"));
 
                 if (outcomeMessage.contains("Loot: ")) {
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordItemCollected(player);
+                    }
                     String lootStr = outcomeMessage.substring(outcomeMessage.indexOf("Loot: ") + 6);
                     rewardLootLabel.setText("Spoils of War: " + lootStr + " (Added to Satchel)");
                     rewardLootLabel.setColor(Color.valueOf("#69f0ae"));
@@ -673,6 +691,9 @@ public class BattleScreen implements Screen {
 
                 spawnCelebrationSparks(960f, 540f);
             } else if (o == BattleOutcome.DEFEAT) {
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordPlayerFallen(player);
+                }
                 topBannerLabel.setText("DEFEAT");
                 modalTitleLabel.setText("DEFEAT");
                 modalTitleLabel.setColor(Color.valueOf("#ff5252"));

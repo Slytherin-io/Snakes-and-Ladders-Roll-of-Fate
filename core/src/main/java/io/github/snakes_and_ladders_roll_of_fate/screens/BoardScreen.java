@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.screens.GameSummaryScreen;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.board.LadderTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile;
@@ -783,6 +784,10 @@ public class BoardScreen implements Screen {
         boolean success = player.useItem(slotIndex);
         if (!success) return;
 
+        if (game.getRunTracker() != null) {
+            game.getRunTracker().recordItemUsed(player);
+        }
+
         itemUsedThisTurn = true;
 
         // Auto-close inventory popup so player returns to the action!
@@ -831,6 +836,9 @@ public class BoardScreen implements Screen {
         Item loot = Item.createRandomLoot();
         boolean added = player.addItem(loot);
         if (added) {
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordItemCollected(player);
+            }
             topBannerLabel.setText(player.getName().toUpperCase() + " FOUND " + loot.getName().toUpperCase() + "! (" + player.getInventory().size() + "/4 SLOTS)");
             refreshInventoryUI();
         }
@@ -1447,10 +1455,16 @@ public class BoardScreen implements Screen {
                 // Check Snake Slain
                 if (sHealth <= 0) {
                     combatOver[0] = true;
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordSnakeCombat(player, pDamage, true, pCrit);
+                    }
                     int exp = 15 + (tile.getPosition() / 2);
                     player.gainExperience(exp);
                     Item loot = Item.createRandomLoot();
                     boolean added = player.addItem(loot);
+                    if (added && game.getRunTracker() != null) {
+                        game.getRunTracker().recordItemCollected(player);
+                    }
                     specialSlideTarget = -1; // Slain! Hold ground!
 
                     String hitPrefix = pCrit ? "CRITICAL STRIKE (D20: 20)!" : (pMiss ? "GRAZING BLOW (D20: 1)!" : "DIRECT HIT (D20: " + pRoll + ")!");
@@ -1468,6 +1482,9 @@ public class BoardScreen implements Screen {
                 boolean sCrit = combatBattle.isLastRollCritical();
 
                 int pHealth = player.getHealth() - sDamage;
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordDamageTaken(player, sDamage);
+                }
 
                 if (pHealth <= 0) {
                     combatOver[0] = true;
@@ -1482,6 +1499,9 @@ public class BoardScreen implements Screen {
                         actionBtn.setText("FLEE DOWN THE SLOPE");
                     } else {
                         player.setHealth(0);
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordPlayerFallen(player);
+                        }
                         pHp.setText("HP: 0 / " + player.getMaxHealth());
                         combatLog.setText("You struck for " + pDamage + " damage! (Serpent HP: " + sHealth + ")\n"
                             + "[SERPENT D20: " + sRoll + "] The serpent delivered a lethal bite for " + sDamage + " damage!\n"
@@ -1704,8 +1724,19 @@ public class BoardScreen implements Screen {
         updateMiniMapProgress();
 
         Player player = game.getCurrentPlayer();
+        if (player != null && game.getRunTracker() != null) {
+            game.getRunTracker().recordEventResolved(player);
+        }
+
         if (player != null && player.getHealth() <= 0) {
-            topBannerLabel.setText(player.getName().toUpperCase() + " DIED! GAME OVER.");
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordPlayerFallen(player);
+            }
+            if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                game.setScreen(new GameSummaryScreen(game, false, player));
+                return;
+            }
+            topBannerLabel.setText(player.getName().toUpperCase() + " DIED! NEXT TRAVELER'S TURN...");
             turnState = TurnState.TURN_TRANSITION;
             actionPauseTimer = 1.0f;
             return;
@@ -1716,7 +1747,11 @@ public class BoardScreen implements Screen {
             actionPauseTimer = 0.8f;
         } else {
             if (player != null && player.getPosition() >= 100) {
-                topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " CLAIMS THE THRONE OF FATE!");
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordThroneClaimed(player);
+                }
+                game.setScreen(new GameSummaryScreen(game, true, player));
+                return;
             } else if (isItemMovement) {
                 isItemMovement = false;
                 turnState = TurnState.WAITING_FOR_ROLL;
@@ -1839,6 +1874,11 @@ public class BoardScreen implements Screen {
                     }
                     diceLabel.setText("ROLLED: " + currentRollValue);
 
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordRoll(player, currentRollValue);
+                        game.getRunTracker().recordTurn(player);
+                    }
+
                     hopCurrentTile = player.getPosition();
                     hopTargetTile = Math.min(100, hopCurrentTile + currentRollValue);
 
@@ -1854,6 +1894,9 @@ public class BoardScreen implements Screen {
                     stepTimer = 0f;
                     hopCurrentTile++;
                     player.setPosition(hopCurrentTile);
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordSteps(player, 1, hopCurrentTile);
+                    }
                     updateMiniMapProgress();
 
                     if (hopCurrentTile >= hopTargetTile) {
@@ -1870,7 +1913,11 @@ public class BoardScreen implements Screen {
                 actionPauseTimer -= delta;
                 if (actionPauseTimer <= 0f) {
                     if (specialSlideTarget != -1) {
+                        int tilesLost = Math.max(0, player.getPosition() - specialSlideTarget);
                         player.setPosition(specialSlideTarget);
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordSnakeSlide(player, tilesLost);
+                        }
                         updateMiniMapProgress();
                         specialSlideTarget = -1;
                         if (isItemMovement) {
@@ -1882,7 +1929,11 @@ public class BoardScreen implements Screen {
                         }
                     } else {
                         if (player.getPosition() >= 100) {
-                            topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " CLAIMS THE THRONE OF FATE!");
+                            if (game.getRunTracker() != null) {
+                                game.getRunTracker().recordThroneClaimed(player);
+                            }
+                            game.setScreen(new GameSummaryScreen(game, true, player));
+                            return;
                         } else if (isItemMovement) {
                             isItemMovement = false;
                             turnState = TurnState.WAITING_FOR_ROLL;
@@ -1898,6 +1949,22 @@ public class BoardScreen implements Screen {
             case TURN_TRANSITION:
                 actionPauseTimer -= delta;
                 if (actionPauseTimer <= 0f) {
+                    if (player.getHealth() <= 0) {
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordPlayerFallen(player);
+                        }
+                        if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                            game.setScreen(new GameSummaryScreen(game, false, player));
+                            return;
+                        }
+                    }
+                    if (player.getPosition() >= 100) {
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordThroneClaimed(player);
+                        }
+                        game.setScreen(new GameSummaryScreen(game, true, player));
+                        return;
+                    }
                     game.nextTurn();
                     itemUsedThisTurn = false;
                     updateHudDisplay();
@@ -1931,6 +1998,9 @@ public class BoardScreen implements Screen {
 
         if (tileIndex >= 100) {
             topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " REACHED THE THRONE OF FATE!");
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordThroneClaimed(player);
+            }
             turnState = TurnState.TILE_ACTION_PAUSE;
             actionPauseTimer = 1.0f;
             return;
@@ -1938,6 +2008,9 @@ public class BoardScreen implements Screen {
 
         // 1. SNAKE TILE -> Trigger serpent ambush narrative event modal (like ConsoleTestGame)
         if (tile instanceof SnakeTile) {
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordSnakeEncounter(player);
+            }
             SnakeTile snakeTile = (SnakeTile) tile;
             Event event = eventManager.selectEventForTile(tileIndex, EventCategory.SNAKE);
             topBannerLabel.setText("SERPENT AMBUSH ON TILE " + tileIndex + "!");
@@ -1947,6 +2020,9 @@ public class BoardScreen implements Screen {
         // 2. LADDER TILE -> Handle climbing
         else if (tile instanceof LadderTile) {
             LadderTile ladder = (LadderTile) tile;
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordLadder(player, tileIndex, ladder.getDestination());
+            }
             // 40% chance for an interactive climbing dilemma; 60% for smooth direct climb
             if (eventManager.shouldTriggerLadderEvent()) {
                 Event event = eventManager.selectEventForTile(tileIndex, EventCategory.LADDER);
