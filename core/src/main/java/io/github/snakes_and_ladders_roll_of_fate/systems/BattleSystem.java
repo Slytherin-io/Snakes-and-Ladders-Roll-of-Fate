@@ -193,25 +193,14 @@ public class BattleSystem {
         }
 
         if (newHealth <= 0) {
-            if (player.getHealth() > 25) { // Mortal Strike Safeguard
-                player.setHealth(1);
-                battleLog = enemy.getEnemyType() + " deals " + damage + " damage - SURVIVAL INSTINCT leaves you at 1 HP!";
-                endBattle(BattleOutcome.WEAKENED);
-            } else {
-                player.setHealth(0);
-                battleLog = enemy.getEnemyType() + " deals " + damage + " damage - you fall...";
-                endBattle(BattleOutcome.DEFEAT);
-            }
+            player.setHealth(0);
+            battleLog = enemy.getEnemyType() + " deals " + damage + " damage - you have fallen in battle...";
+            endBattle(BattleOutcome.DEFEAT);
             return;
         }
         player.setHealth(newHealth);
-        if (player.getHealth() <= 25) {
-            battleLog = enemy.getEnemyType() + " deals " + damage + " damage - you are too weak to continue!";
-            endBattle(BattleOutcome.WEAKENED);
-        } else {
-            battleLog = enemy.getEnemyType() + " deals " + damage + " damage!";
-            currentState = BattleState.PLAYER_TURN;
-        }
+        battleLog = enemy.getEnemyType() + " deals " + damage + " damage!";
+        currentState = BattleState.PLAYER_TURN;
     }
 
     public void endBattle() {
@@ -247,8 +236,7 @@ public class BattleSystem {
                 } catch (NumberFormatException e) {
                     System.out.println("Invalid input. You hesitate, losing your turn!");
                     enemyConsoleTurn(player, enemy);
-                    if (player.getHealth() == 0) return BattleOutcome.DEFEAT;
-                    if (player.getHealth() <= 25) return BattleOutcome.WEAKENED;
+                    if (player.getHealth() <= 0) return BattleOutcome.DEFEAT;
                     continue;
                 }
             } else if (scanner == null || !scanner.hasNextLine()) {
@@ -313,13 +301,10 @@ public class BattleSystem {
                 player.clearTemporaryBuffs();
 
                 // Check battle end conditions
-                if (player.getHealth() == 0) {
+                if (player.getHealth() <= 0) {
+                    player.setHealth(0);
                     endBattle(BattleOutcome.DEFEAT);
                     return BattleOutcome.DEFEAT;
-                } else if (player.getHealth() <= 25) {
-                    System.out.println("\n⚠️ You are too weak to continue fighting!");
-                    endBattle(BattleOutcome.WEAKENED);
-                    return BattleOutcome.WEAKENED;
                 }
             }
         }
@@ -335,14 +320,8 @@ public class BattleSystem {
         int newHealth = player.getHealth() - enemyDamage;
 
         if (newHealth <= 0) {
-            if (player.getHealth() > 25) {
-                player.setHealth(1);
-                System.out.println("The " + enemy.getEnemyType() + " dealt " + enemyDamage + " damage. Your HP: 1");
-                System.out.println("  [SURVIVAL INSTINCT] The massive blow hurls you backwards off the ledge!");
-            } else {
-                player.setHealth(0);
-                System.out.println("The " + enemy.getEnemyType() + " dealt " + enemyDamage + " damage. You have been defeated...");
-            }
+            player.setHealth(0);
+            System.out.println("The " + enemy.getEnemyType() + " dealt " + enemyDamage + " damage. You have been defeated...");
         } else {
             player.setHealth(newHealth);
             System.out.println("The " + enemy.getEnemyType() + " dealt " + enemyDamage + " damage. Your HP: " + player.getHealth());

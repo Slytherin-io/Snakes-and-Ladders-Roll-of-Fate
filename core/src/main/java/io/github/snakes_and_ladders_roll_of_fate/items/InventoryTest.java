@@ -1,6 +1,7 @@
 package io.github.snakes_and_ladders_roll_of_fate.items;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
@@ -294,43 +295,36 @@ public class InventoryTest {
             }
         }
 
-        // Verify Standard Retreat: Player reduced below 25 HP slides down
-        Player retreatPlayer = new Player("Retreater");
-        retreatPlayer.setHealth(40);
-        retreatPlayer.setAttack(1);
-        retreatPlayer.setDefense(0);
-        retreatPlayer.setPosition(98);
-        highSnake.startCombat(retreatPlayer);
-        if (retreatPlayer.getHealth() > 25 || retreatPlayer.getHealth() <= 0) {
-            throw new AssertionError("Player taking non-lethal hit below 25 HP should survive in retreat range, was: " + retreatPlayer.getHealth());
-        }
-        if (retreatPlayer.getPosition() != 40) {
-            throw new AssertionError("Retreating player should slide down to destination (40), was: " + retreatPlayer.getPosition());
-        }
-
-        // Verify Mortal Retreat Safeguard: Player with >25 HP taking lethal damage (>26 dmg) -> Clamps to 1 HP & slides down
-        Player woundedPlayer = new Player("Survivor");
-        woundedPlayer.setHealth(26);
-        woundedPlayer.setAttack(1); // Low attack so snake hits back
-        woundedPlayer.setDefense(-10); // Guarantees incoming damage exceeds 26
-        woundedPlayer.setPosition(98);
-        highSnake.startCombat(woundedPlayer);
-        if (woundedPlayer.getHealth() != 1) {
-            throw new AssertionError("Player who entered combat with >25 HP should survive lethal blow with 1 HP, was: " + woundedPlayer.getHealth());
-        }
-        if (woundedPlayer.getPosition() != 40) {
-            throw new AssertionError("Player surviving lethal blow should slide down to destination (40), was: " + woundedPlayer.getPosition());
-        }
-
-        // Verify Lethal Death when entering combat with <= 25 HP
+        // Verify Combat Damage and True Mortality:
         Player doomedPlayer = new Player("Doomed");
-        doomedPlayer.setHealth(15);
+        doomedPlayer.setHealth(20);
         doomedPlayer.setAttack(1);
-        doomedPlayer.setDefense(-10);
+        doomedPlayer.setDefense(-10); // Guarantees incoming damage exceeds 20
         doomedPlayer.setPosition(98);
         highSnake.startCombat(doomedPlayer);
         if (doomedPlayer.getHealth() != 0) {
-            throw new AssertionError("Critically injured player (<=25 HP) should die if taking lethal combat damage, was: " + doomedPlayer.getHealth());
+            throw new AssertionError("Critically injured player taking lethal combat damage must die (HP 0), was: " + doomedPlayer.getHealth());
+        }
+
+        // Verify Player taking mortal damage dies legitimately (no infinite immortality safeguard)
+        Player mortalPlayer = new Player("Mortal");
+        mortalPlayer.setHealth(30);
+        mortalPlayer.setAttack(1);
+        mortalPlayer.setDefense(-20); // Guarantees incoming damage exceeds 30
+        mortalPlayer.setPosition(98);
+        highSnake.startCombat(mortalPlayer);
+        if (mortalPlayer.getHealth() != 0) {
+            throw new AssertionError("Player taking fatal combat blow must reach 0 HP and die, was: " + mortalPlayer.getHealth());
+        }
+
+        // Verify Victorious Player Survives
+        Player victorPlayer = new Player("Victor");
+        victorPlayer.setHealth(100);
+        victorPlayer.setAttack(100);
+        victorPlayer.setPosition(14);
+        lowSnake.startCombat(victorPlayer);
+        if (victorPlayer.getHealth() <= 0) {
+            throw new AssertionError("Victor player should defeat snake and survive, was: " + victorPlayer.getHealth());
         }
 
         // 17. Character Class Archetypes & Starting Gear Tests
@@ -454,6 +448,58 @@ public class InventoryTest {
         if (expPlayer.getExpThresh() != 110) {
             throw new AssertionError("Exp threshold should increase to 110 on Level 2, was: " + expPlayer.getExpThresh());
         }
+
+        // Test 20: BattleSystem State Transitions & Mortality Verification
+        System.out.println("\n[Test 20] BattleSystem Execution & True Mortality Verification...");
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem bsSys =
+            new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        Player testHero = new Player("Hero", CharacterClass.CAT);
+        testHero.setHealth(50);
+        testHero.setDefense(0);
+        Enemy testEnemy = new Enemy("Test Serpent");
+        testEnemy.setAttack(15);
+        testEnemy.setHealth(100);
+
+        bsSys.startBattle(testHero, testEnemy);
+        // Force ENEMY_TURN
+        try {
+            java.lang.reflect.Field stateField = io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.class.getDeclaredField("currentState");
+            stateField.setAccessible(true);
+            stateField.set(bsSys, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        // Enemy attacks: 50 HP taking ~15 damage should leave ~35 HP and return to PLAYER_TURN
+        bsSys.executeEnemyAttack();
+        if (testHero.getHealth() <= 0 || testHero.getHealth() > 50) {
+            throw new AssertionError("Non-lethal hit should reduce health correctly, was: " + testHero.getHealth());
+        }
+        if (bsSys.getCurrentState() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.PLAYER_TURN) {
+            throw new AssertionError("Combat should continue on PLAYER_TURN after non-lethal hit, was: " + bsSys.getCurrentState());
+        }
+
+        // Now test lethal damage in BattleSystem:
+        testHero.setHealth(5);
+        try {
+            java.lang.reflect.Field stateField = io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.class.getDeclaredField("currentState");
+            stateField.setAccessible(true);
+            stateField.set(bsSys, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        bsSys.executeEnemyAttack();
+        if (testHero.getHealth() != 0) {
+            throw new AssertionError("Hero taking lethal blow in BattleSystem must have 0 HP, was: " + testHero.getHealth());
+        }
+        if (bsSys.getFinalOutcome() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome.DEFEAT) {
+            throw new AssertionError("Outcome must be DEFEAT, was: " + bsSys.getFinalOutcome());
+        }
+        if (bsSys.getCurrentState() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.BATTLE_END) {
+            throw new AssertionError("State must be BATTLE_END, was: " + bsSys.getCurrentState());
+        }
+
+        System.out.println("  [CONFIRMED] Player takes lethal damage, reaches 0 HP, and correctly triggers DEFEAT!");
 
         System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");
     }

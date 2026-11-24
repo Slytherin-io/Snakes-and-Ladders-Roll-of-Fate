@@ -708,8 +708,8 @@ public class BattleScreen implements Screen {
                 rewardStatusLabel.setText("Hero Status: Fallen (0 / " + maxHp + " HP)");
                 rewardStatusLabel.setColor(Color.valueOf("#cfd8dc"));
 
-                if (game.getPlayers().size() <= 1) {
-                    continueBtn.setText("RETURN TO MENU");
+                if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                    continueBtn.setText("VIEW RUN SUMMARY");
                 } else {
                     continueBtn.setText("CONTINUE");
                 }
@@ -919,18 +919,22 @@ public class BattleScreen implements Screen {
         // Draw Player
         TextureRegion pFrame = playerIdleAnim != null ? playerIdleAnim.getKeyFrame(stateTime, true) : null;
         if (pFrame != null) {
-            float bob = MathUtils.sin(stateTime * 3f) * 4f;
+            float bob = (player.getHealth() <= 0) ? 0f : MathUtils.sin(stateTime * 3f) * 4f;
+            float pAlpha = (player.getHealth() <= 0) ? 0.45f : 1.0f;
             if (playerFlinchTimer > 0.12f) {
                 batch.setColor(1f, 0.25f, 0.25f, 1f); // Red hurt flash
+            } else if (player.getHealth() <= 0) {
+                batch.setColor(0.45f, 0.45f, 0.50f, pAlpha); // Fallen knocked out tint
             } else {
                 batch.setColor(Color.WHITE);
             }
             float drawPX = PLAYER_X + pLungeX + pFlinchX;
-            float drawPY = CHAR_DRAW_Y + bob + pLungeY;
+            float drawPY = CHAR_DRAW_Y + (player.getHealth() <= 0 ? -12f : bob) + pLungeY;
+            float drawH = (player.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE;
             batch.draw(pFrame,
                 drawPX - CHAR_DISPLAY_SIZE / 2, drawPY,
                 CHAR_DISPLAY_SIZE / 2, CHAR_DISPLAY_SIZE / 2,
-                CHAR_DISPLAY_SIZE, CHAR_DISPLAY_SIZE,
+                CHAR_DISPLAY_SIZE, drawH,
                 1f, 1f, pRotation);
             batch.setColor(Color.WHITE);
         }
