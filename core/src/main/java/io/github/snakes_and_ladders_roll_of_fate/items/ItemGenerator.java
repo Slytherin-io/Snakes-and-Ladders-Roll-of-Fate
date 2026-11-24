@@ -13,7 +13,7 @@ public class ItemGenerator {
     };
 
     private static final String[] CONSUMABLE_BASES = {
-        "Potion", "Elixir", "Draught", "Tonic", "Scroll", "Feather", "Tome"
+        "Potion", "Elixir", "Draught", "Tonic", "Scroll", "Feather", "Tome", "Torch", "Lens"
     };
 
     private static final String[] EQUIPMENT_BASES = {
@@ -85,6 +85,10 @@ public class ItemGenerator {
                 baseValue = 2 + (tier / 2);   // e.g., Tier 1 = 2 tiles, Tier 5 = 4 tiles
                 variance = 1;
                 break;
+            case SCOUT:
+                baseValue = 3 + (tier / 2);   // e.g., Tier 1 = 3-4 tiles, Tier 4 = 5 tiles
+                variance = 1;
+                break;
             case EXPERIENCE:
                 baseValue = 20 + (tier * 15); // e.g., Tier 1 = 35 EXP, Tier 5 = 95 EXP
                 variance = 15;
@@ -109,6 +113,8 @@ public class ItemGenerator {
                 return type == ItemType.EQUIPMENT ? "+" + value + " DEF (1 Turn Buff)" : "Grants +" + value + " DEF";
             case MOVE:
                 return "Advances " + value + " tiles";
+            case SCOUT:
+                return "Scouts and reveals " + value + " tiles ahead";
             case EXPERIENCE:
                 return "Grants " + value + " EXP";
             default:

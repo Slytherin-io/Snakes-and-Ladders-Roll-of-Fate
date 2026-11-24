@@ -6,5 +6,6 @@ public enum EventEffectType {
     DEFENSE,      // Buffs or debuffs defense
     EXPERIENCE,   // Grants EXP towards leveling up
     MOVE,         // Moves player forward (+) or backward (-)
-    ITEM          // Grants an item or loot drop to the player
+    ITEM,         // Grants an item or loot drop to the player
+    SCOUT         // Scouts and reveals uncharted tiles ahead
 }

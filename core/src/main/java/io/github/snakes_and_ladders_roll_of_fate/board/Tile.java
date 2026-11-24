@@ -13,12 +13,22 @@ public abstract class Tile {
     protected static Dialogue dialogue = new Dialogue();
     private static final Random tileGen = new Random();
     private EventCategory category;
+    private boolean revealed = false;
 
     public Tile(int position, String type, String effect, EventCategory category) {
         this.position = position;
         this.type = type;
         this.effect = effect;
         this.category = category;
+        this.revealed = false;
+    }
+
+    public boolean isRevealed() {
+        return revealed;
+    }
+
+    public void setRevealed(boolean revealed) {
+        this.revealed = revealed;
     }
 
 
@@ -59,15 +69,17 @@ public abstract class Tile {
             case 0:
                 return new NormalTile(position);
             case 1:
-                // LADDER: Ensure it actually moves forward and doesn't pass 100
-                int maxLadderJump = Math.min(20, 100 - position);
-                int ladderDest = position + 1 + tileGen.nextInt(maxLadderJump);
-                return new LadderTile(position, ladderDest);
+                // LADDER: Ensure meaningful forward jump (at least 6 tiles, up to 18)
+                if (position > 93) return new NormalTile(position); // Too close to the end
+                int maxLadderJump = Math.min(18, 100 - position);
+                int ladderDest = position + 6 + (maxLadderJump > 6 ? tileGen.nextInt(maxLadderJump - 5) : 0);
+                return new LadderTile(position, Math.min(99, ladderDest));
             case 2:
-                // SNAKE: Ensure it actually moves backward and doesn't pass 1
+                // SNAKE: Ensure meaningful backward drop (at least 6 tiles, up to 20)
+                if (position < 7) return new NormalTile(position); // Too close to the start
                 int maxSnakeDrop = Math.min(20, position - 1);
-                int snakeDest = position - 1 - tileGen.nextInt(maxSnakeDrop);
-                return new SnakeTile(position, snakeDest);
+                int snakeDest = position - 6 - (maxSnakeDrop > 6 ? tileGen.nextInt(maxSnakeDrop - 5) : 0);
+                return new SnakeTile(position, Math.max(1, snakeDest));
             default:
                 return new NormalTile(position);
         }
