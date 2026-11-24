@@ -3,18 +3,22 @@ package io.github.snakes_and_ladders_roll_of_fate.board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
 import java.util.Random;
+import java.util.Scanner;
 
 /**
- * Snake tile for the LibGDX board.
- * It no longer runs combat: BoardScreen detects the landing and opens BattleScreen,
- * and BattleScreen calls resolveOutcome() exactly once when the fight ends.
+ * Snake tile for the board.
+ * In the GUI, BoardScreen detects the landing, shows the ambush narrative modal,
+ * and launches BattleScreen if the player engages in combat.
+ * For console play and unit tests, startCombat() runs the encounter synchronously.
  */
 public class SnakeTile extends Tile {
     private int destination;
     private static final Random random = new Random();
+    private static final Scanner scanner = new Scanner(System.in);
 
     public SnakeTile(int position, int destination) {
         super(position, "SNAKE", "Slide backwards to a lower tile!", EventCategory.SNAKE);
@@ -23,10 +27,10 @@ public class SnakeTile extends Tile {
 
     @Override
     public void onLand(Player player) {
-        // Intentionally empty: BoardScreen intercepts the landing and launches BattleScreen.
+        startCombat(player);
     }
 
-    /** Factory: builds a balanced, position-scaled snake for the BattleScreen. */
+    /** Factory: builds a balanced, position-scaled snake for combat and the BattleScreen. */
     public Enemy createSnakeEnemy() {
         int pos = getPosition();
         Enemy snake;
@@ -34,7 +38,7 @@ public class SnakeTile extends Tile {
             case 0:
                 snake = new Enemy("Venomous Viper");
                 snake.setBehavior("Aggressive (High ATK, Low HP)");
-                snake.setAttack(6 + (pos / 10));
+                snake.setAttack(8 + (pos / 5));
                 snake.setHealth(25 + (pos / 2));
                 snake.setDefense(1 + (pos / 20));
                 snake.setReward("Viper Venom Sac");
@@ -42,7 +46,7 @@ public class SnakeTile extends Tile {
             case 1:
                 snake = new Enemy("Armored Python");
                 snake.setBehavior("Defensive (Low ATK, High HP)");
-                snake.setAttack(3 + (pos / 12));
+                snake.setAttack(4 + (pos / 6));
                 snake.setHealth(35 + (pos / 2));
                 snake.setDefense(2 + (pos / 15));
                 snake.setReward("Python Scales");
@@ -50,7 +54,7 @@ public class SnakeTile extends Tile {
             default:
                 snake = new Enemy("Shadow Asp");
                 snake.setBehavior("Balanced (Stealthy)");
-                snake.setAttack(5 + (pos / 10));
+                snake.setAttack(6 + (pos / 5));
                 snake.setHealth(30 + (pos / 2));
                 snake.setDefense(1 + (pos / 20));
                 snake.setReward("Shadow Fang");
@@ -59,9 +63,21 @@ public class SnakeTile extends Tile {
         return snake;
     }
 
+    /** Runs synchronous combat for console gameplay and tests. */
+    public void startCombat(Player player) {
+        Enemy snake = createSnakeEnemy();
+        System.out.println("\n🐍 A wild " + snake.getEnemyType() + " blocks your path!");
+
+        BattleSystem battle = new BattleSystem();
+        BattleOutcome outcome = battle.runBattle(player, snake, scanner);
+
+        String msg = resolveOutcome(player, snake, outcome);
+        System.out.println(msg);
+    }
+
     /**
-     * Called ONCE by BattleScreen when the battle reaches BATTLE_END.
-     * Applies EXP / loot / slide and returns a message for the UI.
+     * Called by BattleScreen (or console combat) when the battle reaches BATTLE_END.
+     * Applies EXP / loot / slide and returns a message for the UI/console.
      */
     public String resolveOutcome(Player player, Enemy snake, BattleOutcome outcome) {
         switch (outcome) {
@@ -79,17 +95,26 @@ public class SnakeTile extends Tile {
                 return "You escape, but the tail swipes you down to Tile " + destination + "!";
             case WEAKENED:
                 applyEffect(player);
-                return "Barely conscious, you tumble down the coils to Tile " + destination + "...";
+                return "Barely conscious, you tumble down the coils to Tile " + destination + "!";
             case DEFEAT:
             default:
-                return "You have been slain by the " + snake.getEnemyType() + "...";
+                return "You have been slain by the " + snake.getEnemyType() + "!";
         }
     }
 
     public void applyEffect(Player player) {
         player.setPosition(destination);
+        System.out.println("  [SLIDE] You slid down to Tile " + destination);
     }
 
     public int getDestination() { return destination; }
     public void setDestination(int destination) { this.destination = destination; }
+
+    public int getSnakeAttack() {
+        return 6 + (getPosition() / 7);
+    }
+
+    public int getSnakeHealth() {
+        return 15 + (getPosition() / 2);
+    }
 }

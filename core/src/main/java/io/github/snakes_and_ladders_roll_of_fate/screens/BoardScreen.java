@@ -1316,8 +1316,11 @@ public class BoardScreen implements Screen {
     private void handleChoiceSelected(EventChoice choice, int choiceIndex, Event event, Tile tile, Player player) {
         if (event.getCategory() == EventCategory.SNAKE) {
             if (choiceIndex == 0) {
-                // Choice 0: Draw weapon and engage in turn-by-turn combat!
-                showCombatView(player, (SnakeTile) tile);
+                // Choice 0: Draw weapon and engage in battle -> Launch BattleScreen!
+                modalScrim.setVisible(false);
+                eventModalTable.setVisible(false);
+                isEventModalActive = false;
+                game.setScreen(new BattleScreen(game, player, (SnakeTile) tile));
                 return;
             } else if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY) {
                 // Shield deflection: hold ground and ward off snake!
@@ -1933,11 +1936,13 @@ public class BoardScreen implements Screen {
             return;
         }
 
-        // 1. SNAKE TILE -> Launch BattleScreen
+        // 1. SNAKE TILE -> Trigger serpent ambush narrative event modal (like ConsoleTestGame)
         if (tile instanceof SnakeTile) {
             SnakeTile snakeTile = (SnakeTile) tile;
-            game.setScreen(new BattleScreen(game, player, snakeTile));
-            return; // BattleScreen owns the encounter
+            Event event = eventManager.selectEventForTile(tileIndex, EventCategory.SNAKE);
+            topBannerLabel.setText("SERPENT AMBUSH ON TILE " + tileIndex + "!");
+            showEventChoiceView(event, snakeTile);
+            return;
         }
         // 2. LADDER TILE -> Handle climbing
         else if (tile instanceof LadderTile) {

@@ -1,4 +1,4 @@
-/*package io.github.snakes_and_ladders_roll_of_fate.items;
+package io.github.snakes_and_ladders_roll_of_fate.items;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
@@ -457,4 +457,4 @@ public class InventoryTest {
 
         System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");
     }
-}*/
+}
