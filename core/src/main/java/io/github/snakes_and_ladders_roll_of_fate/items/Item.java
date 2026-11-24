@@ -92,6 +92,9 @@ public class Item {
                     player.move(effectValue);
                     System.out.printf("  [Move] %s%d tiles (New Position: Tile %d)%n", (effectValue >= 0 ? "+" : ""), effectValue, player.getPosition());
                     break;
+                case SCOUT:
+                    System.out.printf("  [SCOUT] Reveals %d tiles ahead!%n", effectValue);
+                    break;
             }
         }
 

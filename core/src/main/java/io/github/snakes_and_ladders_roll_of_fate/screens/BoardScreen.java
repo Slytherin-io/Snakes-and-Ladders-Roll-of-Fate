@@ -36,17 +36,24 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
+import io.github.snakes_and_ladders_roll_of_fate.screens.GameSummaryScreen;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.board.LadderTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile;
 import io.github.snakes_and_ladders_roll_of_fate.board.Tile;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Entity;
+import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
+import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
+import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
@@ -94,20 +101,34 @@ public class BoardScreen implements Screen {
     private BitmapFont badgeFont;
     private BitmapFont miniFont;
     private BitmapFont sliderFont;
-    private BitmapFont modalTitleFont;
-    private BitmapFont modalBodyFont;
+    // Pause, Settings, & Leave Menu Fonts (Decoupled from Event Choices)
+    private BitmapFont pauseBadgeFont;
+    private BitmapFont pauseTitleFont;
+    private BitmapFont pauseSubFont;
+    private BitmapFont pauseBodyFont;
+    private BitmapFont pauseBtnFont;
+    private BitmapFont pauseTipFont;
+
+    // Event & Choice System Fonts (Decoupled from Pause Menu)
+    private BitmapFont eventBadgeFont;
+    private BitmapFont eventTitleFont;
+    private BitmapFont eventDescFont;
+    private BitmapFont choiceBtnFont;
+    private BitmapFont choiceOutcomeTitleFont;
+    private BitmapFont choiceOutcomeBodyFont;
+    private BitmapFont choiceD20Font;
 
     // Parallax Slices for the 3 Acts (Far Canopy, Mid Silhouettes, Foreground Ground)
     private TextureRegion act1Far, act1Mid, act1Ground;
     private TextureRegion act2Far, act2Mid, act2Ground;
     private TextureRegion act3Far, act3Mid, act3Ground;
 
-    // Layout Alignment Constants (Elevated by +110f to give the bottom HUD console generous room)
+    // Layout Alignment Constants (Elevated to give the bottom HUD console generous room)
     private static final float GROUND_BASE_Y = 110f;    // Base anchor of the terrain ground slice
     private static final float GROUND_SURFACE_Y = 245f; // Flat grass line of the ground platform
-    private static final float TILE_WIDTH = 180f;
+    private static final float TILE_WIDTH = 230f;       // Continuous connected pathway matching TILE_SPACING (zero gaps)
     private static final float TILE_HEIGHT = 55f;
-    private static final float TILE_BOTTOM_Y = 230f;    // Elevated stone slab baseline
+    private static final float TILE_BOTTOM_Y = 220f;    // Act I baseline stone slab bottom Y
     private static final float TILE_SPACING = 230f;     // Horizontal distance between tile centers
     private static final float FIRST_TILE_X = 400f;
 
@@ -152,16 +173,35 @@ public class BoardScreen implements Screen {
     // Character Walking Animations & Sizing (75% enlarged: 120f * 1.75 = 210f)
     private static final float CHAR_DISPLAY_SIZE = 210f;
     private static final float CHAR_INACTIVE_SIZE = 186f;
-    // Ground alignment: with feet at Y=183 in 224px cell (41px above cell bottom),
-    // and stone slab top walking surface at Y=282f, drawY = 282 - (41/224)*210 = 243.56f => TILE_BOTTOM_Y + 14f.
-    private static final float CHAR_DRAW_Y = TILE_BOTTOM_Y + 14f;
-    private static final float CHAR_DRAW_Y_INACTIVE_SHARED = TILE_BOTTOM_Y + 18f;
     private final Map<CharacterClass, Animation<TextureRegion>> walkAnimations = new HashMap<>();
     private float walkStateTime = 0f;
 
     // Action Pause Timer (Ladders / Snakes)
     private float actionPauseTimer = 0f;
     private int specialSlideTarget = -1;
+
+    // Special Locomotion Animation (Ascending Ladder Celestial Arc & Descending Snake Slide)
+    private enum SpecialMovePhase {
+        NONE,
+        WINDUP,     // Standing on start tile, power gathers & discovery registers (0.8s)
+        IN_FLIGHT,  // Smooth soaring flight across the arc
+        LANDED      // Touchdown landing recovery on destination tile (0.6s)
+    }
+    private boolean isSpecialMoving = false;
+    private SpecialMovePhase specialMovePhase = SpecialMovePhase.NONE;
+    private float specialMovePhaseTimer = 0f;
+    private boolean isLadderMove = true;
+    private int specialMoveStartTile = 1;
+    private int specialMoveDestTile = 1;
+    private float specialMoveElapsed = 0f;
+    private float specialMoveDuration = 1.35f;
+    private float specialMoveArcHeight = 150f;
+    private float specialMoveCurrentX = 0f;
+    private float specialMoveCurrentY = 0f;
+
+    // Fog of War / Discovery Flash FX
+    private int revealFlashTile = -1;
+    private float revealFlashTimer = 0f;
 
     // HUD UI References
     private Label topBannerLabel;
@@ -189,8 +229,25 @@ public class BoardScreen implements Screen {
     private Table settingsModalTable;
     private Table leaveConfirmModalTable;
 
+    // Act Transition Immersion & Toast UI
+    private Table actTransitionToastTable;
+    private Label actToastHeaderLabel;
+    private Label actToastTitleLabel;
+    private Label actToastSubtitleLabel;
+    private int lastTrackedAct = 1;
+
+    // Post-Battle Resolution Transition Fields
+    private BattleOutcome pendingBattleOutcome = null;
+    private SnakeTile pendingBattleTile = null;
+
     public BoardScreen(RollOfFateGame game) {
+        this(game, null, null);
+    }
+
+    public BoardScreen(RollOfFateGame game, BattleOutcome battleOutcome, SnakeTile battleTile) {
         this.game = game;
+        this.pendingBattleOutcome = battleOutcome;
+        this.pendingBattleTile = battleTile;
         this.board = game.getBoard() != null ? game.getBoard() : new Board(100);
         if (game.getBoard() == null) {
             this.board.generateBoard();
@@ -199,6 +256,7 @@ public class BoardScreen implements Screen {
 
     @Override
     public void show() {
+        updateActMusic();
         batch = new SpriteBatch();
 
         // Responsive World Viewport: extends cleanly without stretching on any resolution
@@ -232,17 +290,31 @@ public class BoardScreen implements Screen {
         rollBigFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.WHITE);
         rollSubFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 21, Color.valueOf("#fbf2dc"));
         hudNameFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, nameBrown);
-        hudHpFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, crimson);
-        hudExpFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, expBrown);
-        hudStatsFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, warmBrown);
+        hudHpFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, crimson);
+        hudExpFont     = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, expBrown);
+        hudStatsFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, warmBrown);
         playerTagFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 19, Color.WHITE);
         badgeFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
         tileNumFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, goldLight);
         tileBadgeFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 15, Color.WHITE);
         miniFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 16, Color.WHITE);
         sliderFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, darkBrown);
-        modalTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
-        modalBodyFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, darkBrown);
+        // Pause, Settings, & Leave Menu Fonts (Decoupled from Event Choices)
+        pauseBadgeFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
+        pauseTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, darkBrown);
+        pauseSubFont   = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, darkBrown);
+        pauseBodyFont  = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, darkBrown);
+        pauseBtnFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
+        pauseTipFont   = UIUtils.createFont("ui/Sniglet-Regular.ttf", 18, Color.valueOf("#54280e"));
+
+        // Event & Choice System Fonts (Decoupled from Pause Menu)
+        eventBadgeFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
+        eventTitleFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 35, Color.valueOf("#361704"));
+        eventDescFont          = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, Color.valueOf("#4a2c11"));
+        choiceBtnFont          = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, Color.valueOf("#fff8ea"));
+        choiceOutcomeTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, Color.valueOf("#361704"));
+        choiceOutcomeBodyFont  = UIUtils.createFont("ui/Sniglet-Regular.ttf", 21, Color.valueOf("#361704"));
+        choiceD20Font          = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, Color.WHITE);
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();
@@ -258,6 +330,7 @@ public class BoardScreen implements Screen {
         // --- Build In-Game HUD Overlay ---
         buildPauseButton();
         buildTopBanner();
+        buildActTransitionBanner();
         buildMiniMap();
         buildBottomHud();
         buildInventoryPopup();
@@ -272,13 +345,65 @@ public class BoardScreen implements Screen {
             }
         });
 
-        // Initial camera placement on active player
+        // Initial camera placement on active player or returning battle tile
         Player current = game.getCurrentPlayer();
-        float startX = current != null ? getTileCenterX(current.getPosition()) : FIRST_TILE_X;
-        worldCamera.position.set(startX, 540f, 0f);
-        worldCamera.update();
+        if (pendingBattleOutcome != null && pendingBattleTile != null) {
+            int battleTilePos = pendingBattleTile.getPosition();
+            if (current != null) {
+                current.setPosition(battleTilePos);
+                Tile curTile = board.getTile(battleTilePos);
+                if (curTile != null && !curTile.isRevealed()) {
+                    curTile.setRevealed(true);
+                }
+            }
+            float startX = getTileCenterX(battleTilePos);
+            lastTrackedAct = (battleTilePos <= 30) ? 1 : ((battleTilePos <= 70) ? 2 : 3);
+            float startY = 540f + (getTileBottomY(battleTilePos) - 220f);
+            worldCamera.position.set(startX, startY, 0f);
+            worldCamera.update();
 
-        updateHudDisplay();
+            updateHudDisplay();
+
+            if (pendingBattleOutcome == BattleOutcome.ESCAPED || pendingBattleOutcome == BattleOutcome.WEAKENED) {
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " ESCAPED - SLIDING DOWN TO TILE " + pendingBattleTile.getDestination() + "!");
+                }
+                rollButton.setColor(1f, 1f, 1f, 0.5f);
+                startSpecialMove(battleTilePos, pendingBattleTile.getDestination(), false);
+            } else if (pendingBattleOutcome == BattleOutcome.VICTORY) {
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " VANQUISHED THE BEAST!");
+                }
+                rollButton.setColor(1f, 1f, 1f, 0.5f);
+                turnState = TurnState.TURN_TRANSITION;
+                actionPauseTimer = 1.0f;
+            } else if (pendingBattleOutcome == BattleOutcome.DEFEAT) {
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " HAS FALLEN IN BATTLE! NEXT TRAVELER'S TURN...");
+                }
+                rollButton.setColor(1f, 1f, 1f, 0.5f);
+                turnState = TurnState.TURN_TRANSITION;
+                actionPauseTimer = 1.2f;
+            }
+
+            pendingBattleOutcome = null;
+            pendingBattleTile = null;
+        } else {
+            if (current != null) {
+                Tile curTile = board.getTile(current.getPosition());
+                if (curTile != null && !curTile.isRevealed()) {
+                    curTile.setRevealed(true);
+                }
+            }
+            float startX = current != null ? getTileCenterX(current.getPosition()) : FIRST_TILE_X;
+            int currentPos = (current != null) ? current.getPosition() : 1;
+            lastTrackedAct = (currentPos <= 30) ? 1 : ((currentPos <= 70) ? 2 : 3);
+            float startY = 540f + (getTileBottomY(currentPos) - 220f);
+            worldCamera.position.set(startX, startY, 0f);
+            worldCamera.update();
+
+            updateHudDisplay();
+        }
     }
 
     /**
@@ -333,17 +458,81 @@ public class BoardScreen implements Screen {
     private void buildTopBanner() {
         topBannerLabel = new Label("PLAYER 1'S TURN - ROLL THE DICE!", new Label.LabelStyle(topBannerFont, Color.valueOf("#fffdfa")));
         topBannerLabel.setAlignment(Align.center);
+        topBannerLabel.setWrap(true);
 
         Table bannerTable = new Table();
         bannerTable.setBackground(UIUtils.createRoundedDrawable(920, 70, 20, Color.valueOf("#854b25")));
-        bannerTable.add(topBannerLabel).pad(8, 36, 8, 36);
+        bannerTable.add(topBannerLabel).width(860).pad(10, 24, 10, 24).center();
 
         Table outerTop = new Table();
         outerTop.setFillParent(true);
         outerTop.top().padTop(22);
-        outerTop.add(bannerTable).center();
+        outerTop.add(bannerTable).width(920).minHeight(70).center();
 
         hudStage.addActor(outerTop);
+    }
+
+    /**
+     * Builds the cinematic Act Transition Toast card that glides in when crossing biomes.
+     */
+    private void buildActTransitionBanner() {
+        actTransitionToastTable = new Table();
+        actTransitionToastTable.setBackground(UIUtils.createRoundedDrawable(760, 100, 22, Color.valueOf("#120d1cf0")));
+
+        actToastHeaderLabel = new Label("✦ ENTERING ACT II ✦", new Label.LabelStyle(miniFont, Color.valueOf("#ffe082")));
+        actToastHeaderLabel.setAlignment(Align.center);
+
+        actToastTitleLabel = new Label("THE SUNKEN RUINS", new Label.LabelStyle(topBannerFont, Color.valueOf("#80d8ff")));
+        actToastTitleLabel.setAlignment(Align.center);
+
+        actToastSubtitleLabel = new Label("Ancient shadows whisper through the deep sapphire mist", new Label.LabelStyle(miniFont, Color.valueOf("#e1f5fe")));
+        actToastSubtitleLabel.setAlignment(Align.center);
+
+        actTransitionToastTable.add(actToastHeaderLabel).padTop(10).center().row();
+        actTransitionToastTable.add(actToastTitleLabel).padTop(2).padBottom(2).center().row();
+        actTransitionToastTable.add(actToastSubtitleLabel).padBottom(10).center();
+
+        Table toastContainer = new Table();
+        toastContainer.setFillParent(true);
+        toastContainer.top().padTop(110);
+        toastContainer.add(actTransitionToastTable).size(760, 100).center();
+
+        actTransitionToastTable.setVisible(false);
+        actTransitionToastTable.getColor().a = 0f;
+
+        hudStage.addActor(toastContainer);
+    }
+
+    private void showActTransitionToast(int act) {
+        if (actTransitionToastTable == null) return;
+
+        if (act == 2) {
+            actToastHeaderLabel.setText("✦ ENTERING ACT II ✦");
+            actToastTitleLabel.setText("THE SUNKEN RUINS");
+            actToastTitleLabel.setStyle(new Label.LabelStyle(topBannerFont, Color.valueOf("#80d8ff")));
+            actToastSubtitleLabel.setText("Ancient shadows whisper through the deep sapphire mist");
+            topBannerLabel.setText("ENTERING ACT II: THE SUNKEN RUINS! ANCIENT MYSTERIES AWAIT.");
+        } else if (act == 3) {
+            actToastHeaderLabel.setText("✦ ENTERING ACT III ✦");
+            actToastTitleLabel.setText("THE INFERNAL VOID");
+            actToastTitleLabel.setStyle(new Label.LabelStyle(topBannerFont, Color.valueOf("#ff8a80")));
+            actToastSubtitleLabel.setText("The final perilous ascent towards the Throne of Fate");
+            topBannerLabel.setText("ENTERING ACT III: THE INFERNAL VOID! THE THRONE OF FATE AWAITS.");
+        }
+
+        actTransitionToastTable.clearActions();
+        actTransitionToastTable.setVisible(true);
+        actTransitionToastTable.getColor().a = 0f;
+        actTransitionToastTable.setTransform(true);
+        actTransitionToastTable.setScale(0.92f);
+        actTransitionToastTable.setOrigin(Align.center);
+
+        actTransitionToastTable.addAction(Actions.sequence(
+            Actions.parallel(Actions.fadeIn(0.45f, Interpolation.fade), Actions.scaleTo(1.0f, 1.0f, 0.45f, Interpolation.swingOut)),
+            Actions.delay(3.2f),
+            Actions.parallel(Actions.fadeOut(0.7f, Interpolation.fade), Actions.scaleTo(0.95f, 0.95f, 0.7f, Interpolation.fade)),
+            Actions.run(() -> actTransitionToastTable.setVisible(false))
+        ));
     }
 
     /**
@@ -419,6 +608,9 @@ public class BoardScreen implements Screen {
         inventoryBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 // Prevent opening inventory during dice rolling, tile stepping, combat/event modal, or turn pause
                 if (turnState != TurnState.WAITING_FOR_ROLL || isEventModalActive) {
                     return;
@@ -459,6 +651,9 @@ public class BoardScreen implements Screen {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
                 if (turnState == TurnState.WAITING_FOR_ROLL) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
                     triggerRoll();
                 }
             }
@@ -470,6 +665,7 @@ public class BoardScreen implements Screen {
 
         hudPlayerAvatar = new Image(game.getAssetManager().get(Assets.CHAR_TURTLE));
         hudPlayerAvatar.setScaling(Scaling.fit);
+        hudPlayerAvatar.setAlign(Align.center);
 
         Table statsTextTable = new Table();
         statsTextTable.left();
@@ -567,6 +763,9 @@ public class BoardScreen implements Screen {
         inventoryLootBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 handleFindLoot();
             }
         });
@@ -582,6 +781,9 @@ public class BoardScreen implements Screen {
         closeBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 inventoryPopup.setVisible(false);
             }
         });
@@ -710,6 +912,9 @@ public class BoardScreen implements Screen {
                 useBtn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
                         handleUseInventoryItem(slotIndex);
                     }
                 });
@@ -779,6 +984,10 @@ public class BoardScreen implements Screen {
         boolean success = player.useItem(slotIndex);
         if (!success) return;
 
+        if (game.getRunTracker() != null) {
+            game.getRunTracker().recordItemUsed(player);
+        }
+
         itemUsedThisTurn = true;
 
         // Auto-close inventory popup so player returns to the action!
@@ -788,6 +997,18 @@ public class BoardScreen implements Screen {
 
         // Banner feedback
         topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! (" + effectDesc + ")");
+
+        if (game.getAudioManager() != null) {
+            if (type == EventEffectType.HEALTH) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.POTION_DRINK);
+            } else if (type == EventEffectType.ATTACK || type == EventEffectType.DEFENSE) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP);
+            } else if (type == EventEffectType.SCOUT) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.SCOUT_FLARE);
+            } else if (type == EventEffectType.MOVE) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP);
+            }
+        }
 
         // If it was a movement item, advance player with walking animation
         if (type == EventEffectType.MOVE) {
@@ -799,6 +1020,13 @@ public class BoardScreen implements Screen {
             isItemMovement = true;
             turnState = TurnState.STEPPING_TILES;
             topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! ADVANCING " + effectVal + " TILES...");
+        } else if (type == EventEffectType.SCOUT) {
+            int start = startPos + 1;
+            int end = Math.min(100, startPos + effectVal);
+            int newlyRevealed = board.revealRange(start, end);
+            revealFlashTile = end;
+            revealFlashTimer = 1.4f;
+            topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! SCOUTED TILES " + start + " TO " + end + " (" + newlyRevealed + " NEWLY UNCOVERED)!");
         }
 
         // Update active player stats & mini-map
@@ -827,6 +1055,9 @@ public class BoardScreen implements Screen {
         Item loot = Item.createRandomLoot();
         boolean added = player.addItem(loot);
         if (added) {
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordItemCollected(player);
+            }
             topBannerLabel.setText(player.getName().toUpperCase() + " FOUND " + loot.getName().toUpperCase() + "! (" + player.getInventory().size() + "/4 SLOTS)");
             refreshInventoryUI();
         }
@@ -850,6 +1081,9 @@ public class BoardScreen implements Screen {
         pauseBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 if (!isPaused) {
                     pauseGame();
                 } else {
@@ -879,36 +1113,37 @@ public class BoardScreen implements Screen {
         hudStage.addActor(modalScrim);
 
         TextButton.TextButtonStyle menuBtnStyle = new TextButton.TextButtonStyle();
-        menuBtnStyle.up = UIUtils.createRoundedDrawable(360, 58, 16, pillBrown);
-        menuBtnStyle.over = UIUtils.createRoundedDrawable(360, 58, 16, Color.valueOf("#9c572b"));
-        menuBtnStyle.font = badgeFont;
+        menuBtnStyle.up = UIUtils.createRoundedDrawable(340, 52, 16, pillBrown);
+        menuBtnStyle.over = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#9c572b"));
+        menuBtnStyle.font = pauseBtnFont;
         menuBtnStyle.fontColor = Color.WHITE;
 
         TextButton.TextButtonStyle dangerBtnStyle = new TextButton.TextButtonStyle();
-        dangerBtnStyle.up = UIUtils.createRoundedDrawable(360, 58, 16, Color.valueOf("#8a2424"));
-        dangerBtnStyle.over = UIUtils.createRoundedDrawable(360, 58, 16, Color.valueOf("#a63232"));
-        dangerBtnStyle.font = badgeFont;
+        dangerBtnStyle.up = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#8a2424"));
+        dangerBtnStyle.over = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#a63232"));
+        dangerBtnStyle.font = pauseBtnFont;
         dangerBtnStyle.fontColor = Color.WHITE;
 
         // =====================================================================
         // 1. PAUSE MODAL
         // =====================================================================
-        Label pauseBadge = new Label("GAME PAUSED", new Label.LabelStyle(badgeFont, Color.WHITE));
+        Label pauseBadge = new Label("GAME PAUSED", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
         pauseBadge.setAlignment(Align.center);
         Table pauseBadgeTable = new Table();
         pauseBadgeTable.setBackground(UIUtils.createRoundedDrawable(340, 58, 18, pillBrown));
         pauseBadgeTable.add(pauseBadge).pad(6, 36, 6, 36);
 
         Table pauseContent = new Table();
-        Label pauseSub = new Label("The journey awaits your command.", new Label.LabelStyle(modalBodyFont, darkBrown));
+        Label pauseSub = new Label("The journey awaits your command.", new Label.LabelStyle(pauseSubFont, darkBrown));
         pauseSub.setAlignment(Align.center);
-        pauseContent.add(pauseSub).padBottom(28).center().row();
+        pauseContent.add(pauseSub).padTop(12).padBottom(20).center().row();
 
         TextButton resumeBtn = new TextButton("RESUME", menuBtnStyle);
         UIUtils.addScaleHoverEffect(resumeBtn);
         resumeBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 resumeGame();
             }
         });
@@ -918,6 +1153,7 @@ public class BoardScreen implements Screen {
         settingsBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showSettingsMenu();
             }
         });
@@ -927,17 +1163,18 @@ public class BoardScreen implements Screen {
         leaveBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showLeaveConfirmMenu();
             }
         });
 
-        pauseContent.add(resumeBtn).size(360, 58).padBottom(14).center().row();
-        pauseContent.add(settingsBtn).size(360, 58).padBottom(14).center().row();
-        pauseContent.add(leaveBtn).size(360, 58).padBottom(18).center().row();
+        pauseContent.add(resumeBtn).size(340, 52).padBottom(12).center().row();
+        pauseContent.add(settingsBtn).size(340, 52).padBottom(12).center().row();
+        pauseContent.add(leaveBtn).size(340, 52).padBottom(16).center().row();
 
-        Label escTip = new Label("Press ESC or P to resume", new Label.LabelStyle(miniFont, Color.valueOf("#7a4823")));
+        Label escTip = new Label("Press ESC or P to resume", new Label.LabelStyle(pauseTipFont, Color.valueOf("#54280e")));
         escTip.setAlignment(Align.center);
-        pauseContent.add(escTip).center();
+        pauseContent.add(escTip).padTop(4).padBottom(10).center();
 
         Image pauseScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
         pauseScrollBg.setScaling(Scaling.stretch);
@@ -950,14 +1187,14 @@ public class BoardScreen implements Screen {
         pauseModalTable.setFillParent(true);
         pauseModalTable.setVisible(false);
         pauseModalTable.add(pauseBadgeTable).size(340, 58).padBottom(-22).center().row();
-        pauseModalTable.add(pauseScrollStack).size(740, 540).center().row();
+        pauseModalTable.add(pauseScrollStack).size(800, 580).center().row();
 
         hudStage.addActor(pauseModalTable);
 
         // =====================================================================
         // 2. SETTINGS MODAL
         // =====================================================================
-        Label settingsBadge = new Label("SETTINGS", new Label.LabelStyle(badgeFont, Color.WHITE));
+        Label settingsBadge = new Label("SETTINGS", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
         settingsBadge.setAlignment(Align.center);
         Table settingsBadgeTable = new Table();
         settingsBadgeTable.setBackground(UIUtils.createRoundedDrawable(280, 58, 18, pillBrown));
@@ -966,22 +1203,33 @@ public class BoardScreen implements Screen {
         Slider.SliderStyle sliderStyle = UIUtils.createSliderStyle(darkBrown, darkBrown);
 
         Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
-        musicSlider.setValue(10);
-        Label musicNum = new Label("10", new Label.LabelStyle(sliderFont, darkBrown));
+        int musicVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getMusicVolume() * 10f) : 7;
+        musicSlider.setValue(musicVal);
+        Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(sliderFont, darkBrown));
         musicSlider.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                musicNum.setText(String.valueOf((int) musicSlider.getValue()));
+                int val = (int) musicSlider.getValue();
+                musicNum.setText(String.valueOf(val));
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().setMusicVolume(val / 10f);
+                }
             }
         });
 
         Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
-        sfxSlider.setValue(10);
-        Label sfxNum = new Label("10", new Label.LabelStyle(sliderFont, darkBrown));
+        int sfxVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getSfxVolume() * 10f) : 8;
+        sfxSlider.setValue(sfxVal);
+        Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(sliderFont, darkBrown));
         sfxSlider.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                sfxNum.setText(String.valueOf((int) sfxSlider.getValue()));
+                int val = (int) sfxSlider.getValue();
+                sfxNum.setText(String.valueOf(val));
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().setSfxVolume(val / 10f);
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
             }
         });
 
@@ -990,15 +1238,15 @@ public class BoardScreen implements Screen {
 
         Table settingsContent = new Table();
 
-        Label musicLabel = new Label("MUSIC VOLUME", new Label.LabelStyle(modalTitleFont, darkBrown));
+        Label musicLabel = new Label("MUSIC VOLUME", new Label.LabelStyle(pauseTitleFont, darkBrown));
         settingsContent.add(musicLabel).colspan(3).center().padBottom(10).row();
-        settingsContent.add(soundIcon).size(38, 38).padRight(16);
+        settingsContent.add(musicIcon).size(38, 38).padRight(16);
         settingsContent.add(musicSlider).width(340).padRight(16);
         settingsContent.add(musicNum).width(44).left().padBottom(26).row();
 
-        Label sfxLabel = new Label("SFX VOLUME", new Label.LabelStyle(modalTitleFont, darkBrown));
+        Label sfxLabel = new Label("SFX VOLUME", new Label.LabelStyle(pauseTitleFont, darkBrown));
         settingsContent.add(sfxLabel).colspan(3).center().padBottom(10).row();
-        settingsContent.add(musicIcon).size(38, 38).padRight(16);
+        settingsContent.add(soundIcon).size(38, 38).padRight(16);
         settingsContent.add(sfxSlider).width(340).padRight(16);
         settingsContent.add(sfxNum).width(44).left().row();
 
@@ -1014,6 +1262,7 @@ public class BoardScreen implements Screen {
         backSettingsBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showPauseMenu();
             }
         });
@@ -1022,7 +1271,7 @@ public class BoardScreen implements Screen {
         settingsModalTable.setFillParent(true);
         settingsModalTable.setVisible(false);
         settingsModalTable.add(settingsBadgeTable).size(280, 58).padBottom(-22).center().row();
-        settingsModalTable.add(settingsScrollStack).size(740, 540).center().row();
+        settingsModalTable.add(settingsScrollStack).size(800, 580).center().row();
         settingsModalTable.add(backSettingsBtn).size(180, 52).padTop(-22).center().row();
 
         hudStage.addActor(settingsModalTable);
@@ -1030,7 +1279,7 @@ public class BoardScreen implements Screen {
         // =====================================================================
         // 3. LEAVE GAME CONFIRMATION MODAL
         // =====================================================================
-        Label leaveBadge = new Label("LEAVE GAME?", new Label.LabelStyle(badgeFont, Color.WHITE));
+        Label leaveBadge = new Label("LEAVE GAME?", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
         leaveBadge.setAlignment(Align.center);
         Table leaveBadgeTable = new Table();
         leaveBadgeTable.setBackground(UIUtils.createRoundedDrawable(300, 58, 18, Color.valueOf("#8a2424")));
@@ -1038,14 +1287,14 @@ public class BoardScreen implements Screen {
 
         Table leaveContent = new Table();
 
-        Label leaveWarningTitle = new Label("Abandon Current Adventure?", new Label.LabelStyle(modalTitleFont, darkBrown));
+        Label leaveWarningTitle = new Label("Abandon Current Adventure?", new Label.LabelStyle(pauseTitleFont, darkBrown));
         leaveWarningTitle.setAlignment(Align.center);
-        leaveContent.add(leaveWarningTitle).padBottom(14).center().row();
+        leaveContent.add(leaveWarningTitle).padTop(10).padBottom(16).center().row();
 
-        Label leaveWarningBody = new Label("Are you sure you want to return to the main menu?\nAny unsaved progress on this board will be lost.", new Label.LabelStyle(modalBodyFont, darkBrown));
+        Label leaveWarningBody = new Label("Are you sure you want to return to the main menu?\nAny unsaved progress on this board will be lost.", new Label.LabelStyle(pauseBodyFont, darkBrown));
         leaveWarningBody.setAlignment(Align.center);
         leaveWarningBody.setWrap(true);
-        leaveContent.add(leaveWarningBody).width(460).padBottom(36).center().row();
+        leaveContent.add(leaveWarningBody).width(500).padBottom(28).center().row();
 
         Table leaveBtnRow = new Table();
         TextButton stayBtn = new TextButton("STAY", menuBtnStyle);
@@ -1053,6 +1302,7 @@ public class BoardScreen implements Screen {
         stayBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 showPauseMenu();
             }
         });
@@ -1062,13 +1312,14 @@ public class BoardScreen implements Screen {
         confirmLeaveBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 leaveGameToMainMenu();
             }
         });
 
-        leaveBtnRow.add(stayBtn).size(180, 56).padRight(24);
-        leaveBtnRow.add(confirmLeaveBtn).size(180, 56);
-        leaveContent.add(leaveBtnRow).center();
+        leaveBtnRow.add(stayBtn).size(170, 52).padRight(20);
+        leaveBtnRow.add(confirmLeaveBtn).size(170, 52);
+        leaveContent.add(leaveBtnRow).padBottom(12).center();
 
         Image leaveScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
         leaveScrollBg.setScaling(Scaling.stretch);
@@ -1081,7 +1332,7 @@ public class BoardScreen implements Screen {
         leaveConfirmModalTable.setFillParent(true);
         leaveConfirmModalTable.setVisible(false);
         leaveConfirmModalTable.add(leaveBadgeTable).size(300, 58).padBottom(-22).center().row();
-        leaveConfirmModalTable.add(leaveScrollStack).size(740, 540).center().row();
+        leaveConfirmModalTable.add(leaveScrollStack).size(800, 580).center().row();
 
         hudStage.addActor(leaveConfirmModalTable);
     }
@@ -1142,24 +1393,24 @@ public class BoardScreen implements Screen {
      */
     private void buildEventModal(Color darkBrown, Color pillBrown) {
         eventChoiceBtnStyle = new TextButton.TextButtonStyle();
-        eventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
-        eventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
-        eventChoiceBtnStyle.font = playerTagFont;
+        eventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
+        eventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
+        eventChoiceBtnStyle.font = choiceBtnFont;
         eventChoiceBtnStyle.fontColor = Color.valueOf("#fff8ea");
 
         disabledEventChoiceBtnStyle = new TextButton.TextButtonStyle();
-        disabledEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#554338aa"), Color.valueOf("#443329aa"), 2);
-        disabledEventChoiceBtnStyle.font = playerTagFont;
+        disabledEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#554338aa"), Color.valueOf("#443329aa"), 2);
+        disabledEventChoiceBtnStyle.font = choiceBtnFont;
         disabledEventChoiceBtnStyle.fontColor = Color.valueOf("#a89688");
 
         combatStrikeBtnStyle = new TextButton.TextButtonStyle();
         combatStrikeBtnStyle.up = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#8a2424"), Color.valueOf("#5a1414"), 2);
         combatStrikeBtnStyle.over = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#a63232"), Color.valueOf("#5a1414"), 2);
-        combatStrikeBtnStyle.font = badgeFont;
+        combatStrikeBtnStyle.font = choiceBtnFont;
         combatStrikeBtnStyle.fontColor = Color.WHITE;
 
         // Top Event Badge (Positioned to comfortably overlap the top of the enlarged scroll)
-        eventBadgeLabel = new Label("EVENT", new Label.LabelStyle(badgeFont, Color.WHITE));
+        eventBadgeLabel = new Label("EVENT", new Label.LabelStyle(eventBadgeFont, Color.WHITE));
         eventBadgeLabel.setAlignment(Align.center);
         eventBadgeLabel.setWrap(true);
         eventBadgeTable = new Table();
@@ -1234,14 +1485,15 @@ public class BoardScreen implements Screen {
         eventBadgeLabel.setText(badgePrefix + "  -  TILE " + tile.getPosition());
 
         // 2. Event Title & Atmospheric Narrative Lore
-        Label titleLbl = new Label(event.getTitle(), new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label(event.getTitle(), new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
-        eventContentTable.add(titleLbl).padTop(14).padBottom(6).center().row();
+        titleLbl.setWrap(true);
+        eventContentTable.add(titleLbl).width(580).padTop(10).padBottom(6).center().row();
 
-        Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+        Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         descLbl.setAlignment(Align.center);
         descLbl.setWrap(true);
-        eventContentTable.add(descLbl).width(530).padBottom(18).center().row();
+        eventContentTable.add(descLbl).width(580).padBottom(16).center().row();
 
         // 3. Dynamic Choices (Hybrid Model: Strategic/tactical actions visible with requirements; unaffordable merchant stock hidden)
         List<EventChoice> choices = event.getChoices();
@@ -1285,20 +1537,23 @@ public class BoardScreen implements Screen {
             TextButton choiceBtn = new TextButton(buttonText, available ? eventChoiceBtnStyle : disabledEventChoiceBtnStyle);
             choiceBtn.getLabel().setWrap(true);
             choiceBtn.getLabel().setAlignment(Align.center);
-            choiceBtn.pad(4, 16, 4, 16);
-            choiceBtn.getLabelCell().width(480);
+            choiceBtn.pad(5, 16, 5, 16);
+            choiceBtn.getLabelCell().width(494);
 
             if (available) {
                 UIUtils.addScaleHoverEffect(choiceBtn);
                 choiceBtn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent evt, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
                         handleChoiceSelected(choice, choiceIndex, event, tile, player);
                     }
                 });
             }
 
-            eventContentTable.add(choiceBtn).size(530, 46).padBottom(6).center().row();
+            eventContentTable.add(choiceBtn).width(530).minHeight(46).padBottom(5).center().row();
         }
 
         modalScrim.setVisible(true);
@@ -1312,8 +1567,11 @@ public class BoardScreen implements Screen {
     private void handleChoiceSelected(EventChoice choice, int choiceIndex, Event event, Tile tile, Player player) {
         if (event.getCategory() == EventCategory.SNAKE) {
             if (choiceIndex == 0) {
-                // Choice 0: Draw weapon and engage in turn-by-turn combat!
-                showCombatView(player, (SnakeTile) tile);
+                // Choice 0: Draw weapon and engage in battle -> Launch BattleScreen!
+                modalScrim.setVisible(false);
+                eventModalTable.setVisible(false);
+                isEventModalActive = false;
+                game.setScreen(new BattleScreen(game, player, (SnakeTile) tile));
                 return;
             } else if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY) {
                 // Shield deflection: hold ground and ward off snake!
@@ -1361,11 +1619,10 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#8a2424")));
         eventBadgeLabel.setText("SERPENT BATTLE  -  TILE " + tile.getPosition());
 
-        final int snakeMaxHp = tile.getSnakeHealth();
-        final int snakeAtk = tile.getSnakeAttack();
-        final Entity snake = new Enemy("SERPENT");
-        snake.setHealth(snakeMaxHp);
-        snake.setAttack(snakeAtk);
+        // Build the serpent from the SAME factory BattleScreen uses (balanced, 3 variants)
+        final Enemy snake = tile.createSnakeEnemy();
+        final int snakeMaxHp = snake.getHealth();
+        final int snakeAtk = snake.getAttack();
 
         final BattleSystem combatBattle = new BattleSystem();
         combatBattle.startBattle(player, snake);
@@ -1384,7 +1641,7 @@ public class BoardScreen implements Screen {
         playerBox.add(pHp).left().row();
         playerBox.add(pAtk).left();
 
-        Label vsLabel = new Label("VS", new Label.LabelStyle(modalTitleFont, Color.valueOf("#8a2424")));
+        Label vsLabel = new Label("VS", new Label.LabelStyle(eventTitleFont, Color.valueOf("#8a2424")));
 
         // Serpent Info Box
         Table snakeBox = new Table();
@@ -1407,7 +1664,7 @@ public class BoardScreen implements Screen {
         logContainer.setBackground(UIUtils.createRoundedDrawable(530, 140, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
         logContainer.pad(10, 18, 10, 18);
 
-        final Label combatLog = new Label("The coiled serpent lunges from the foliage!\nTap [STRIKE] to roll your combat dice!", new Label.LabelStyle(modalBodyFont, Color.valueOf("#361704")));
+        final Label combatLog = new Label("The coiled serpent lunges from the foliage!\nTap [STRIKE] to roll your combat dice!", new Label.LabelStyle(eventDescFont, Color.valueOf("#361704")));
         combatLog.setAlignment(Align.center);
         combatLog.setWrap(true);
         logContainer.add(combatLog).width(490).center();
@@ -1423,6 +1680,9 @@ public class BoardScreen implements Screen {
         actionBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 if (combatOver[0]) {
                     closeEventModal();
                     return;
@@ -1441,10 +1701,16 @@ public class BoardScreen implements Screen {
                 // Check Snake Slain
                 if (sHealth <= 0) {
                     combatOver[0] = true;
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordSnakeCombat(player, pDamage, true, pCrit);
+                    }
                     int exp = 15 + (tile.getPosition() / 2);
                     player.gainExperience(exp);
                     Item loot = Item.createRandomLoot();
                     boolean added = player.addItem(loot);
+                    if (added && game.getRunTracker() != null) {
+                        game.getRunTracker().recordItemCollected(player);
+                    }
                     specialSlideTarget = -1; // Slain! Hold ground!
 
                     String hitPrefix = pCrit ? "CRITICAL STRIKE (D20: 20)!" : (pMiss ? "GRAZING BLOW (D20: 1)!" : "DIRECT HIT (D20: " + pRoll + ")!");
@@ -1462,37 +1728,21 @@ public class BoardScreen implements Screen {
                 boolean sCrit = combatBattle.isLastRollCritical();
 
                 int pHealth = player.getHealth() - sDamage;
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordDamageTaken(player, sDamage);
+                }
 
                 if (pHealth <= 0) {
                     combatOver[0] = true;
-                    if (player.getHealth() > 25) {
-                        // Mortal strike safeguard: clinging to life, slides down slope
-                        player.setHealth(1);
-                        pHp.setText("HP: 1 / " + player.getMaxHealth());
-                        specialSlideTarget = tile.getDestination();
-                        combatLog.setText("You struck for " + pDamage + " damage! (Serpent HP: " + sHealth + ")\n"
-                            + "[SERPENT D20: " + sRoll + "] The beast lands a MORTAL BLOW for " + sDamage + " damage!\n"
-                            + "SURVIVAL INSTINCT: Cast backward down the slope!");
-                        actionBtn.setText("FLEE DOWN THE SLOPE");
-                    } else {
-                        player.setHealth(0);
-                        pHp.setText("HP: 0 / " + player.getMaxHealth());
-                        combatLog.setText("You struck for " + pDamage + " damage! (Serpent HP: " + sHealth + ")\n"
-                            + "[SERPENT D20: " + sRoll + "] The serpent delivered a lethal bite for " + sDamage + " damage!\n"
-                            + "You have fallen in battle...");
-                        actionBtn.setText("ACCEPT DEFEAT");
+                    player.setHealth(0);
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordPlayerFallen(player);
                     }
-                    updateHudDisplay();
-                    return;
-                } else if (pHealth <= 25) {
-                    combatOver[0] = true;
-                    player.setHealth(pHealth);
-                    pHp.setText("HP: " + pHealth + " / " + player.getMaxHealth());
-                    specialSlideTarget = tile.getDestination();
+                    pHp.setText("HP: 0 / " + player.getMaxHealth());
                     combatLog.setText("You struck for " + pDamage + " damage! (Serpent HP: " + sHealth + ")\n"
-                        + "[SERPENT D20: " + sRoll + "] Serpent struck for " + sDamage + " damage! (Your HP: " + pHealth + ")\n"
-                        + "You are critically wounded and slide down the slope to safety!");
-                    actionBtn.setText("SLIDE DOWN TO SAFETY");
+                        + "[SERPENT D20: " + sRoll + "] The serpent delivered a lethal bite for " + sDamage + " damage!\n"
+                        + "You have fallen in battle...");
+                    actionBtn.setText("ACCEPT DEFEAT");
                     updateHudDisplay();
                     return;
                 } else {
@@ -1518,11 +1768,11 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#9c6818")));
         eventBadgeLabel.setText("BARTER  -  SELECT AN ITEM");
 
-        Label titleLbl = new Label("Select Item to Trade", new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label("Select Item to Trade", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
 
-        Label subLbl = new Label("The merchant inspects your inventory. Choose which relic to trade away:", new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+        Label subLbl = new Label("The merchant inspects your inventory. Choose which relic to trade away:", new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
         eventContentTable.add(subLbl).width(530).padBottom(12).center().row();
@@ -1536,12 +1786,15 @@ public class BoardScreen implements Screen {
             TextButton itemBtn = new TextButton(itDesc, eventChoiceBtnStyle);
             itemBtn.getLabel().setWrap(true);
             itemBtn.getLabel().setAlignment(Align.center);
-            itemBtn.pad(4, 16, 4, 16);
+            itemBtn.pad(6, 18, 6, 18);
             itemBtn.getLabelCell().width(480);
             UIUtils.addScaleHoverEffect(itemBtn);
             itemBtn.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent evt, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
                     Item traded = player.getInventory().removeItem(slotIndex);
                     EventChoice.EventResult res = new EventChoice.EventResult();
                     res.tradedItem = traded;
@@ -1552,7 +1805,7 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Barter Trade Completed", res, false);
                 }
             });
-            eventContentTable.add(itemBtn).size(530, 46).padBottom(6).center().row();
+            eventContentTable.add(itemBtn).width(530).minHeight(48).padBottom(6).center().row();
         }
 
         TextButton cancelBtn = new TextButton("CANCEL & RETURN", disabledEventChoiceBtnStyle);
@@ -1560,10 +1813,13 @@ public class BoardScreen implements Screen {
         cancelBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 showEventChoiceView(activeCurrentEvent, tile);
             }
         });
-        eventContentTable.add(cancelBtn).size(260, 44).padTop(6).center().row();
+        eventContentTable.add(cancelBtn).size(280, 48).padTop(6).center().row();
     }
 
     /**
@@ -1575,12 +1831,12 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#a63232")));
         eventBadgeLabel.setText("INVENTORY FULL (4/4)  -  ITEM SWAP");
 
-        Label titleLbl = new Label("Inventory Full!", new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label("Inventory Full!", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
 
         Label subLbl = new Label("You discovered [" + newItem.getName() + "], but your inventory is full.\nSelect an item to discard and replace, or leave it behind:",
-            new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
+            new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
         eventContentTable.add(subLbl).width(530).padBottom(10).center().row();
@@ -1592,19 +1848,22 @@ public class BoardScreen implements Screen {
             TextButton swapSlotBtn = new TextButton(label, eventChoiceBtnStyle);
             swapSlotBtn.getLabel().setWrap(true);
             swapSlotBtn.getLabel().setAlignment(Align.center);
-            swapSlotBtn.pad(4, 16, 4, 16);
+            swapSlotBtn.pad(6, 18, 6, 18);
             swapSlotBtn.getLabelCell().width(480);
             UIUtils.addScaleHoverEffect(swapSlotBtn);
             swapSlotBtn.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent evt, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
                     player.replaceItem(slot, newItem);
                     EventChoice.EventResult res = new EventChoice.EventResult();
                     res.consequences.add("Replaced [" + existing.getName() + "] with [" + newItem.getName() + "].");
                     showOutcomeView("Item Swapped", res, false);
                 }
             });
-            eventContentTable.add(swapSlotBtn).size(530, 46).padBottom(6).center().row();
+            eventContentTable.add(swapSlotBtn).width(530).minHeight(48).padBottom(6).center().row();
         }
 
         TextButton leaveBtn = new TextButton("LEAVE " + newItem.getName().toUpperCase() + " BEHIND", disabledEventChoiceBtnStyle);
@@ -1612,12 +1871,15 @@ public class BoardScreen implements Screen {
         leaveBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 EventChoice.EventResult res = new EventChoice.EventResult();
                 res.consequences.add("Left [" + newItem.getName() + "] behind.");
                 showOutcomeView("Discovery Left Behind", res, false);
             }
         });
-        eventContentTable.add(leaveBtn).size(400, 44).padTop(6).center().row();
+        eventContentTable.add(leaveBtn).width(440).minHeight(48).padTop(6).center().row();
 
         modalScrim.setVisible(true);
         eventModalTable.setVisible(true);
@@ -1633,10 +1895,10 @@ public class BoardScreen implements Screen {
         eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#7a4823")));
         eventBadgeLabel.setText("EVENT RESOLUTION");
 
-        Label titleLbl = new Label(choiceTitle, new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label(choiceTitle, new Label.LabelStyle(choiceOutcomeTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         titleLbl.setWrap(true);
-        eventContentTable.add(titleLbl).width(530).padTop(12).padBottom(6).center().row();
+        eventContentTable.add(titleLbl).width(580).padTop(10).padBottom(12).center().row();
 
         // D20 Skill Check Outcome Banner (if applicable)
         if (res.difficultyClass > 0) {
@@ -1646,33 +1908,32 @@ public class BoardScreen implements Screen {
                 res.d20Roll, res.difficultyClass, (res.checkSucceeded ? "SUCCESS!" : "FAILED!"));
 
             Table d20Badge = new Table();
-            d20Badge.setBackground(UIUtils.createRoundedDrawable(480, 40, 10, d20Color, d20Border, 2));
-            // Use playerTagFont (baked in pure white) so text pops with high contrast on red/green backgrounds
-            Label d20Lbl = new Label(d20Text, new Label.LabelStyle(playerTagFont, Color.WHITE));
+            d20Badge.setBackground(UIUtils.createRoundedDrawable(480, 44, 10, d20Color, d20Border, 2));
+            Label d20Lbl = new Label(d20Text, new Label.LabelStyle(choiceD20Font, Color.WHITE));
             d20Lbl.setAlignment(Align.center);
             d20Lbl.setWrap(true);
             d20Badge.add(d20Lbl).width(460).center();
 
-            eventContentTable.add(d20Badge).size(480, 40).padBottom(12).center().row();
+            eventContentTable.add(d20Badge).size(480, 44).padBottom(12).center().row();
         }
 
         // Consequences List Inset Box (Light Cream Container with Dark Mahogany Text)
         Table outcomeBox = new Table();
-        outcomeBox.setBackground(UIUtils.createRoundedDrawable(530, 135, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
+        outcomeBox.setBackground(UIUtils.createRoundedDrawable(530, 140, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
         outcomeBox.pad(10, 20, 10, 20);
 
         Table linesTable = new Table();
         linesTable.center();
 
         for (String msg : res.consequences) {
-            Label lineLbl = new Label(msg, new Label.LabelStyle(modalBodyFont, Color.valueOf("#361704")));
+            Label lineLbl = new Label(msg, new Label.LabelStyle(choiceOutcomeBodyFont, Color.valueOf("#361704")));
             lineLbl.setAlignment(Align.center);
             lineLbl.setWrap(true);
             linesTable.add(lineLbl).width(460).padBottom(6).center().row();
         }
 
         outcomeBox.add(linesTable).width(460).center();
-        eventContentTable.add(outcomeBox).size(530, 135).padBottom(16).center().row();
+        eventContentTable.add(outcomeBox).size(530, 140).padBottom(16).center().row();
 
         // Action Button: CONTINUE
         TextButton continueBtn = new TextButton("CONTINUE", eventChoiceBtnStyle);
@@ -1681,10 +1942,13 @@ public class BoardScreen implements Screen {
         continueBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
                 closeEventModal();
             }
         });
-        eventContentTable.add(continueBtn).size(280, 48).center().row();
+        eventContentTable.add(continueBtn).size(280, 52).center().row();
     }
 
     /**
@@ -1698,19 +1962,35 @@ public class BoardScreen implements Screen {
         updateMiniMapProgress();
 
         Player player = game.getCurrentPlayer();
+        if (player != null && game.getRunTracker() != null) {
+            game.getRunTracker().recordEventResolved(player);
+        }
+
         if (player != null && player.getHealth() <= 0) {
-            topBannerLabel.setText(player.getName().toUpperCase() + " DIED! GAME OVER.");
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordPlayerFallen(player);
+            }
+            if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                game.setScreen(new GameSummaryScreen(game, false, player));
+                return;
+            }
+            topBannerLabel.setText(player.getName().toUpperCase() + " DIED! NEXT TRAVELER'S TURN...");
             turnState = TurnState.TURN_TRANSITION;
             actionPauseTimer = 1.0f;
             return;
         }
 
         if (specialSlideTarget != -1) {
-            turnState = TurnState.TILE_ACTION_PAUSE;
-            actionPauseTimer = 0.8f;
+            boolean isLadder = (specialSlideTarget > player.getPosition());
+            startSpecialMove(player.getPosition(), specialSlideTarget, isLadder);
+            specialSlideTarget = -1;
         } else {
             if (player != null && player.getPosition() >= 100) {
-                topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " CLAIMS THE THRONE OF FATE!");
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordThroneClaimed(player);
+                }
+                game.setScreen(new GameSummaryScreen(game, true, player));
+                return;
             } else if (isItemMovement) {
                 isItemMovement = false;
                 turnState = TurnState.WAITING_FOR_ROLL;
@@ -1722,10 +2002,31 @@ public class BoardScreen implements Screen {
         }
     }
 
+    private void updateActMusic() {
+        if (game.getAudioManager() == null) return;
+        Player player = game.getCurrentPlayer();
+        int pos = (player != null) ? player.getPosition() : 1;
+        AudioManager.MusicTrack track;
+        if (pos <= 30) {
+            track = AudioManager.MusicTrack.ACT1;
+        } else if (pos <= 70) {
+            track = AudioManager.MusicTrack.ACT2;
+        } else {
+            track = AudioManager.MusicTrack.ACT3;
+        }
+        boolean immediate = (game.getAudioManager().getCurrentTrack() != AudioManager.MusicTrack.ACT1 &&
+                             game.getAudioManager().getCurrentTrack() != AudioManager.MusicTrack.ACT2 &&
+                             game.getAudioManager().getCurrentTrack() != AudioManager.MusicTrack.ACT3);
+        game.getAudioManager().playMusic(track, true, immediate);
+    }
+
     /**
      * Starts the dice tumbling sequence.
      */
     private void triggerRoll() {
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playSound(AudioManager.SoundEffect.DICE_ROLL);
+        }
         turnState = TurnState.ROLLING_DICE;
         diceTumbleTimer = 0.75f;
         diceFaceShuffleTimer = 0f;
@@ -1755,24 +2056,38 @@ public class BoardScreen implements Screen {
         // 1. Update Game Physics & Camera only when NOT paused
         if (!isPaused) {
             stateTime += delta;
-            if (turnState == TurnState.STEPPING_TILES) {
+            if (turnState == TurnState.STEPPING_TILES || (isSpecialMoving && specialMovePhase == SpecialMovePhase.IN_FLIGHT)) {
                 walkStateTime += delta;
             } else {
                 walkStateTime = 0f;
+            }
+            if (revealFlashTimer > 0f) {
+                revealFlashTimer -= delta;
+                if (revealFlashTimer <= 0f) revealFlashTile = -1;
             }
             updateTurnLogic(delta);
             updateCameraTracking(delta);
         }
 
-        // 2. Clear Screen with the Act's Atmospheric Sky Color
-        int currentTile = getTileIndexAtX(worldCamera.position.x);
+        // 2. Clear Screen with smoothly interpolated Act Atmospheric Sky Color
+        float camTilePos = 1f + (worldCamera.position.x - FIRST_TILE_X) / TILE_SPACING;
+        Color act1Sky = Color.valueOf("#42828a"); // Act 1 Atmospheric forest teal daytime sky
+        Color act2Sky = Color.valueOf("#183864"); // Act 2 Vibrant deep sapphire twilight sky
+        Color act3Sky = Color.valueOf("#4a1424"); // Act 3 Dramatic crimson twilight sky
+
         Color skyColor;
-        if (currentTile <= 30) {
-            skyColor = Color.valueOf("#42828a"); // Act 1 Atmospheric forest teal daytime sky
-        } else if (currentTile <= 70) {
-            skyColor = Color.valueOf("#183864"); // Act 2 Vibrant deep sapphire twilight sky
+        if (camTilePos <= 27f) {
+            skyColor = act1Sky;
+        } else if (camTilePos < 33f) {
+            float t = Interpolation.smooth.apply((camTilePos - 27f) / 6f);
+            skyColor = new Color(act1Sky).lerp(act2Sky, t);
+        } else if (camTilePos <= 67f) {
+            skyColor = act2Sky;
+        } else if (camTilePos < 73f) {
+            float t = Interpolation.smooth.apply((camTilePos - 67f) / 6f);
+            skyColor = new Color(act2Sky).lerp(act3Sky, t);
         } else {
-            skyColor = Color.valueOf("#4a1424"); // Act 3 Dramatic crimson twilight sky
+            skyColor = act3Sky;
         }
         Gdx.gl.glClearColor(skyColor.r, skyColor.g, skyColor.b, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -1782,7 +2097,7 @@ public class BoardScreen implements Screen {
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
-        renderParallaxBackground(currentTile);
+        renderParallaxBackground(camTilePos);
         renderGroundedSteppingStones();
         renderPlayers();
 
@@ -1833,6 +2148,11 @@ public class BoardScreen implements Screen {
                     }
                     diceLabel.setText("ROLLED: " + currentRollValue);
 
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordRoll(player, currentRollValue);
+                        game.getRunTracker().recordTurn(player);
+                    }
+
                     hopCurrentTile = player.getPosition();
                     hopTargetTile = Math.min(100, hopCurrentTile + currentRollValue);
 
@@ -1848,6 +2168,12 @@ public class BoardScreen implements Screen {
                     stepTimer = 0f;
                     hopCurrentTile++;
                     player.setPosition(hopCurrentTile);
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.STEP, 0.65f, 0.08f);
+                    }
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordSteps(player, 1, hopCurrentTile);
+                    }
                     updateMiniMapProgress();
 
                     if (hopCurrentTile >= hopTargetTile) {
@@ -1861,22 +2187,136 @@ public class BoardScreen implements Screen {
                 break;
 
             case TILE_ACTION_PAUSE:
-                actionPauseTimer -= delta;
-                if (actionPauseTimer <= 0f) {
-                    if (specialSlideTarget != -1) {
-                        player.setPosition(specialSlideTarget);
-                        updateMiniMapProgress();
-                        specialSlideTarget = -1;
-                        if (isItemMovement) {
-                            isItemMovement = false;
-                            turnState = TurnState.WAITING_FOR_ROLL;
-                            topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + player.getPosition() + "! ROLL THE DICE!");
-                        } else {
-                            actionPauseTimer = 0.7f;
-                        }
-                    } else {
+                if (isSpecialMoving) {
+                    float startX = getTileCenterX(specialMoveStartTile);
+                    float destX = getTileCenterX(specialMoveDestTile);
+                    float startY = getCharacterDrawY(specialMoveStartTile);
+                    float destY = getCharacterDrawY(specialMoveDestTile);
+
+                    switch (specialMovePhase) {
+                        case WINDUP:
+                            // 1. ANTICIPATION WIND-UP:
+                            // Character stands on the tile while ladder surges with light and discovery registers
+                            specialMoveCurrentX = startX;
+                            specialMoveCurrentY = startY;
+                            specialMovePhaseTimer -= delta;
+
+                            if (specialMovePhaseTimer <= 0f) {
+                                specialMovePhase = SpecialMovePhase.IN_FLIGHT;
+                                specialMoveElapsed = 0f;
+                                if (game.getAudioManager() != null) {
+                                    if (isLadderMove) {
+                                        game.getAudioManager().playSound(AudioManager.SoundEffect.LADDER_SOAR);
+                                    } else {
+                                        game.getAudioManager().playSound(AudioManager.SoundEffect.SNAKE_SLIDE);
+                                    }
+                                }
+                            }
+                            break;
+
+                        case IN_FLIGHT:
+                            // 2. SOARING FLIGHT ACROSS THE CELESTIAL ARC:
+                            specialMoveElapsed += delta;
+                            float progress = MathUtils.clamp(specialMoveElapsed / specialMoveDuration, 0f, 1f);
+
+                            if (isLadderMove) {
+                                float tX = Interpolation.smooth.apply(progress);
+                                specialMoveCurrentX = MathUtils.lerp(startX, destX, tX);
+
+                                float tY = Interpolation.linear.apply(progress);
+                                float arc = (float) Math.sin(progress * Math.PI) * specialMoveArcHeight;
+                                specialMoveCurrentY = MathUtils.lerp(startY, destY, tY) + arc;
+                            } else {
+                                float tX = Interpolation.pow2In.apply(progress);
+                                specialMoveCurrentX = MathUtils.lerp(startX, destX, tX);
+
+                                float tY = Interpolation.linear.apply(progress);
+                                float dip = (float) Math.sin(progress * Math.PI) * specialMoveArcHeight;
+                                specialMoveCurrentY = MathUtils.lerp(startY, destY, tY) - dip;
+                            }
+
+                            if (progress >= 1.0f) {
+                                specialMoveCurrentX = destX;
+                                specialMoveCurrentY = destY;
+                                player.setPosition(specialMoveDestTile);
+                                updateMiniMapProgress();
+
+                                // Reveal destination tile upon landing through ladder or slide
+                                Tile destTile = board.getTile(specialMoveDestTile);
+                                boolean destWasUnrevealed = (destTile != null && !destTile.isRevealed());
+                                if (destTile != null && !destTile.isRevealed()) {
+                                    destTile.setRevealed(true);
+                                }
+                                if (destWasUnrevealed) {
+                                    revealFlashTile = specialMoveDestTile;
+                                    revealFlashTimer = 1.0f;
+                                    int discoveryExp = (int) (10 + specialMoveDestTile * 0.05f);
+                                    player.gainExperience(discoveryExp);
+                                }
+                                updateHudDisplay();
+
+                                if (isLadderMove) {
+                                    if (specialMoveDestTile >= 100) {
+                                        topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " REACHED THE THRONE OF FATE!");
+                                    } else if (specialMoveDestTile == 30) {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED SANCTUARY (ACT I FINALE) VIA CELESTIAL LADDER!");
+                                    } else if (specialMoveDestTile == 70) {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED THE ABYSS GATE (ACT II FINALE) VIA CELESTIAL LADDER!");
+                                    } else if (destWasUnrevealed) {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + specialMoveDestTile + "! ASCENT COMPLETE! (+" + (int) (10 + specialMoveDestTile * 0.05f) + " EXP)");
+                                    } else {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + specialMoveDestTile + "! ASCENT COMPLETE!");
+                                    }
+                                } else {
+                                    int tilesLost = Math.max(0, specialMoveStartTile - specialMoveDestTile);
+                                    if (game.getRunTracker() != null) {
+                                        game.getRunTracker().recordSnakeSlide(player, tilesLost);
+                                    }
+                                    topBannerLabel.setText(player.getName().toUpperCase() + " SLID DOWN TO TILE " + specialMoveDestTile + "!");
+                                }
+
+                                specialMovePhase = SpecialMovePhase.LANDED;
+                                specialMovePhaseTimer = 0.65f; // Touchdown landing pause
+                                if (game.getAudioManager() != null && isLadderMove) {
+                                    game.getAudioManager().playSound(AudioManager.SoundEffect.LADDER_LAND);
+                                }
+                            }
+                            break;
+
+                        case LANDED:
+                            // 3. TOUCHDOWN LANDING RECOVERY:
+                            specialMoveCurrentX = destX;
+                            specialMoveCurrentY = destY;
+                            specialMovePhaseTimer -= delta;
+
+                            if (specialMovePhaseTimer <= 0f) {
+                                isSpecialMoving = false;
+                                specialMovePhase = SpecialMovePhase.NONE;
+
+                                if (isItemMovement) {
+                                    isItemMovement = false;
+                                    turnState = TurnState.WAITING_FOR_ROLL;
+                                    topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + player.getPosition() + "! ROLL THE DICE!");
+                                } else {
+                                    turnState = TurnState.TURN_TRANSITION;
+                                    actionPauseTimer = 0.5f;
+                                }
+                            }
+                            break;
+
+                        case NONE:
+                        default:
+                            break;
+                    }
+                } else {
+                    actionPauseTimer -= delta;
+                    if (actionPauseTimer <= 0f) {
                         if (player.getPosition() >= 100) {
-                            topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " CLAIMS THE THRONE OF FATE!");
+                            if (game.getRunTracker() != null) {
+                                game.getRunTracker().recordThroneClaimed(player);
+                            }
+                            game.setScreen(new GameSummaryScreen(game, true, player));
+                            return;
                         } else if (isItemMovement) {
                             isItemMovement = false;
                             turnState = TurnState.WAITING_FOR_ROLL;
@@ -1892,6 +2332,22 @@ public class BoardScreen implements Screen {
             case TURN_TRANSITION:
                 actionPauseTimer -= delta;
                 if (actionPauseTimer <= 0f) {
+                    if (player.getHealth() <= 0) {
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordPlayerFallen(player);
+                        }
+                        if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                            game.setScreen(new GameSummaryScreen(game, false, player));
+                            return;
+                        }
+                    }
+                    if (player.getPosition() >= 100) {
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordThroneClaimed(player);
+                        }
+                        game.setScreen(new GameSummaryScreen(game, true, player));
+                        return;
+                    }
                     game.nextTurn();
                     itemUsedThisTurn = false;
                     updateHudDisplay();
@@ -1903,6 +2359,7 @@ public class BoardScreen implements Screen {
                     }
                     diceLabel.setText("D6");
                     turnState = TurnState.WAITING_FOR_ROLL;
+                    updateActMusic();
                     topBannerLabel.setText(game.getCurrentPlayer().getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
                 }
                 break;
@@ -1916,24 +2373,58 @@ public class BoardScreen implements Screen {
     /**
      * Handles event, snake, or ladder trigger when landing on a tile.
      */
+    /**
+     * Handles event, snake, or ladder trigger when landing on a tile.
+     */
     private void handleTileArrival(Player player, int tileIndex) {
         Tile tile = board.getTile(tileIndex);
         if (tile == null) return;
 
+        boolean wasUnrevealed = !tile.isRevealed();
+        if (wasUnrevealed) {
+            tile.setRevealed(true);
+            revealFlashTile = tileIndex;
+            revealFlashTimer = 1.0f;
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.FOG_REVEAL);
+            }
+        }
+
         if (tileIndex >= 100) {
             topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " REACHED THE THRONE OF FATE!");
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordThroneClaimed(player);
+            }
             turnState = TurnState.TILE_ACTION_PAUSE;
             actionPauseTimer = 1.0f;
             return;
         }
 
+        // 1. SNAKE TILE -> Trigger serpent ambush narrative event modal (like ConsoleTestGame)
         if (tile instanceof SnakeTile) {
-            SnakeTile snake = (SnakeTile) tile;
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordSnakeEncounter(player);
+            }
+            SnakeTile snakeTile = (SnakeTile) tile;
             Event event = eventManager.selectEventForTile(tileIndex, EventCategory.SNAKE);
-            topBannerLabel.setText("SERPENT AMBUSH ON TILE " + tileIndex + "!");
-            showEventChoiceView(event, snake);
-        } else if (tile instanceof LadderTile) {
+            if (wasUnrevealed) {
+                topBannerLabel.setText("AMBUSH! " + player.getName().toUpperCase() + " UNCOVERED A SERPENT PIT ON TILE " + tileIndex + "!");
+            } else {
+                topBannerLabel.setText("SERPENT AMBUSH ON TILE " + tileIndex + "!");
+            }
+            showEventChoiceView(event, snakeTile);
+            return;
+        }
+        // 2. LADDER TILE -> Handle climbing
+        else if (tile instanceof LadderTile) {
             LadderTile ladder = (LadderTile) tile;
+            if (game.getRunTracker() != null) {
+                game.getRunTracker().recordLadder(player, tileIndex, ladder.getDestination());
+            }
+            int discoveryBonus = wasUnrevealed ? 20 : 0;
+            if (discoveryBonus > 0) {
+                player.gainExperience(discoveryBonus);
+            }
             // 40% chance for an interactive climbing dilemma; 60% for smooth direct climb
             if (eventManager.shouldTriggerLadderEvent()) {
                 Event event = eventManager.selectEventForTile(tileIndex, EventCategory.LADDER);
@@ -1941,16 +2432,19 @@ public class BoardScreen implements Screen {
                 showEventChoiceView(event, ladder);
             } else {
                 int dest = ladder.getDestination();
-                specialSlideTarget = dest;
                 int expEarned = 10 + (tileIndex / 3);
                 player.gainExperience(expEarned);
-                topBannerLabel.setText("STABLE ASCENT ON TILE " + tileIndex + "! CLIMBING UP TO TILE " + dest + "! (+" + expEarned + " EXP)");
-                turnState = TurnState.TILE_ACTION_PAUSE;
-                actionPauseTimer = 0.9f;
+                if (wasUnrevealed) {
+                    topBannerLabel.setText("DISCOVERY! " + player.getName().toUpperCase() + " UNCOVERED A CELESTIAL LADDER ON TILE " + tileIndex + " -> TILE " + dest + "! (+" + (expEarned + discoveryBonus) + " EXP)");
+                } else {
+                    topBannerLabel.setText("STABLE ASCENT ON TILE " + tileIndex + "! CLIMBING UP TO TILE " + dest + "! (+" + expEarned + " EXP)");
+                }
                 updateHudDisplay();
+                startSpecialMove(tileIndex, dest, true);
             }
-        } else {
-            // Normal tile: Dynamic pacing check with cooldown & bad-luck protection
+        }
+        // 3. NORMAL TILE -> Ambient events or safe ground
+        else {
             if (eventManager.shouldTriggerAmbientEvent(player)) {
                 Event event = eventManager.selectEventForTile(tileIndex, EventCategory.NORMAL);
                 player.resetEventCooldown();
@@ -1965,7 +2459,21 @@ public class BoardScreen implements Screen {
                     topBannerLabel.setText(player.getName().toUpperCase() + " ADVANCED TO TILE " + tileIndex + " - SAFE GROUND. ROLL THE DICE!");
                     turnState = TurnState.WAITING_FOR_ROLL;
                 } else {
-                    topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + tileIndex + " - SAFE GROUND. (+" + expEarned + " EXP)");
+                    if (tileIndex == 30) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
+                        }
+                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED SANCTUARY (ACT I FINALE)! REST BEFORE ENTERING THE SUNKEN RUINS.");
+                    } else if (tileIndex == 70) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
+                        }
+                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED THE ABYSS GATE (ACT II FINALE)! GIRD RESOLVE FOR THE INFERNAL VOID.");
+                    } else if (wasUnrevealed) {
+                        topBannerLabel.setText(player.getName().toUpperCase() + " UNCOVERED TILE " + tileIndex + " - SAFE GROUND. (+" + expEarned + " EXP)");
+                    } else {
+                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + tileIndex + " - SAFE GROUND. (+" + expEarned + " EXP)");
+                    }
                     turnState = TurnState.TILE_ACTION_PAUSE;
                     actionPauseTimer = 0.8f;
                 }
@@ -1973,67 +2481,115 @@ public class BoardScreen implements Screen {
             }
         }
     }
-
     /**
-     * Smoothly pans the world camera to follow the active player, anchoring Y to viewport center.
+     * Smoothly pans the world camera to follow the active player, tracking both X and stepped Y elevation.
      */
     private void updateCameraTracking(float delta) {
         Player current = game.getCurrentPlayer();
         if (current == null) return;
 
         float targetX;
-        if (turnState == TurnState.STEPPING_TILES) {
+        float targetY;
+        float baselineY = worldCamera.viewportHeight / 2f;
+
+        if (isSpecialMoving) {
+            targetX = specialMoveCurrentX;
+            if (specialMovePhase == SpecialMovePhase.WINDUP) {
+                targetY = baselineY + (getTileBottomY(specialMoveStartTile) - 220f);
+            } else if (specialMovePhase == SpecialMovePhase.LANDED) {
+                targetY = baselineY + (getTileBottomY(specialMoveDestTile) - 220f);
+            } else {
+                float moveProgress = MathUtils.clamp(specialMoveElapsed / specialMoveDuration, 0f, 1f);
+                float startElev = getTileBottomY(specialMoveStartTile) - 220f;
+                float destElev = getTileBottomY(specialMoveDestTile) - 220f;
+                float currentElev = MathUtils.lerp(startElev, destElev, moveProgress);
+                targetY = baselineY + currentElev;
+            }
+        } else if (turnState == TurnState.STEPPING_TILES) {
             float fromX = getTileCenterX(hopCurrentTile);
             float toX = getTileCenterX(Math.min(100, hopCurrentTile + 1));
             float alpha = stepTimer / STEP_DURATION;
             targetX = MathUtils.lerp(fromX, toX, alpha);
+
+            float fromElev = getTileBottomY(hopCurrentTile) - 220f;
+            float toElev = getTileBottomY(Math.min(100, hopCurrentTile + 1)) - 220f;
+            targetY = baselineY + MathUtils.lerp(fromElev, toElev, alpha);
         } else {
             targetX = getTileCenterX(current.getPosition());
+            targetY = baselineY + (getTileBottomY(current.getPosition()) - 220f);
         }
 
         worldCamera.position.x += (targetX - worldCamera.position.x) * (delta * 4.5f);
-        // Anchor vertical position to half of current viewport height so y=0 is strictly the bottom
-        worldCamera.position.y = worldCamera.viewportHeight / 2f;
+        worldCamera.position.y += (targetY - worldCamera.position.y) * (delta * 3.5f);
         worldCamera.update();
     }
 
     /**
-     * Renders seamlessly composited multi-layer parallax backgrounds across the 3 Acts.
+     * Renders seamlessly composited multi-layer parallax backgrounds with smooth crossfading between Acts.
      * Layering order (from back to front):
      * 1. Layer 3 (Far Canopy & Sky): Sits in the back, extends to screen top, 0.15x parallax.
      * 2. Layer 2 (Midground Silhouettes & Ruins): Sits behind the ground ledge, 0.35x parallax.
      * 3. Layer 1 (Foreground Ground Platform): Anchored at y=0, turf embeds stepping stones, 1.0x scroll.
      */
-    private void renderParallaxBackground(int currentTile) {
+    private void renderParallaxBackground(float camTilePos) {
         float camX = worldCamera.position.x;
+        float camY = worldCamera.position.y;
         float viewW = worldCamera.viewportWidth;
         float viewH = worldCamera.viewportHeight;
         float leftVisible = camX - viewW / 2f;
         float rightVisible = camX + viewW / 2f;
+        float bottomVisible = camY - viewH / 2f;
 
-        // Select slices based on Act
-        TextureRegion farSlice    = (currentTile <= 30) ? act1Far    : ((currentTile <= 70) ? act2Far    : act3Far);
-        TextureRegion midSlice    = (currentTile <= 30) ? act1Mid    : ((currentTile <= 70) ? act2Mid    : act3Mid);
-        TextureRegion groundSlice = (currentTile <= 30) ? act1Ground : ((currentTile <= 70) ? act2Ground : act3Ground);
+        // 0. Subterranean Foundation (Layer 0) - Smoothly interpolated
+        Color act1Lower = Color.valueOf("#20202a");
+        Color act2Lower = Color.valueOf("#0a204f");
+        Color act3Lower = Color.valueOf("#2e1534");
 
-        // =========================================================================
-        // 0. Layer 0 (Subterranean Foundation / Lower Console Backdrop):
-        // Fills the area below the ground platform (y = 0 to GROUND_BASE_Y + 25f)
-        // using the exact dark rock color of Layer 1 for the active Act.
-        // This eliminates any floating look and creates a continuous, grounded lower section.
-        // =========================================================================
-        Color lowerBgColor = (currentTile <= 30)
-            ? Color.valueOf("#20202a")
-            : ((currentTile <= 70) ? Color.valueOf("#0a204f") : Color.valueOf("#2e1534"));
+        Color lowerBgColor;
+        if (camTilePos <= 27f) {
+            lowerBgColor = act1Lower;
+        } else if (camTilePos < 33f) {
+            float t = Interpolation.smooth.apply((camTilePos - 27f) / 6f);
+            lowerBgColor = new Color(act1Lower).lerp(act2Lower, t);
+        } else if (camTilePos <= 67f) {
+            lowerBgColor = act2Lower;
+        } else if (camTilePos < 73f) {
+            float t = Interpolation.smooth.apply((camTilePos - 67f) / 6f);
+            lowerBgColor = new Color(act2Lower).lerp(act3Lower, t);
+        } else {
+            lowerBgColor = act3Lower;
+        }
+        float foundationBottom = bottomVisible - 100f;
+        float foundationTop = GROUND_BASE_Y + 25f;
+        float foundationH = Math.max(50f, foundationTop - foundationBottom);
         batch.setColor(lowerBgColor);
-        batch.draw(whitePixelTex, leftVisible - 200f, 0f, viewW + 400f, GROUND_BASE_Y + 25f);
+        batch.draw(whitePixelTex, leftVisible - 200f, foundationBottom, viewW + 400f, foundationH);
         batch.setColor(Color.WHITE);
 
-        // =========================================================================
-        // 1. Layer 3 (Backdrop): Far Canopy / Deep Forest / Moon (0.15x parallax)
-        // Elevated to y=190f, scaled to reach beyond screen top, seamlessly tiling with 2px overlap
-        // =========================================================================
-        float farH = Math.max(920f, viewH - 190f) + 120f;
+        // 1, 2, 3. Parallax Layers Crossfade
+        if (camTilePos <= 27f) {
+            drawParallaxSliceSet(act1Far, act1Mid, act1Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+        } else if (camTilePos < 33f) {
+            float blend = Interpolation.smooth.apply((camTilePos - 27f) / 6f);
+            drawParallaxSliceSet(act1Far, act1Mid, act1Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+            drawParallaxSliceSet(act2Far, act2Mid, act2Ground, blend, camX, leftVisible, rightVisible, viewH);
+        } else if (camTilePos <= 67f) {
+            drawParallaxSliceSet(act2Far, act2Mid, act2Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+        } else if (camTilePos < 73f) {
+            float blend = Interpolation.smooth.apply((camTilePos - 67f) / 6f);
+            drawParallaxSliceSet(act2Far, act2Mid, act2Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+            drawParallaxSliceSet(act3Far, act3Mid, act3Ground, blend, camX, leftVisible, rightVisible, viewH);
+        } else {
+            drawParallaxSliceSet(act3Far, act3Mid, act3Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+        }
+    }
+
+    private void drawParallaxSliceSet(TextureRegion farSlice, TextureRegion midSlice, TextureRegion groundSlice, float alpha,
+                                      float camX, float leftVisible, float rightVisible, float viewH) {
+        if (alpha <= 0.001f) return;
+
+        // 1. Layer 3 (Backdrop): Far Canopy / Deep Forest (0.15x parallax)
+        float farH = Math.max(1050f, viewH) + 380f;
         float farW = farH * ((float) farSlice.getRegionWidth() / farSlice.getRegionHeight());
         float stepFar = farW - 2f;
         float farOffset = (camX * 0.15f) % stepFar;
@@ -2041,15 +2597,13 @@ public class BoardScreen implements Screen {
 
         float farStart = leftVisible - farOffset;
         while (farStart > leftVisible - farW) farStart -= stepFar;
+        batch.setColor(1f, 1f, 1f, alpha);
         for (float x = farStart; x < rightVisible + farW; x += stepFar) {
-            batch.draw(farSlice, x, 190f, farW, farH);
+            batch.draw(farSlice, x, 140f, farW, farH);
         }
 
-        // =========================================================================
         // 2. Layer 2 (Midground): Silhouettes & Ancient Ruins (0.35x parallax)
-        // Elevated to y=210f; its base is naturally hidden behind the ground platform ledge
-        // =========================================================================
-        float midH = 560f;
+        float midH = 620f;
         float midW = midH * ((float) midSlice.getRegionWidth() / midSlice.getRegionHeight());
         float stepMid = midW - 2f;
         float midOffset = (camX * 0.35f) % stepMid;
@@ -2058,13 +2612,10 @@ public class BoardScreen implements Screen {
         float midStart = leftVisible - midOffset;
         while (midStart > leftVisible - midW) midStart -= stepMid;
         for (float x = midStart; x < rightVisible + midW; x += stepMid) {
-            batch.draw(midSlice, x, 210f, midW, midH);
+            batch.draw(midSlice, x, 180f, midW, midH);
         }
 
-        // =========================================================================
         // 3. Layer 1 (Foreground): Terrain Ground Platform (1.0x scroll with world)
-        // Sits at y=GROUND_BASE_Y (110f), seamlessly continuing into the lower background
-        // =========================================================================
         float groundH = 260f;
         float groundW = groundH * ((float) groundSlice.getRegionWidth() / groundSlice.getRegionHeight());
         float stepGround = groundW - 2f;
@@ -2076,39 +2627,343 @@ public class BoardScreen implements Screen {
         for (float x = groundStart; x < rightVisible + groundW; x += stepGround) {
             batch.draw(groundSlice, x, GROUND_BASE_Y, groundW, groundH);
         }
+        batch.setColor(Color.WHITE);
     }
 
     /**
-     * Option C: Renders the 100 Grounded Stepping Stones sitting directly on the grass platform.
+     * Renders the connected translucent flagstone walkway across all 100 tiles.
+     * Features:
+     * - Tiered stepped elevation across Acts (Act I at 220f, Act II at 275f, Act III at 330f).
+     * - Grand carved ascending stone staircases at Act boundaries (Tile 30 Sanctuary & Tile 70 Abyss Gate).
+     * - Solid bedrock and retaining masonry foundation under elevated tiers (zero floating gaps).
+     * - Upright illuminated ladders with celestial ascension beams and glowing rungs on Ladder tiles.
+     * - Hazard warning crests and glowing serpent eyes on Snake tiles.
+     * - Translucent opacity (78-85%) harmonizing with each Act's atmospheric background palette.
+     * - High-contrast engraved tile numbers and destination indicators (+ LADDER -> dest, - SNAKE -> dest).
      */
     private void renderGroundedSteppingStones() {
-        float camLeft = worldCamera.position.x - 1100f;
-        float camRight = worldCamera.position.x + 1100f;
+        float camX = worldCamera.position.x;
+        float viewW = worldCamera.viewportWidth;
+        float camLeft = camX - viewW / 2f - 200f;
+        float camRight = camX + viewW / 2f + 200f;
 
         Texture stoneNormal = game.getAssetManager().get(Assets.TILE_STONE_NORMAL);
         Texture stoneSnake  = game.getAssetManager().get(Assets.TILE_STONE_SNAKE);
         Texture stoneLadder = game.getAssetManager().get(Assets.TILE_STONE_LADDER);
 
         for (int i = 1; i <= 100; i++) {
-            float tileX = getTileCenterX(i) - TILE_WIDTH / 2f;
-            if (tileX + TILE_WIDTH < camLeft || tileX > camRight) continue;
+            float tileLeft = getTileCenterX(i) - TILE_WIDTH / 2f;
+            float tileRight = tileLeft + TILE_WIDTH;
+            if (tileRight < camLeft || tileLeft > camRight) continue;
 
+            float tileY = getTileBottomY(i);
             Tile tile = board.getTile(i);
+            boolean isRevealed = tile.isRevealed();
             Texture slabTex = stoneNormal;
-            if (tile instanceof SnakeTile) slabTex = stoneSnake;
-            else if (tile instanceof LadderTile) slabTex = stoneLadder;
+            if (isRevealed) {
+                if (tile instanceof SnakeTile) slabTex = stoneSnake;
+                else if (tile instanceof LadderTile) slabTex = stoneLadder;
+            }
 
-            // Draw grounded stone slab embedded naturally into the grass platform
-            batch.draw(slabTex, tileX, TILE_BOTTOM_Y, TILE_WIDTH, TILE_HEIGHT);
+            // =========================================================================
+            // Elevated Plateau Retaining Wall Foundation Masonry
+            // =========================================================================
+            if (i >= 31 && i <= 70) {
+                // Act II Elevated Sunken Ruins Foundation (Height: 275 - 110 = 165px)
+                float wallH = tileY - GROUND_BASE_Y;
+                batch.setColor(0.08f, 0.16f, 0.24f, 0.88f);
+                batch.draw(whitePixelTex, tileLeft, GROUND_BASE_Y, TILE_WIDTH + 1f, wallH);
+                // Horizontal stone coursing groove
+                batch.setColor(0.18f, 0.28f, 0.40f, 0.50f);
+                batch.draw(whitePixelTex, tileLeft, GROUND_BASE_Y + 75f, TILE_WIDTH + 1f, 2f);
+                // Vertical block seams
+                batch.setColor(0.04f, 0.08f, 0.14f, 0.65f);
+                batch.draw(whitePixelTex, tileLeft, GROUND_BASE_Y, 2f, wallH);
+            } else if (i >= 71) {
+                // Act III Elevated Celestial Peak Foundation (Height: 330 - 110 = 220px)
+                float wallH = tileY - GROUND_BASE_Y;
+                batch.setColor(0.16f, 0.08f, 0.18f, 0.88f);
+                batch.draw(whitePixelTex, tileLeft, GROUND_BASE_Y, TILE_WIDTH + 1f, wallH);
+                // Horizontal stone coursing grooves
+                batch.setColor(0.32f, 0.18f, 0.35f, 0.50f);
+                batch.draw(whitePixelTex, tileLeft, GROUND_BASE_Y + 70f, TILE_WIDTH + 1f, 2f);
+                batch.draw(whitePixelTex, tileLeft, GROUND_BASE_Y + 145f, TILE_WIDTH + 1f, 2f);
+                // Vertical block seams
+                batch.setColor(0.07f, 0.03f, 0.09f, 0.65f);
+                batch.draw(whitePixelTex, tileLeft, GROUND_BASE_Y, 2f, wallH);
+            }
 
-            // Special Tiles: Ladder or Snake Badge Overlay centered cleanly on the stone slab
-            // Regular tiles remain clean and unnumbered (HUD mini-map is the single source of truth)
-            if (tile instanceof LadderTile) {
+            // =========================================================================
+            // Translucent Atmospheric Color Grading (Smooth Biome Transition Gradient)
+            // =========================================================================
+            if (isRevealed && tile instanceof LadderTile) {
+                batch.setColor(1.0f, 0.92f, 0.70f, 0.85f);
+            } else if (isRevealed && tile instanceof SnakeTile) {
+                batch.setColor(0.98f, 0.70f, 0.74f, 0.85f);
+            } else {
+                Color act1Normal = Color.valueOf("#d9f0e0"); // Soft mossy forest green
+                Color act2Normal = Color.valueOf("#c7dbfa"); // Cool moonlit slate blue
+                Color act3Normal = Color.valueOf("#f2bfc7"); // Scorched ruby-slate
+
+                Color base;
+                if (i <= 27) {
+                    base = act1Normal;
+                } else if (i < 33) {
+                    float t = (i - 27f) / 6f;
+                    base = new Color(act1Normal).lerp(act2Normal, t);
+                } else if (i <= 67) {
+                    base = act2Normal;
+                } else if (i < 73) {
+                    float t = (i - 67f) / 6f;
+                    base = new Color(act2Normal).lerp(act3Normal, t);
+                } else {
+                    base = act3Normal;
+                }
+                float slabAlpha = isRevealed ? 0.78f : 0.64f;
+                batch.setColor(base.r, base.g, base.b, slabAlpha);
+            }
+
+            // Draw stone paver slab (with +1f overlap to eliminate any OpenGL subpixel seams)
+            batch.draw(slabTex, tileLeft, tileY, TILE_WIDTH + 1f, TILE_HEIGHT);
+            batch.setColor(Color.WHITE);
+
+            // Fog of War mist veil across unrevealed flagstones
+            if (!isRevealed) {
+                float fogPulse = 0.22f + 0.08f * MathUtils.sinDeg(stateTime * 120f + (i * 25f));
+                batch.setColor(0.78f, 0.88f, 0.98f, fogPulse);
+                batch.draw(whitePixelTex, tileLeft, tileY + 3f, TILE_WIDTH, TILE_HEIGHT - 5f);
+                batch.setColor(Color.WHITE);
+            }
+
+            // Top walking surface highlight
+            batch.setColor(1f, 1f, 1f, 0.20f);
+            batch.draw(whitePixelTex, tileLeft, tileY + TILE_HEIGHT - 2f, TILE_WIDTH, 2f);
+
+            // =========================================================================
+            // Vertical Mortar Joints & Grand Transition Staircases
+            // =========================================================================
+            if (i == 30) {
+                // Grand Sanctuary Stepped Ascent (Ascending from 220f+55f to 275f+55f)
+                // 3 carved stone steps on the right edge of Tile 30 leading up +55px to Tile 31
+                float step1X = tileRight - 75f;
+                float step1W = 75f;
+                float step1Y = tileY + TILE_HEIGHT;
+                float step1H = 18f;
+                batch.setColor(0.24f, 0.36f, 0.34f, 0.88f);
+                batch.draw(whitePixelTex, step1X, step1Y, step1W, step1H);
+                batch.setColor(0.60f, 0.95f, 0.85f, 0.60f);
+                batch.draw(whitePixelTex, step1X, step1Y + step1H - 2f, step1W, 2f);
+
+                float step2X = tileRight - 48f;
+                float step2W = 48f;
+                float step2Y = step1Y + 18f;
+                float step2H = 18f;
+                batch.setColor(0.22f, 0.34f, 0.32f, 0.90f);
+                batch.draw(whitePixelTex, step2X, step2Y, step2W, step2H);
+                batch.setColor(0.60f, 0.95f, 0.85f, 0.70f);
+                batch.draw(whitePixelTex, step2X, step2Y + step2H - 2f, step2W, 2f);
+
+                float step3X = tileRight - 22f;
+                float step3W = 22f;
+                float step3Y = step2Y + 18f;
+                float step3H = 19f;
+                batch.setColor(0.20f, 0.32f, 0.30f, 0.92f);
+                batch.draw(whitePixelTex, step3X, step3Y, step3W, step3H);
+                batch.setColor(0.60f, 0.95f, 0.85f, 0.80f);
+                batch.draw(whitePixelTex, step3X, step3Y + step3H - 2f, step3W, 2f);
+            } else if (i == 70) {
+                // Grand Abyss Gate Stepped Ascent (Ascending from 275f+55f to 330f+55f)
+                // 3 carved stone steps on the right edge of Tile 70 leading up +55px to Tile 71
+                float step1X = tileRight - 75f;
+                float step1W = 75f;
+                float step1Y = tileY + TILE_HEIGHT;
+                float step1H = 18f;
+                batch.setColor(0.32f, 0.18f, 0.34f, 0.88f);
+                batch.draw(whitePixelTex, step1X, step1Y, step1W, step1H);
+                batch.setColor(0.85f, 0.55f, 0.95f, 0.60f);
+                batch.draw(whitePixelTex, step1X, step1Y + step1H - 2f, step1W, 2f);
+
+                float step2X = tileRight - 48f;
+                float step2W = 48f;
+                float step2Y = step1Y + 18f;
+                float step2H = 18f;
+                batch.setColor(0.28f, 0.16f, 0.30f, 0.90f);
+                batch.draw(whitePixelTex, step2X, step2Y, step2W, step2H);
+                batch.setColor(0.85f, 0.55f, 0.95f, 0.70f);
+                batch.draw(whitePixelTex, step2X, step2Y + step2H - 2f, step2W, 2f);
+
+                float step3X = tileRight - 22f;
+                float step3W = 22f;
+                float step3Y = step2Y + 18f;
+                float step3H = 19f;
+                batch.setColor(0.24f, 0.14f, 0.26f, 0.92f);
+                batch.draw(whitePixelTex, step3X, step3Y, step3W, step3H);
+                batch.setColor(0.85f, 0.55f, 0.95f, 0.80f);
+                batch.draw(whitePixelTex, step3X, step3Y + step3H - 2f, step3W, 2f);
+            } else if (i < 100) {
+                // Standard flat joint between consecutive tiles
+                float jointX = tileRight;
+                batch.setColor(0.06f, 0.10f, 0.08f, 0.40f);
+                batch.draw(whitePixelTex, jointX - 1f, tileY, 2f, TILE_HEIGHT);
+                batch.setColor(1f, 1f, 1f, 0.15f);
+                batch.draw(whitePixelTex, jointX + 1f, tileY + 1f, 1f, TILE_HEIGHT - 2f);
+            }
+
+            // Left curb border cap on Tile 1
+            if (i == 1) {
+                batch.setColor(1f, 1f, 1f, 0.35f);
+                batch.draw(whitePixelTex, tileLeft, tileY, 3f, TILE_HEIGHT);
+            }
+            // Right curb border cap on Tile 100
+            if (i == 100) {
+                batch.setColor(1.0f, 0.85f, 0.30f, 0.50f);
+                batch.draw(whitePixelTex, tileRight - 3f, tileY, 3f, TILE_HEIGHT);
+            }
+
+            // Ceremonial Milestone Portal Beacons (Tile 30 Sanctuary & Tile 70 Abyss Gate)
+            if (i == 30) {
+                batch.setColor(0.50f, 0.95f, 0.85f, 0.70f);
+                batch.draw(whitePixelTex, tileLeft, tileY, 4f, TILE_HEIGHT + 24f);
+                batch.draw(whitePixelTex, tileRight - 4f, tileY, 4f, TILE_HEIGHT + 24f);
+                batch.setColor(0.50f, 0.95f, 0.85f, 0.35f);
+                batch.draw(whitePixelTex, tileLeft, tileY + TILE_HEIGHT + 20f, TILE_WIDTH, 4f);
+            } else if (i == 70) {
+                batch.setColor(0.85f, 0.45f, 0.95f, 0.70f);
+                batch.draw(whitePixelTex, tileLeft, tileY, 4f, TILE_HEIGHT + 24f);
+                batch.draw(whitePixelTex, tileRight - 4f, tileY, 4f, TILE_HEIGHT + 24f);
+                batch.setColor(0.85f, 0.45f, 0.95f, 0.35f);
+                batch.draw(whitePixelTex, tileLeft, tileY + TILE_HEIGHT + 20f, TILE_WIDTH, 4f);
+            }
+            batch.setColor(Color.WHITE);
+
+            // =========================================================================
+            // Visual Structural Features: Upright Ladder & Snake Hazard Runes (REVEALED ONLY)
+            // =========================================================================
+            if (isRevealed && tile instanceof LadderTile) {
+                float ladderX = tileLeft + 35f;
+                float ladderY = tileY + TILE_HEIGHT;
+                float ladderH = 80f;
+                float ladderW = 34f;
+                float glowAlpha = 0.65f + 0.30f * MathUtils.sinDeg(stateTime * 180f);
+
+                // Ascension draft beam
+                batch.setColor(1.0f, 0.92f, 0.55f, 0.16f * glowAlpha);
+                batch.draw(whitePixelTex, ladderX - 8f, ladderY, ladderW + 16f, ladderH + 40f);
+
+                // Rails
+                batch.setColor(0.92f, 0.72f, 0.22f, 0.88f);
+                batch.draw(whitePixelTex, ladderX, ladderY, 4f, ladderH);
+                batch.draw(whitePixelTex, ladderX + ladderW - 4f, ladderY, 4f, ladderH);
+
+                // Rungs
+                batch.setColor(1.0f, 0.88f, 0.45f, glowAlpha);
+                for (float ry = ladderY + 14f; ry < ladderY + ladderH - 4f; ry += 16f) {
+                    batch.draw(whitePixelTex, ladderX + 2f, ry, ladderW - 4f, 3f);
+                }
+                batch.setColor(Color.WHITE);
+            } else if (isRevealed && tile instanceof SnakeTile) {
+                float snakeX = tileLeft + 32f;
+                float snakeY = tileY + TILE_HEIGHT;
+                float snakeW = 40f;
+                float pulse = 0.65f + 0.30f * MathUtils.sinDeg(stateTime * 200f);
+
+                // Hazard aura along slab surface
+                batch.setColor(0.85f, 0.15f, 0.20f, 0.25f * pulse);
+                batch.draw(whitePixelTex, tileLeft + 12f, tileY + TILE_HEIGHT, TILE_WIDTH - 24f, 8f);
+
+                // Hazard Crest
+                batch.setColor(0.95f, 0.25f, 0.30f, 0.85f);
+                batch.draw(whitePixelTex, snakeX, snakeY, 4f, 22f);
+                batch.draw(whitePixelTex, snakeX + snakeW - 4f, snakeY, 4f, 22f);
+                batch.draw(whitePixelTex, snakeX, snakeY + 10f, snakeW, 3f);
+
+                // Glowing Serpent Eyes
+                batch.setColor(1.0f, 0.10f, 0.15f, pulse);
+                batch.draw(whitePixelTex, snakeX + 10f, snakeY + 15f, 5f, 5f);
+                batch.draw(whitePixelTex, snakeX + snakeW - 15f, snakeY + 15f, 5f, 5f);
+                batch.setColor(Color.WHITE);
+            }
+
+            // =========================================================================
+            // Tile Typography & Badges
+            // =========================================================================
+            if (!isRevealed) {
+                // UNCHARTED BADGE (Fog of War)
+                float pulse = 0.60f + 0.35f * MathUtils.sinDeg(stateTime * 140f + (i * 22f));
+                tileBadgeFont.setColor(0.08f, 0.12f, 0.16f, 0.80f);
+                tileBadgeFont.draw(batch, "? UNCHARTED ?", tileLeft + 1f, tileY + 27f, TILE_WIDTH, Align.center, false);
+                tileBadgeFont.setColor(0.72f, 0.86f, 0.98f, pulse);
+                tileBadgeFont.draw(batch, "? UNCHARTED ?", tileLeft, tileY + 28f, TILE_WIDTH, Align.center, false);
+
+                miniFont.setColor(0.75f, 0.86f, 0.94f, 0.85f);
+                miniFont.draw(batch, "TILE " + i, tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+
+            } else if (tile instanceof LadderTile) {
+                LadderTile ladder = (LadderTile) tile;
+                int dest = ladder.getDestination();
+
+                tileBadgeFont.setColor(Color.valueOf("#201202"));
+                tileBadgeFont.draw(batch, "+ LADDER -> " + dest, tileLeft + 1f, tileY + 27f, TILE_WIDTH, Align.center, false);
                 tileBadgeFont.setColor(Color.valueOf("#ffe082"));
-                tileBadgeFont.draw(batch, "+ LADDER", tileX, TILE_BOTTOM_Y + 28f, TILE_WIDTH, Align.center, false);
+                tileBadgeFont.draw(batch, "+ LADDER -> " + dest, tileLeft, tileY + 28f, TILE_WIDTH, Align.center, false);
+                miniFont.setColor(Color.valueOf("#fff8e1"));
+                miniFont.draw(batch, "TILE " + i, tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+
             } else if (tile instanceof SnakeTile) {
+                SnakeTile snake = (SnakeTile) tile;
+                int dest = snake.getDestination();
+
+                tileBadgeFont.setColor(Color.valueOf("#260404"));
+                tileBadgeFont.draw(batch, "- SNAKE -> " + dest, tileLeft + 1f, tileY + 27f, TILE_WIDTH, Align.center, false);
                 tileBadgeFont.setColor(Color.valueOf("#ff6b6b"));
-                tileBadgeFont.draw(batch, "- SNAKE", tileX, TILE_BOTTOM_Y + 28f, TILE_WIDTH, Align.center, false);
+                tileBadgeFont.draw(batch, "- SNAKE -> " + dest, tileLeft, tileY + 28f, TILE_WIDTH, Align.center, false);
+                miniFont.setColor(Color.valueOf("#ffebee"));
+                miniFont.draw(batch, "TILE " + i, tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+
+            } else {
+                if (i == 1) {
+                    miniFont.setColor(Color.valueOf("#81c784"));
+                    miniFont.draw(batch, "START CAMP", tileLeft, tileY + 27f, TILE_WIDTH, Align.center, false);
+                    miniFont.setColor(Color.valueOf("#c8e6c9"));
+                    miniFont.draw(batch, "TILE 1", tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+                } else if (i == 30) {
+                    miniFont.setColor(Color.valueOf("#80cbc4"));
+                    miniFont.draw(batch, "SANCTUARY", tileLeft, tileY + 27f, TILE_WIDTH, Align.center, false);
+                    miniFont.setColor(Color.valueOf("#b2dfdb"));
+                    miniFont.draw(batch, "ACT I FINALE (30)", tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+                } else if (i == 70) {
+                    miniFont.setColor(Color.valueOf("#b39ddb"));
+                    miniFont.draw(batch, "ABYSS GATE", tileLeft, tileY + 27f, TILE_WIDTH, Align.center, false);
+                    miniFont.setColor(Color.valueOf("#d1c4e9"));
+                    miniFont.draw(batch, "ACT II FINALE (70)", tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+                } else if (i == 100) {
+                    miniFont.setColor(Color.valueOf("#ffd700"));
+                    miniFont.draw(batch, "THRONE OF FATE", tileLeft, tileY + 27f, TILE_WIDTH, Align.center, false);
+                    miniFont.setColor(Color.valueOf("#fff9c4"));
+                    miniFont.draw(batch, "* VICTORY (100) *", tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+                } else if (i % 10 == 0) {
+                    miniFont.setColor(Color.valueOf("#ffd54f"));
+                    miniFont.draw(batch, "* TILE " + i + " *", tileLeft, tileY + 34f, TILE_WIDTH, Align.center, false);
+                } else {
+                    miniFont.setColor(Color.valueOf("#d4c4ac"));
+                    miniFont.draw(batch, String.valueOf(i), tileLeft, tileY + 34f, TILE_WIDTH, Align.center, false);
+                }
+            }
+
+            // =========================================================================
+            // Discovery Burst FX (Triggered upon stepping onto an uncharted tile or scouting)
+            // =========================================================================
+            if (i == revealFlashTile && revealFlashTimer > 0f) {
+                float flashAlpha = MathUtils.clamp(revealFlashTimer, 0f, 1f);
+                if (tile instanceof LadderTile) {
+                    batch.setColor(1.0f, 0.95f, 0.50f, 0.65f * flashAlpha);
+                } else if (tile instanceof SnakeTile) {
+                    batch.setColor(0.95f, 0.20f, 0.25f, 0.65f * flashAlpha);
+                } else {
+                    batch.setColor(0.55f, 0.95f, 0.80f, 0.55f * flashAlpha);
+                }
+                batch.draw(whitePixelTex, tileLeft - 8f, tileY - 6f, TILE_WIDTH + 16f, TILE_HEIGHT + 14f);
+                batch.setColor(Color.WHITE);
             }
         }
     }
@@ -2136,19 +2991,24 @@ public class BoardScreen implements Screen {
             float tileCenterX = getTileCenterX(player.getPosition());
 
             // If sharing a tile with the active player, offset slightly behind
-            boolean sharesWithActive = (player.getPosition() == activePos && turnState != TurnState.STEPPING_TILES);
+            boolean sharesWithActive = (player.getPosition() == activePos && turnState != TurnState.STEPPING_TILES && !isSpecialMoving);
             float drawX = sharesWithActive ? (tileCenterX - 145f) : (tileCenterX - (CHAR_DISPLAY_SIZE / 2f));
-            float drawY = sharesWithActive ? CHAR_DRAW_Y_INACTIVE_SHARED : CHAR_DRAW_Y;
+            float drawY = sharesWithActive ? (getTileBottomY(player.getPosition()) + 18f) : getCharacterDrawY(player.getPosition());
             float size = sharesWithActive ? CHAR_INACTIVE_SIZE : CHAR_DISPLAY_SIZE;
 
-            if (sharesWithActive) {
-                // Subtle depth tint so the active player in front pops prominently
-                batch.setColor(0.85f, 0.85f, 0.9f, 0.80f);
+            boolean isDead = (player.getHealth() <= 0);
+            if (isDead) {
+                batch.setColor(0.35f, 0.35f, 0.40f, 0.50f);
+                drawY -= 8f;
+                batch.draw(idleFrame, drawX, drawY, size, size * 0.72f);
             } else {
-                batch.setColor(Color.WHITE);
+                if (sharesWithActive) {
+                    batch.setColor(0.85f, 0.85f, 0.9f, 0.80f);
+                } else {
+                    batch.setColor(Color.WHITE);
+                }
+                batch.draw(idleFrame, drawX, drawY, size, size);
             }
-
-            batch.draw(idleFrame, drawX, drawY, size, size);
             batch.setColor(Color.WHITE);
         }
 
@@ -2157,24 +3017,102 @@ public class BoardScreen implements Screen {
             Animation<TextureRegion> anim = walkAnimations.get(activePlayer.getCharacterClass());
             Texture charTex = game.getAssetManager().get(Assets.getCharacterTexture(activePlayer.getCharacterClass()));
             float drawX;
-            float drawY = CHAR_DRAW_Y;
+            float drawY;
             TextureRegion activeFrame;
 
-            if (turnState == TurnState.STEPPING_TILES) {
+            if (isSpecialMoving) {
+                drawX = specialMoveCurrentX - (CHAR_DISPLAY_SIZE / 2f);
+                drawY = specialMoveCurrentY;
+
+                if (specialMovePhase == SpecialMovePhase.WINDUP) {
+                    // Standing firmly on the start tile while discovery and celestial power register
+                    activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
+
+                    if (isLadderMove) {
+                        float pulse = 0.5f + 0.5f * MathUtils.sinDeg(stateTime * 360f);
+                        batch.setColor(1.0f, 0.90f, 0.40f, 0.45f * pulse);
+                        float beamW = 60f + pulse * 20f;
+                        batch.draw(whitePixelTex, specialMoveCurrentX - beamW / 2f, drawY - 4f, beamW, 22f);
+                        batch.setColor(Color.WHITE);
+                    }
+                } else if (specialMovePhase == SpecialMovePhase.LANDED) {
+                    // Touchdown landing recovery on destination tile
+                    activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
+
+                    if (isLadderMove) {
+                        float landAlpha = MathUtils.clamp(specialMovePhaseTimer / 0.65f, 0f, 1f);
+                        batch.setColor(1.0f, 0.95f, 0.60f, 0.55f * landAlpha);
+                        float ringW = 90f + (1f - landAlpha) * 40f;
+                        batch.draw(whitePixelTex, specialMoveCurrentX - ringW / 2f, drawY - 4f, ringW, 12f);
+                        batch.setColor(Color.WHITE);
+                    }
+                } else {
+                    // IN_FLIGHT: active walking/climbing motion along the soaring arc
+                    activeFrame = (anim != null) ? anim.getKeyFrame(walkStateTime, true) : new TextureRegion(charTex);
+
+                    if (isLadderMove) {
+                        float progress = MathUtils.clamp(specialMoveElapsed / specialMoveDuration, 0f, 1f);
+
+                        // Dynamic Drop Shadow on the ground directly below the ascending character
+                        float groundY = MathUtils.lerp(
+                            getCharacterDrawY(specialMoveStartTile),
+                            getCharacterDrawY(specialMoveDestTile),
+                            progress
+                        ) - 6f;
+                        float heightAboveGround = Math.max(0f, specialMoveCurrentY - groundY);
+                        float shadowScale = MathUtils.clamp(1f - (heightAboveGround / 220f), 0.35f, 1.0f);
+                        float shadowAlpha = MathUtils.clamp(0.45f - (heightAboveGround / 400f), 0.15f, 0.45f);
+
+                        batch.setColor(0.04f, 0.08f, 0.06f, shadowAlpha);
+                        float shadowW = 110f * shadowScale;
+                        float shadowH = 22f * shadowScale;
+                        batch.draw(whitePixelTex, specialMoveCurrentX - shadowW / 2f, groundY, shadowW, shadowH);
+
+                        // Golden Ascending Particle Shimmer / Celestial Rung trail under character's feet
+                        float trailPulse = 0.6f + 0.35f * MathUtils.sinDeg(stateTime * 360f);
+                        batch.setColor(1.0f, 0.88f, 0.40f, 0.50f * trailPulse);
+                        for (int s = 0; s < 4; s++) {
+                            float sparkY = specialMoveCurrentY - 12f - (s * 16f);
+                            float sparkX = specialMoveCurrentX + MathUtils.sinDeg((stateTime * 240f) + (s * 75f)) * 18f;
+                            batch.draw(whitePixelTex, sparkX - 3f, sparkY, 6f, 6f);
+                        }
+                        batch.setColor(Color.WHITE);
+                    } else {
+                        // Snake slide: crimson hazard dust trail behind player
+                        batch.setColor(0.95f, 0.20f, 0.25f, 0.45f);
+                        for (int s = 0; s < 4; s++) {
+                            float sparkY = specialMoveCurrentY + 8f + (s * 10f);
+                            float sparkX = specialMoveCurrentX + 15f + (s * 18f);
+                            batch.draw(whitePixelTex, sparkX - 4f, sparkY, 8f, 8f);
+                        }
+                        batch.setColor(Color.WHITE);
+                    }
+                }
+            } else if (turnState == TurnState.STEPPING_TILES) {
                 float fromX = getTileCenterX(hopCurrentTile);
                 float toX = getTileCenterX(Math.min(100, hopCurrentTile + 1));
                 float progress = MathUtils.clamp(stepTimer / STEP_DURATION, 0f, 1f);
 
-                // Smooth ground-level walking stride between stepping stones (no parabolic hopping arc)
                 drawX = MathUtils.lerp(fromX, toX, progress) - (CHAR_DISPLAY_SIZE / 2f);
+                float fromY = getCharacterDrawY(hopCurrentTile);
+                float toY = getCharacterDrawY(Math.min(100, hopCurrentTile + 1));
+                drawY = MathUtils.lerp(fromY, toY, progress);
                 activeFrame = (anim != null) ? anim.getKeyFrame(walkStateTime, true) : new TextureRegion(charTex);
             } else {
                 drawX = getTileCenterX(activePlayer.getPosition()) - (CHAR_DISPLAY_SIZE / 2f);
+                drawY = getCharacterDrawY(activePlayer.getPosition());
                 activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
             }
 
+            boolean isDead = (activePlayer.getHealth() <= 0);
+            if (isDead) {
+                batch.setColor(0.35f, 0.35f, 0.40f, 0.50f);
+                batch.draw(activeFrame, drawX, drawY - 8f, CHAR_DISPLAY_SIZE, CHAR_DISPLAY_SIZE * 0.72f);
+            } else {
+                batch.setColor(Color.WHITE);
+                batch.draw(activeFrame, drawX, drawY, CHAR_DISPLAY_SIZE, CHAR_DISPLAY_SIZE);
+            }
             batch.setColor(Color.WHITE);
-            batch.draw(activeFrame, drawX, drawY, CHAR_DISPLAY_SIZE, CHAR_DISPLAY_SIZE);
         }
     }
 
@@ -2193,6 +3131,8 @@ public class BoardScreen implements Screen {
 
         Texture avatarTex = game.getAssetManager().get(Assets.getCharacterTexture(player.getCharacterClass()));
         hudPlayerAvatar.setDrawable(new TextureRegionDrawable(new TextureRegion(avatarTex)));
+        hudPlayerAvatar.setScaling(Scaling.fit);
+        hudPlayerAvatar.setAlign(Align.center);
 
         updateMiniMapProgress();
 
@@ -2206,8 +3146,73 @@ public class BoardScreen implements Screen {
         if (player == null) return;
 
         int pos = player.getPosition();
-        String actStr = (pos <= 30) ? "ACT I" : ((pos <= 70) ? "ACT II" : "ACT III");
+        int currentAct = (pos <= 30) ? 1 : ((pos <= 70) ? 2 : 3);
+
+        if (currentAct > lastTrackedAct) {
+            showActTransitionToast(currentAct);
+            lastTrackedAct = currentAct;
+        }
+
+        String actStr = (currentAct == 1) ? "ACT I" : ((currentAct == 2) ? "ACT II" : "ACT III");
         miniMapProgressLabel.setText(actStr + "   -   TILE " + pos + " / 100");
+    }
+
+    /**
+     * Tiered Elevation Profile across the 3 Acts:
+     * - Act I (Tiles 1-30): Lowland Valley Forest baseline (Y = 220f)
+     * - Act II (Tiles 31-70): Elevated Sunken Ruins plateau (Y = 275f, +55px higher)
+     * - Act III (Tiles 71-100): High Celestial Peak / Throne of Fate (Y = 330f, +110px higher)
+     */
+    public static float getTileBottomY(int tileIndex) {
+        if (tileIndex <= 30) {
+            return 220f;
+        } else if (tileIndex <= 70) {
+            return 275f;
+        } else {
+            return 330f;
+        }
+    }
+
+    /**
+     * Character foot anchor dynamically aligned to each tile's top walking surface.
+     */
+    public static float getCharacterDrawY(int tileIndex) {
+        return getTileBottomY(tileIndex) + 14f;
+    }
+
+    /**
+     * Initiates phased 3D celestial arc ascension for ladders or tumbling slide for snakes:
+     * 1. Wind-up anticipation pause on start tile (power gathers, banner readable)
+     * 2. Smooth soaring flight across the arc
+     * 3. Touchdown recovery on destination tile
+     */
+    private void startSpecialMove(int startTile, int destTile, boolean isLadder) {
+        if (game.getAudioManager() != null) {
+            if (isLadder) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.LADDER_WINDUP);
+            } else {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.SNAKE_HISS);
+            }
+        }
+        this.specialMoveStartTile = startTile;
+        this.specialMoveDestTile = destTile;
+        this.isLadderMove = isLadder;
+        this.isSpecialMoving = true;
+        this.specialMovePhase = SpecialMovePhase.WINDUP;
+        this.specialMovePhaseTimer = isLadder ? 0.85f : 0.65f; // Wind-up anticipation pause
+        this.specialMoveElapsed = 0f;
+        float jumpDist = Math.abs(destTile - startTile);
+        if (isLadder) {
+            this.specialMoveDuration = MathUtils.clamp(1.20f + (jumpDist * 0.04f), 1.35f, 1.95f);
+            this.specialMoveArcHeight = MathUtils.clamp(120f + (jumpDist * 4.5f), 135f, 205f);
+        } else {
+            this.specialMoveDuration = MathUtils.clamp(0.95f + (jumpDist * 0.035f), 1.05f, 1.55f);
+            this.specialMoveArcHeight = 35f;
+        }
+        this.specialMoveCurrentX = getTileCenterX(startTile);
+        this.specialMoveCurrentY = getCharacterDrawY(startTile);
+        this.turnState = TurnState.TILE_ACTION_PAUSE;
+        this.actionPauseTimer = 0f;
     }
 
     private float getTileCenterX(int tileIndex) {
@@ -2258,7 +3263,19 @@ public class BoardScreen implements Screen {
         if (badgeFont != null) badgeFont.dispose();
         if (miniFont != null) miniFont.dispose();
         if (sliderFont != null) sliderFont.dispose();
-        if (modalTitleFont != null) modalTitleFont.dispose();
-        if (modalBodyFont != null) modalBodyFont.dispose();
+        if (pauseBadgeFont != null) pauseBadgeFont.dispose();
+        if (pauseTitleFont != null) pauseTitleFont.dispose();
+        if (pauseSubFont != null) pauseSubFont.dispose();
+        if (pauseBodyFont != null) pauseBodyFont.dispose();
+        if (pauseBtnFont != null) pauseBtnFont.dispose();
+        if (pauseTipFont != null) pauseTipFont.dispose();
+
+        if (eventBadgeFont != null) eventBadgeFont.dispose();
+        if (eventTitleFont != null) eventTitleFont.dispose();
+        if (eventDescFont != null) eventDescFont.dispose();
+        if (choiceBtnFont != null) choiceBtnFont.dispose();
+        if (choiceOutcomeTitleFont != null) choiceOutcomeTitleFont.dispose();
+        if (choiceOutcomeBodyFont != null) choiceOutcomeBodyFont.dispose();
+        if (choiceD20Font != null) choiceD20Font.dispose();
     }
 }

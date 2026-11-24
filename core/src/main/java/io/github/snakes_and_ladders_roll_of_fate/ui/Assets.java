@@ -64,6 +64,10 @@ public class Assets {
     public static final AssetDescriptor<Texture> LOADING_SNAKE =
         new AssetDescriptor<>("img/loading_snake_spritesheet.png", Texture.class);
 
+    // Enemy combat spritesheet (224x32, 7 frames of 32x32)
+    public static final AssetDescriptor<Texture> ENEMY_SNAKE =
+        new AssetDescriptor<>("img/enemy_snake.png", Texture.class);
+
     // =========================================================================
     // In-Game Board: Parallax Act Backgrounds
     // =========================================================================
@@ -212,6 +216,7 @@ public class Assets {
         manager.load(CHAR_FOX_WALK);
         manager.load(CHAR_RACCOON_WALK);
         manager.load(LOADING_SNAKE);
+        manager.load(ENEMY_SNAKE);
         manager.load(ACT1_BG);
         manager.load(ACT2_BG);
         manager.load(ACT3_BG);

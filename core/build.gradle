@@ -19,3 +19,8 @@ tasks.register('testInventory', JavaExec) {
   classpath = sourceSets.main.runtimeClasspath
   mainClass = 'io.github.snakes_and_ladders_roll_of_fate.items.InventoryTest'
 }
+
+tasks.register('testBoard', JavaExec) {
+  classpath = sourceSets.main.runtimeClasspath
+  mainClass = 'io.github.snakes_and_ladders_roll_of_fate.board.BoardTest'
+}

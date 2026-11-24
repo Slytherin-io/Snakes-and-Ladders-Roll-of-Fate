@@ -104,6 +104,8 @@ public class UIUtils {
         FreeTypeFontParameter parameter = new FreeTypeFontParameter();
         parameter.size = size;
         parameter.color = color;
+        parameter.minFilter = Texture.TextureFilter.Linear;
+        parameter.magFilter = Texture.TextureFilter.Linear;
         BitmapFont font = generator.generateFont(parameter);
         generator.dispose(); // Generator is no longer needed once the font is baked
         return font;

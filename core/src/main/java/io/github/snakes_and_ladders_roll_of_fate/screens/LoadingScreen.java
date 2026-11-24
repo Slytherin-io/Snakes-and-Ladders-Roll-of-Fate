@@ -58,6 +58,9 @@ public class LoadingScreen implements Screen {
 
     @Override
     public void show() {
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().stopMusic();
+        }
         stage = new Stage(new ExtendViewport(1920, 1080));
 
         // Create typography using the Sniglet font

@@ -12,10 +12,12 @@ import java.util.ArrayList;
 import io.github.snakes_and_ladders_roll_of_fate.screens.BoardScreen;
 import io.github.snakes_and_ladders_roll_of_fate.screens.LoadingScreen;
 import io.github.snakes_and_ladders_roll_of_fate.screens.MainMenuScreen;
+import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
+import io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker;
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
@@ -28,6 +30,9 @@ public class RollOfFateGame extends Game {
     private int currentTurn;
     private String gameState;
     private GameMode selectedGameMode;
+    private RunTracker runTracker = new RunTracker();
+    private List<io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass> lastChosenClasses = new ArrayList<>();
+    private AudioManager audioManager = new AudioManager();
 
     @Override
     public void create() {
@@ -36,6 +41,8 @@ public class RollOfFateGame extends Game {
         Assets.loadAll(assetManager);
 
         assetManager.finishLoading();
+
+        audioManager.init();
 
         gameState = "MENU";
         setScreen(new MainMenuScreen(this));
@@ -47,6 +54,7 @@ public class RollOfFateGame extends Game {
         }
 
         players = new ArrayList<>();
+        runTracker = new RunTracker();
         createPlayer();
 
         currentTurn = 0; // Player 1
@@ -67,8 +75,10 @@ public class RollOfFateGame extends Game {
      * Starts the game with each player assigned to their chosen CharacterClass.
      */
     public void startGameWithClasses(List<io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass> chosenClasses) {
+        this.lastChosenClasses = new ArrayList<>(chosenClasses);
         this.totalPlayers = chosenClasses.size();
         this.players = new ArrayList<>();
+        this.runTracker = new RunTracker();
 
         for (int i = 0; i < chosenClasses.size(); i++) {
             Player player = new Player("Player " + (i + 1), chosenClasses.get(i));
@@ -107,9 +117,27 @@ public class RollOfFateGame extends Game {
     }
 
     public void nextTurn() {
-        if (!players.isEmpty()) {
-            this.currentTurn = (currentTurn + 1) % players.size();
+        if (players.isEmpty()) return;
+        int livingCount = 0;
+        for (Player p : players) {
+            if (p.getHealth() > 0) livingCount++;
         }
+        if (livingCount == 0) return; // All dead
+
+        for (int i = 0; i < players.size(); i++) {
+            currentTurn = (currentTurn + 1) % players.size();
+            if (players.get(currentTurn).getHealth() > 0) {
+                break;
+            }
+        }
+    }
+
+    public boolean isPartyWiped() {
+        if (players == null || players.isEmpty()) return true;
+        for (Player p : players) {
+            if (p.getHealth() > 0) return false;
+        }
+        return true;
     }
 
     public boolean checkGameOver() {
@@ -158,18 +186,26 @@ public class RollOfFateGame extends Game {
 //            Gdx.app.log("Screenshot", "Saved to " + file.file().getAbsolutePath());
 //        }
 
+        if (audioManager != null) {
+            audioManager.update(Gdx.graphics.getDeltaTime());
+        }
+
         super.render();
     }
 
     @Override
     public void dispose() {
         super.dispose();
+        if (audioManager != null) {
+            audioManager.dispose();
+        }
         if (assetManager != null) {
             assetManager.dispose();
         }
     }
 
     // Getters & Setters
+    public AudioManager getAudioManager() { return audioManager; }
     public AssetManager getAssetManager() { return assetManager; }
     public Screen getCurrentScreen() { return currentScreen; }
     public Board getBoard() { return board; }
@@ -179,6 +215,8 @@ public class RollOfFateGame extends Game {
         return players.isEmpty() ? null : players.get(currentTurn);
     }
     public String getGameState() { return gameState; }
+    public RunTracker getRunTracker() { return runTracker; }
+    public List<io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass> getLastChosenClasses() { return lastChosenClasses; }
 
     public void setTotalPlayers(int totalPlayers) {
         this.totalPlayers = totalPlayers;

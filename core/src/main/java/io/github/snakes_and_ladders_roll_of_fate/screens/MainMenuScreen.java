@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.systems.GameMode;
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
@@ -98,6 +99,9 @@ public class MainMenuScreen implements Screen {
 
     @Override
     public void show() {
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playMusic(AudioManager.MusicTrack.MENU, true, true);
+        }
         batch = new SpriteBatch();
         // ExtendViewport gives a responsive virtual 1920x1080 canvas that scales to any window resolution
         stage = new Stage(new ExtendViewport(1920, 1080));
@@ -170,6 +174,7 @@ public class MainMenuScreen implements Screen {
         playButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 menuTable.setVisible(false);
                 gameModeTable.setVisible(true);
             }
@@ -179,6 +184,7 @@ public class MainMenuScreen implements Screen {
         settingsButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 menuTable.setVisible(false);
                 settingsTable.setVisible(true);
             }
@@ -187,6 +193,7 @@ public class MainMenuScreen implements Screen {
         exitButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 Gdx.app.exit();
             }
         });
@@ -259,6 +266,7 @@ public class MainMenuScreen implements Screen {
         singlePlayerBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 openCharacterSelect(1);
             }
         });
@@ -281,6 +289,7 @@ public class MainMenuScreen implements Screen {
         passPlayBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 // Open Player Count picker for Pass & Play mode
                 gameModeTable.setVisible(false);
                 updatePlayerCountDisplay();
@@ -321,6 +330,7 @@ public class MainMenuScreen implements Screen {
         backButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 gameModeTable.setVisible(false);
                 menuTable.setVisible(true);
             }
@@ -391,6 +401,7 @@ public class MainMenuScreen implements Screen {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
                 if (passPlayPlayerCount > 2) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     passPlayPlayerCount--;
                     updatePlayerCountDisplay();
                 }
@@ -401,6 +412,7 @@ public class MainMenuScreen implements Screen {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
                 if (passPlayPlayerCount < 4) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     passPlayPlayerCount++;
                     updatePlayerCountDisplay();
                 }
@@ -438,6 +450,7 @@ public class MainMenuScreen implements Screen {
         backButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 playerCountTable.setVisible(false);
                 gameModeTable.setVisible(true);
             }
@@ -447,6 +460,7 @@ public class MainMenuScreen implements Screen {
         enterButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 playerCountTable.setVisible(false);
                 openCharacterSelect(passPlayPlayerCount);
             }
@@ -542,6 +556,7 @@ public class MainMenuScreen implements Screen {
         leftArrow.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP, 0.7f, 0.1f);
                 CharacterClass[] values = CharacterClass.values();
                 currentCharacterIndex = (currentCharacterIndex - 1 + values.length) % values.length;
                 updateCharacterDisplay();
@@ -551,6 +566,7 @@ public class MainMenuScreen implements Screen {
         rightArrow.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP, 0.7f, 0.1f);
                 CharacterClass[] values = CharacterClass.values();
                 currentCharacterIndex = (currentCharacterIndex + 1) % values.length;
                 updateCharacterDisplay();
@@ -628,6 +644,7 @@ public class MainMenuScreen implements Screen {
         backButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 if (selectingPlayerIndex > 0) {
                     // Back up to the previous player and unlock their pick
                     selectingPlayerIndex--;
@@ -659,6 +676,7 @@ public class MainMenuScreen implements Screen {
                 selectingPlayerIndex++;
 
                 if (selectingPlayerIndex < totalSelectingPlayers) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP);
                     // Next player's turn: auto-advance to the first available class
                     for (int i = 0; i < CharacterClass.values().length; i++) {
                         if (!chosenClasses.contains(CharacterClass.values()[i])) {
@@ -669,6 +687,7 @@ public class MainMenuScreen implements Screen {
                     updateCharacterDisplay();
                 } else {
                     // All players are ready! Launch the game with their selected characters
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
                     game.startGameWithClasses(chosenClasses);
                 }
             }
@@ -758,25 +777,32 @@ public class MainMenuScreen implements Screen {
 
         // 1. Music volume controls
         Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
-        musicSlider.setValue(10);
-        Label musicNum = new Label("10", new Label.LabelStyle(numFont, darkBrown));
+        int musicVal = Math.round(game.getAudioManager().getMusicVolume() * 10f);
+        musicSlider.setValue(musicVal);
+        Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(numFont, darkBrown));
 
         musicSlider.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                musicNum.setText(String.valueOf((int) musicSlider.getValue()));
+                int val = (int) musicSlider.getValue();
+                musicNum.setText(String.valueOf(val));
+                game.getAudioManager().setMusicVolume(val / 10f);
             }
         });
 
         // 2. Sound Effects (SFX) volume controls
         Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
-        sfxSlider.setValue(10);
-        Label sfxNum = new Label("10", new Label.LabelStyle(numFont, darkBrown));
+        int sfxVal = Math.round(game.getAudioManager().getSfxVolume() * 10f);
+        sfxSlider.setValue(sfxVal);
+        Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(numFont, darkBrown));
 
         sfxSlider.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                sfxNum.setText(String.valueOf((int) sfxSlider.getValue()));
+                int val = (int) sfxSlider.getValue();
+                sfxNum.setText(String.valueOf(val));
+                game.getAudioManager().setSfxVolume(val / 10f);
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
             }
         });
 
@@ -791,7 +817,7 @@ public class MainMenuScreen implements Screen {
         Label musicLabel = new Label("MUSIC", new Label.LabelStyle(textFont, darkBrown));
         contentTable.add(musicLabel).colspan(3).center().padBottom(10).row();
 
-        contentTable.add(soundIcon).size(38, 38).padRight(16);
+        contentTable.add(musicIcon).size(38, 38).padRight(16);
         contentTable.add(musicSlider).width(360).padRight(16);
         contentTable.add(musicNum).width(44).left().padBottom(26).row();
 
@@ -799,7 +825,7 @@ public class MainMenuScreen implements Screen {
         Label sfxLabel = new Label("SFX", new Label.LabelStyle(textFont, darkBrown));
         contentTable.add(sfxLabel).colspan(3).center().padBottom(10).row();
 
-        contentTable.add(musicIcon).size(38, 38).padRight(16);
+        contentTable.add(soundIcon).size(38, 38).padRight(16);
         contentTable.add(sfxSlider).width(360).padRight(16);
         contentTable.add(sfxNum).width(44).left().row();
 
@@ -831,6 +857,7 @@ public class MainMenuScreen implements Screen {
         backButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 settingsTable.setVisible(false);
                 menuTable.setVisible(true);
             }
