@@ -52,6 +52,7 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
+import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Dice;
 import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
@@ -101,6 +102,7 @@ public class BoardScreen implements Screen {
     private BitmapFont sliderFont;
     private BitmapFont modalTitleFont;
     private BitmapFont modalBodyFont;
+    private BitmapFont modalChoiceFont;
 
     // Parallax Slices for the 3 Acts (Far Canopy, Mid Silhouettes, Foreground Ground)
     private TextureRegion act1Far, act1Mid, act1Ground;
@@ -220,8 +222,18 @@ public class BoardScreen implements Screen {
     private Label actToastSubtitleLabel;
     private int lastTrackedAct = 1;
 
+    // Post-Battle Resolution Transition Fields
+    private BattleOutcome pendingBattleOutcome = null;
+    private SnakeTile pendingBattleTile = null;
+
     public BoardScreen(RollOfFateGame game) {
+        this(game, null, null);
+    }
+
+    public BoardScreen(RollOfFateGame game, BattleOutcome battleOutcome, SnakeTile battleTile) {
         this.game = game;
+        this.pendingBattleOutcome = battleOutcome;
+        this.pendingBattleTile = battleTile;
         this.board = game.getBoard() != null ? game.getBoard() : new Board(100);
         if (game.getBoard() == null) {
             this.board.generateBoard();
@@ -272,8 +284,9 @@ public class BoardScreen implements Screen {
         tileBadgeFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 15, Color.WHITE);
         miniFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 16, Color.WHITE);
         sliderFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, darkBrown);
-        modalTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
-        modalBodyFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, darkBrown);
+        modalTitleFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 34, darkBrown);
+        modalBodyFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
+        modalChoiceFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();
@@ -304,16 +317,59 @@ public class BoardScreen implements Screen {
             }
         });
 
-        // Initial camera placement on active player
+        // Initial camera placement on active player or returning battle tile
         Player current = game.getCurrentPlayer();
-        float startX = current != null ? getTileCenterX(current.getPosition()) : FIRST_TILE_X;
-        int currentPos = (current != null) ? current.getPosition() : 1;
-        lastTrackedAct = (currentPos <= 30) ? 1 : ((currentPos <= 70) ? 2 : 3);
-        float startY = 540f + (getTileBottomY(currentPos) - 220f);
-        worldCamera.position.set(startX, startY, 0f);
-        worldCamera.update();
+        if (pendingBattleOutcome != null && pendingBattleTile != null) {
+            int battleTilePos = pendingBattleTile.getPosition();
+            if (current != null) {
+                current.setPosition(battleTilePos);
+                Tile curTile = board.getTile(battleTilePos);
+                if (curTile != null && !curTile.isRevealed()) {
+                    curTile.setRevealed(true);
+                }
+            }
+            float startX = getTileCenterX(battleTilePos);
+            lastTrackedAct = (battleTilePos <= 30) ? 1 : ((battleTilePos <= 70) ? 2 : 3);
+            float startY = 540f + (getTileBottomY(battleTilePos) - 220f);
+            worldCamera.position.set(startX, startY, 0f);
+            worldCamera.update();
 
-        updateHudDisplay();
+            updateHudDisplay();
+
+            if (pendingBattleOutcome == BattleOutcome.ESCAPED || pendingBattleOutcome == BattleOutcome.WEAKENED) {
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " ESCAPED - SLIDING DOWN TO TILE " + pendingBattleTile.getDestination() + "!");
+                }
+                rollButton.setColor(1f, 1f, 1f, 0.5f);
+                startSpecialMove(battleTilePos, pendingBattleTile.getDestination(), false);
+            } else if (pendingBattleOutcome == BattleOutcome.VICTORY) {
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " VANQUISHED THE BEAST!");
+                }
+                rollButton.setColor(1f, 1f, 1f, 0.5f);
+                turnState = TurnState.TURN_TRANSITION;
+                actionPauseTimer = 1.0f;
+            } else if (pendingBattleOutcome == BattleOutcome.DEFEAT) {
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " HAS FALLEN IN BATTLE! NEXT TRAVELER'S TURN...");
+                }
+                rollButton.setColor(1f, 1f, 1f, 0.5f);
+                turnState = TurnState.TURN_TRANSITION;
+                actionPauseTimer = 1.2f;
+            }
+
+            pendingBattleOutcome = null;
+            pendingBattleTile = null;
+        } else {
+            float startX = current != null ? getTileCenterX(current.getPosition()) : FIRST_TILE_X;
+            int currentPos = (current != null) ? current.getPosition() : 1;
+            lastTrackedAct = (currentPos <= 30) ? 1 : ((currentPos <= 70) ? 2 : 3);
+            float startY = 540f + (getTileBottomY(currentPos) - 220f);
+            worldCamera.position.set(startX, startY, 0f);
+            worldCamera.update();
+
+            updateHudDisplay();
+        }
     }
 
     /**
@@ -1255,14 +1311,14 @@ public class BoardScreen implements Screen {
      */
     private void buildEventModal(Color darkBrown, Color pillBrown) {
         eventChoiceBtnStyle = new TextButton.TextButtonStyle();
-        eventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
-        eventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
-        eventChoiceBtnStyle.font = playerTagFont;
+        eventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
+        eventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
+        eventChoiceBtnStyle.font = modalChoiceFont;
         eventChoiceBtnStyle.fontColor = Color.valueOf("#fff8ea");
 
         disabledEventChoiceBtnStyle = new TextButton.TextButtonStyle();
-        disabledEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 46, 12, Color.valueOf("#554338aa"), Color.valueOf("#443329aa"), 2);
-        disabledEventChoiceBtnStyle.font = playerTagFont;
+        disabledEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#554338aa"), Color.valueOf("#443329aa"), 2);
+        disabledEventChoiceBtnStyle.font = modalChoiceFont;
         disabledEventChoiceBtnStyle.fontColor = Color.valueOf("#a89688");
 
         combatStrikeBtnStyle = new TextButton.TextButtonStyle();
@@ -1349,12 +1405,13 @@ public class BoardScreen implements Screen {
         // 2. Event Title & Atmospheric Narrative Lore
         Label titleLbl = new Label(event.getTitle(), new Label.LabelStyle(modalTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
-        eventContentTable.add(titleLbl).padTop(14).padBottom(6).center().row();
+        titleLbl.setWrap(true);
+        eventContentTable.add(titleLbl).width(530).padTop(10).padBottom(4).center().row();
 
         Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(modalBodyFont, Color.valueOf("#4a2c11")));
         descLbl.setAlignment(Align.center);
         descLbl.setWrap(true);
-        eventContentTable.add(descLbl).width(530).padBottom(18).center().row();
+        eventContentTable.add(descLbl).width(530).padBottom(14).center().row();
 
         // 3. Dynamic Choices (Hybrid Model: Strategic/tactical actions visible with requirements; unaffordable merchant stock hidden)
         List<EventChoice> choices = event.getChoices();
@@ -1398,8 +1455,8 @@ public class BoardScreen implements Screen {
             TextButton choiceBtn = new TextButton(buttonText, available ? eventChoiceBtnStyle : disabledEventChoiceBtnStyle);
             choiceBtn.getLabel().setWrap(true);
             choiceBtn.getLabel().setAlignment(Align.center);
-            choiceBtn.pad(4, 16, 4, 16);
-            choiceBtn.getLabelCell().width(480);
+            choiceBtn.pad(5, 16, 5, 16);
+            choiceBtn.getLabelCell().width(494);
 
             if (available) {
                 UIUtils.addScaleHoverEffect(choiceBtn);
@@ -1411,7 +1468,7 @@ public class BoardScreen implements Screen {
                 });
             }
 
-            eventContentTable.add(choiceBtn).size(530, 46).padBottom(6).center().row();
+            eventContentTable.add(choiceBtn).width(530).minHeight(46).padBottom(5).center().row();
         }
 
         modalScrim.setVisible(true);
@@ -1641,7 +1698,7 @@ public class BoardScreen implements Screen {
             TextButton itemBtn = new TextButton(itDesc, eventChoiceBtnStyle);
             itemBtn.getLabel().setWrap(true);
             itemBtn.getLabel().setAlignment(Align.center);
-            itemBtn.pad(4, 16, 4, 16);
+            itemBtn.pad(6, 18, 6, 18);
             itemBtn.getLabelCell().width(480);
             UIUtils.addScaleHoverEffect(itemBtn);
             itemBtn.addListener(new ChangeListener() {
@@ -1657,7 +1714,7 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Barter Trade Completed", res, false);
                 }
             });
-            eventContentTable.add(itemBtn).size(530, 46).padBottom(6).center().row();
+            eventContentTable.add(itemBtn).width(530).minHeight(48).padBottom(6).center().row();
         }
 
         TextButton cancelBtn = new TextButton("CANCEL & RETURN", disabledEventChoiceBtnStyle);
@@ -1668,7 +1725,7 @@ public class BoardScreen implements Screen {
                 showEventChoiceView(activeCurrentEvent, tile);
             }
         });
-        eventContentTable.add(cancelBtn).size(260, 44).padTop(6).center().row();
+        eventContentTable.add(cancelBtn).size(280, 48).padTop(6).center().row();
     }
 
     /**
@@ -1697,7 +1754,7 @@ public class BoardScreen implements Screen {
             TextButton swapSlotBtn = new TextButton(label, eventChoiceBtnStyle);
             swapSlotBtn.getLabel().setWrap(true);
             swapSlotBtn.getLabel().setAlignment(Align.center);
-            swapSlotBtn.pad(4, 16, 4, 16);
+            swapSlotBtn.pad(6, 18, 6, 18);
             swapSlotBtn.getLabelCell().width(480);
             UIUtils.addScaleHoverEffect(swapSlotBtn);
             swapSlotBtn.addListener(new ChangeListener() {
@@ -1709,7 +1766,7 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Item Swapped", res, false);
                 }
             });
-            eventContentTable.add(swapSlotBtn).size(530, 46).padBottom(6).center().row();
+            eventContentTable.add(swapSlotBtn).width(530).minHeight(48).padBottom(6).center().row();
         }
 
         TextButton leaveBtn = new TextButton("LEAVE " + newItem.getName().toUpperCase() + " BEHIND", disabledEventChoiceBtnStyle);
@@ -1722,7 +1779,7 @@ public class BoardScreen implements Screen {
                 showOutcomeView("Discovery Left Behind", res, false);
             }
         });
-        eventContentTable.add(leaveBtn).size(400, 44).padTop(6).center().row();
+        eventContentTable.add(leaveBtn).width(440).minHeight(48).padTop(6).center().row();
 
         modalScrim.setVisible(true);
         eventModalTable.setVisible(true);
@@ -1751,19 +1808,19 @@ public class BoardScreen implements Screen {
                 res.d20Roll, res.difficultyClass, (res.checkSucceeded ? "SUCCESS!" : "FAILED!"));
 
             Table d20Badge = new Table();
-            d20Badge.setBackground(UIUtils.createRoundedDrawable(480, 40, 10, d20Color, d20Border, 2));
-            // Use playerTagFont (baked in pure white) so text pops with high contrast on red/green backgrounds
-            Label d20Lbl = new Label(d20Text, new Label.LabelStyle(playerTagFont, Color.WHITE));
+            d20Badge.setBackground(UIUtils.createRoundedDrawable(480, 44, 10, d20Color, d20Border, 2));
+            // Use modalChoiceFont (baked in pure white) so text pops with high contrast on red/green backgrounds
+            Label d20Lbl = new Label(d20Text, new Label.LabelStyle(modalChoiceFont, Color.WHITE));
             d20Lbl.setAlignment(Align.center);
             d20Lbl.setWrap(true);
             d20Badge.add(d20Lbl).width(460).center();
 
-            eventContentTable.add(d20Badge).size(480, 40).padBottom(12).center().row();
+            eventContentTable.add(d20Badge).size(480, 44).padBottom(12).center().row();
         }
 
         // Consequences List Inset Box (Light Cream Container with Dark Mahogany Text)
         Table outcomeBox = new Table();
-        outcomeBox.setBackground(UIUtils.createRoundedDrawable(530, 135, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
+        outcomeBox.setBackground(UIUtils.createRoundedDrawable(530, 140, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
         outcomeBox.pad(10, 20, 10, 20);
 
         Table linesTable = new Table();
@@ -1777,7 +1834,7 @@ public class BoardScreen implements Screen {
         }
 
         outcomeBox.add(linesTable).width(460).center();
-        eventContentTable.add(outcomeBox).size(530, 135).padBottom(16).center().row();
+        eventContentTable.add(outcomeBox).size(530, 140).padBottom(16).center().row();
 
         // Action Button: CONTINUE
         TextButton continueBtn = new TextButton("CONTINUE", eventChoiceBtnStyle);
@@ -1789,7 +1846,7 @@ public class BoardScreen implements Screen {
                 closeEventModal();
             }
         });
-        eventContentTable.add(continueBtn).size(280, 48).center().row();
+        eventContentTable.add(continueBtn).size(280, 52).center().row();
     }
 
     /**
@@ -3030,5 +3087,6 @@ public class BoardScreen implements Screen {
         if (sliderFont != null) sliderFont.dispose();
         if (modalTitleFont != null) modalTitleFont.dispose();
         if (modalBodyFont != null) modalBodyFont.dispose();
+        if (modalChoiceFont != null) modalChoiceFont.dispose();
     }
 }

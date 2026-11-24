@@ -607,8 +607,16 @@ public class BattleScreen implements Screen {
                         return;
                     }
                 }
-                game.nextTurn();
-                game.setScreen(new BoardScreen(game));
+                BattleOutcome outcome = battleSystem.getFinalOutcome();
+                if (outcome == null) {
+                    outcome = BattleOutcome.ESCAPED;
+                }
+                if (snakeTile != null) {
+                    game.setScreen(new BoardScreen(game, outcome, snakeTile));
+                } else {
+                    game.nextTurn();
+                    game.setScreen(new BoardScreen(game));
+                }
             }
         });
         victoryCard.add(continueBtn).size(260, 62).center();
