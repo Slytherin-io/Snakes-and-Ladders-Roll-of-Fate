@@ -361,6 +361,12 @@ public class BoardScreen implements Screen {
             pendingBattleOutcome = null;
             pendingBattleTile = null;
         } else {
+            if (current != null) {
+                Tile curTile = board.getTile(current.getPosition());
+                if (curTile != null && !curTile.isRevealed()) {
+                    curTile.setRevealed(true);
+                }
+            }
             float startX = current != null ? getTileCenterX(current.getPosition()) : FIRST_TILE_X;
             int currentPos = (current != null) ? current.getPosition() : 1;
             lastTrackedAct = (currentPos <= 30) ? 1 : ((currentPos <= 70) ? 2 : 3);
@@ -2107,10 +2113,33 @@ public class BoardScreen implements Screen {
                                 specialMoveCurrentY = destY;
                                 player.setPosition(specialMoveDestTile);
                                 updateMiniMapProgress();
+
+                                // Reveal destination tile upon landing through ladder or slide
+                                Tile destTile = board.getTile(specialMoveDestTile);
+                                boolean destWasUnrevealed = (destTile != null && !destTile.isRevealed());
+                                if (destTile != null && !destTile.isRevealed()) {
+                                    destTile.setRevealed(true);
+                                }
+                                if (destWasUnrevealed) {
+                                    revealFlashTile = specialMoveDestTile;
+                                    revealFlashTimer = 1.0f;
+                                    int discoveryExp = (int) (10 + specialMoveDestTile * 0.05f);
+                                    player.gainExperience(discoveryExp);
+                                }
                                 updateHudDisplay();
 
                                 if (isLadderMove) {
-                                    topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + specialMoveDestTile + "! ASCENT COMPLETE!");
+                                    if (specialMoveDestTile >= 100) {
+                                        topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " REACHED THE THRONE OF FATE!");
+                                    } else if (specialMoveDestTile == 30) {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED SANCTUARY (ACT I FINALE) VIA CELESTIAL LADDER!");
+                                    } else if (specialMoveDestTile == 70) {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED THE ABYSS GATE (ACT II FINALE) VIA CELESTIAL LADDER!");
+                                    } else if (destWasUnrevealed) {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + specialMoveDestTile + "! ASCENT COMPLETE! (+" + (int) (10 + specialMoveDestTile * 0.05f) + " EXP)");
+                                    } else {
+                                        topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + specialMoveDestTile + "! ASCENT COMPLETE!");
+                                    }
                                 } else {
                                     int tilesLost = Math.max(0, specialMoveStartTile - specialMoveDestTile);
                                     if (game.getRunTracker() != null) {
