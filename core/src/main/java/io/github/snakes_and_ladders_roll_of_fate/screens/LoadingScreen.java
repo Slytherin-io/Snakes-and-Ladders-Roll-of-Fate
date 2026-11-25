@@ -63,9 +63,9 @@ public class LoadingScreen implements Screen {
         }
         stage = new Stage(new ExtendViewport(1920, 1080));
 
-        // Create typography using the Sniglet font
-        titleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.valueOf("#f4e4c1"));
-        tipFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, Color.valueOf("#c9935a"));
+        // Create typography using the Fredoka pairing (Option 1)
+        titleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.valueOf("#f4e4c1"));
+        tipFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 20, Color.valueOf("#c9935a"));
 
         // Load and split the 6x6 snake spritesheet (576x576 total, 96x96 per frame)
         Texture snakeSheet = game.getAssetManager().get(Assets.LOADING_SNAKE);

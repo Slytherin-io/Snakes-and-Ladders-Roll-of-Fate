@@ -314,20 +314,20 @@ public class BattleScreen implements Screen {
         px.setColor(Color.WHITE); px.fill();
         whitePixelTex = new Texture(px); px.dispose();
 
-        // Load Fonts (Exact match to BoardScreen)
-        titleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, Color.WHITE);
-        topBannerFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 32, Color.valueOf("#fffdfa"));
-        hudHpFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.valueOf("#a81717"));
-        battleLogFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, Color.WHITE);
-        playerTagFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 19, Color.WHITE);
-        miniFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 16, Color.WHITE);
-        damageFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.WHITE);
-        critFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 38, Color.valueOf("#ffe082"));
-        modalTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 40, Color.valueOf("#ffd54f"));
-        modalSubFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.valueOf("#fbf2dc"));
-        modalRewardFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.WHITE);
-        modalNarrativeFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, Color.WHITE);
-        modalStatusFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, Color.WHITE);
+        // Load Fredoka Fonts (Option 1 pairing matching BoardScreen)
+        titleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
+        topBannerFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 32, Color.valueOf("#fffdfa"));
+        hudHpFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#a81717"));
+        battleLogFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.WHITE);
+        playerTagFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, Color.WHITE);
+        miniFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 16, Color.WHITE);
+        damageFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.WHITE);
+        critFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 38, Color.valueOf("#ffe082"));
+        modalTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 40, Color.valueOf("#ffd54f"));
+        modalSubFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#fbf2dc"));
+        modalRewardFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.WHITE);
+        modalNarrativeFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.WHITE);
+        modalStatusFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 24, Color.WHITE);
 
         // Register Battle Listeners for Dynamic FX
         battleSystem.setBattleListener((attacker, defender, damage, isCrit, isMiss) -> {

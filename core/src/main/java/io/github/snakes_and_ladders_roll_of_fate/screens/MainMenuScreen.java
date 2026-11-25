@@ -126,20 +126,20 @@ public class MainMenuScreen implements Screen {
             Gdx.app.error("Video", "Error starting background video", e);
         }
 
-        // --- Theme Colors & Sniglet Fonts ---
+        // --- Theme Colors & Fredoka Fonts ---
         Color darkBrown = Color.valueOf("#5a2d0c"); // Main font & icon color
         Color pillBrown = Color.valueOf("#854b25"); // Header badge & button color
 
-        // Crisp FreeType Sniglet fonts - enlarged for clear visibility and readability
-        badgeFont        = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, Color.WHITE);
-        textFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
-        numFont          = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
-        modeTitleFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, darkBrown);
-        modeSubtitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, darkBrown);
-        instructionFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 25, darkBrown);
-        statFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, darkBrown);
-        perkFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 21, Color.valueOf("#6d3b17"));
-        countNumFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 64, darkBrown);
+        // Crisp FreeType Fredoka fonts - Option 1 pairing for clear visibility and readability
+        badgeFont        = UIUtils.createFont("ui/Fredoka-Bold.ttf", 28, Color.WHITE);
+        textFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 28, darkBrown);
+        numFont          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 28, darkBrown);
+        modeTitleFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, darkBrown);
+        modeSubtitleFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, darkBrown);
+        instructionFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 25, darkBrown);
+        statFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 24, darkBrown);
+        perkFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#6d3b17"));
+        countNumFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 64, darkBrown);
 
         // --- Main Menu Buttons & Title ---
         Texture titleTexture = game.getAssetManager().get(Assets.TITLE);

@@ -278,7 +278,7 @@ public class BoardScreen implements Screen {
         whitePixelTex = new Texture(px);
         px.dispose();
 
-        // --- Load Sniglet Fonts (Large, bold, highly legible hierarchy) ---
+        // --- Load Fredoka Fonts (Crisp, legible Option 1 pairing across all UI layers) ---
         Color darkBrown = Color.valueOf("#5a2d0c");
         Color nameBrown = Color.valueOf("#361704");
         Color pillBrown = Color.valueOf("#854b25");
@@ -287,38 +287,38 @@ public class BoardScreen implements Screen {
         Color warmBrown = Color.valueOf("#5c2f0f");
         Color expBrown  = Color.valueOf("#693708");
 
-        titleFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, Color.WHITE);
-        topBannerFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 32, Color.valueOf("#fffdfa"));
-        topActFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 23, Color.valueOf("#fdf5e2"));
-        topPauseFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 25, Color.WHITE);
-        rollBigFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.WHITE);
-        rollSubFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 21, Color.valueOf("#fbf2dc"));
-        hudNameFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, nameBrown);
+        titleFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
+        topBannerFont  = UIUtils.createFont("ui/Fredoka-Bold.ttf", 32, Color.valueOf("#fffdfa"));
+        topActFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 23, Color.valueOf("#fdf5e2"));
+        topPauseFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 25, Color.WHITE);
+        rollBigFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.WHITE);
+        rollSubFont    = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#fbf2dc"));
+        hudNameFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, nameBrown);
         hudHpFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, crimson);
         hudExpFont     = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, expBrown);
         hudStatsFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, warmBrown);
-        playerTagFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 19, Color.WHITE);
-        badgeFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
-        tileNumFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, goldLight);
-        tileBadgeFont  = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 15, Color.WHITE);
-        miniFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 16, Color.WHITE);
-        sliderFont     = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, darkBrown);
+        playerTagFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, Color.WHITE);
+        badgeFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
+        tileNumFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, goldLight);
+        tileBadgeFont  = UIUtils.createFont("ui/Fredoka-Bold.ttf", 15, Color.WHITE);
+        miniFont       = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 16, Color.WHITE);
+        sliderFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, darkBrown);
         // Pause, Settings, & Leave Menu Fonts (Decoupled from Event Choices)
-        pauseBadgeFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
-        pauseTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, darkBrown);
-        pauseSubFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, darkBrown);
-        pauseBodyFont  = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, darkBrown);
-        pauseBtnFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
-        pauseTipFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.valueOf("#54280e"));
+        pauseBadgeFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
+        pauseTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, darkBrown);
+        pauseSubFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, darkBrown);
+        pauseBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, darkBrown);
+        pauseBtnFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
+        pauseTipFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#54280e"));
 
         // Event & Choice System Fonts (Decoupled from Pause Menu)
-        eventBadgeFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, Color.WHITE);
-        eventTitleFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 35, Color.valueOf("#361704"));
-        eventDescFont          = UIUtils.createFont("ui/Sniglet-Regular.ttf", 22, Color.valueOf("#4a2c11"));
-        choiceBtnFont          = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, Color.valueOf("#fff8ea"));
-        choiceOutcomeTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, Color.valueOf("#361704"));
-        choiceOutcomeBodyFont  = UIUtils.createFont("ui/Sniglet-Regular.ttf", 26, Color.valueOf("#361704"));
-        choiceD20Font          = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, Color.WHITE);
+        eventBadgeFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
+        eventTitleFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 35, Color.valueOf("#361704"));
+        eventDescFont          = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#4a2c11"));
+        choiceBtnFont          = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 20, Color.valueOf("#fff8ea"));
+        choiceOutcomeTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 28, Color.valueOf("#361704"));
+        choiceOutcomeBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.valueOf("#361704"));
+        choiceD20Font          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 20, Color.WHITE);
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();

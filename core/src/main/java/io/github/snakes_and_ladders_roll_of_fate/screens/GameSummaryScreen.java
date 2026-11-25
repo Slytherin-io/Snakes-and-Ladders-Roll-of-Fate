@@ -115,26 +115,26 @@ public class GameSummaryScreen implements Screen {
         Color overlayColor = isVictory ? Color.valueOf("#120b06ee") : Color.valueOf("#160808f2");
         darkOverlay = UIUtils.createRoundedDrawable(32, 32, 0, overlayColor);
 
-        // 2. Initialize Crisp Sniglet Fonts
+        // 2. Initialize Crisp Fredoka Fonts (Option 1 pairing)
         Color goldColor = Color.valueOf("#ffd54f");
         Color softCrimson = Color.valueOf("#ff8a80");
         Color warmIvory = Color.valueOf("#fbf2dc");
         Color dimText = Color.valueOf("#cfd8dc");
 
-        headerTitleFont    = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 40, isVictory ? goldColor : softCrimson);
-        headerSubtitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, warmIvory);
-        sectionTitleFont   = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, isVictory ? goldColor : softCrimson);
-        cardTitleFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, warmIvory);
-        heroNameFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, Color.WHITE);
-        accoladeFont       = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 21, goldColor);
-        bodyFont           = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, warmIvory);
-        statLabelFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 19, dimText);
-        statValueFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 20, isVictory ? goldColor : Color.valueOf("#ffb74d"));
-        buttonFont         = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 26, Color.WHITE);
-        chipTitleFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 14, Color.valueOf("#b0bec5"));
-        chipValueFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 17, isVictory ? goldColor : Color.valueOf("#ffb74d"));
-        ledgerKeyFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, Color.valueOf("#e0e0e0"));
-        ledgerValFont      = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 18, isVictory ? goldColor : Color.valueOf("#ffb74d"));
+        headerTitleFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 40, isVictory ? goldColor : softCrimson);
+        headerSubtitleFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, warmIvory);
+        sectionTitleFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, isVictory ? goldColor : softCrimson);
+        cardTitleFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, warmIvory);
+        heroNameFont       = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.WHITE);
+        accoladeFont       = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, goldColor);
+        bodyFont           = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 20, warmIvory);
+        statLabelFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, dimText);
+        statValueFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 20, isVictory ? goldColor : Color.valueOf("#ffb74d"));
+        buttonFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
+        chipTitleFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 14, Color.valueOf("#b0bec5"));
+        chipValueFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 17, isVictory ? goldColor : Color.valueOf("#ffb74d"));
+        ledgerKeyFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 18, Color.valueOf("#e0e0e0"));
+        ledgerValFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 18, isVictory ? goldColor : Color.valueOf("#ffb74d"));
 
         // 3. Setup Animated Walking Hero Pedestal
         CharacterClass heroClass = (hero != null) ? hero.getCharacterClass() : CharacterClass.CAT;
