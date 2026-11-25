@@ -31,32 +31,43 @@ public class SnakeTile extends Tile {
     }
 
     /** Factory: builds a balanced, position-scaled snake for combat and the BattleScreen. */
+    /** Factory: builds balanced, tier-scaled snakes to prevent late-game damage sponges. */
     public Enemy createSnakeEnemy() {
         int pos = getPosition();
         Enemy snake;
+
+        // 1. Determine Board Zone for predictable, fair scaling
+        int tier;
+        if (pos <= 33) tier = 1;       // Early Game (Tiles 1-33)
+        else if (pos <= 66) tier = 2;  // Mid-Game (Tiles 34-66)
+        else tier = 3;                 // Late Game (Tiles 67-99)
+
+        // 2. Generate Variation based on Tier
         switch (random.nextInt(3)) {
-            case 0:
+            case 0: // VENOMOUS VIPER (Glass Cannon / Aggressive)
                 snake = new Enemy("Venomous Viper");
-                snake.setBehavior("Aggressive (High ATK, Low HP)");
-                snake.setAttack(8 + (pos / 5));
-                snake.setHealth(25 + (pos / 2));
-                snake.setDefense(1 + (pos / 20));
+                snake.setBehavior("Aggressive");
+                snake.setAttack(4 + (tier * 3));      // ATK: 7, 10, 13
+                snake.setHealth(15 + (tier * 10));    // HP:  25, 35, 45
+                snake.setDefense(tier);               // DEF: 1,  2,  3
                 snake.setReward("Viper Venom Sac");
                 break;
-            case 1:
+
+            case 1: // ARMORED PYTHON (Tank / Defensive)
                 snake = new Enemy("Armored Python");
-                snake.setBehavior("Defensive (Low ATK, High HP)");
-                snake.setAttack(4 + (pos / 6));
-                snake.setHealth(35 + (pos / 2));
-                snake.setDefense(2 + (pos / 15));
+                snake.setBehavior("Defensive");
+                snake.setAttack(2 + (tier * 2));      // ATK: 4,  6,  8 (Low threat)
+                snake.setHealth(25 + (tier * 15));    // HP:  40, 55, 70 (High bulk)
+                snake.setDefense(1 + tier);           // DEF: 2,  3,  4 (Capped! Prevents damage immunity)
                 snake.setReward("Python Scales");
                 break;
-            default:
+
+            default: // SHADOW ASP (Rogue / Balanced)
                 snake = new Enemy("Shadow Asp");
-                snake.setBehavior("Balanced (Stealthy)");
-                snake.setAttack(6 + (pos / 5));
-                snake.setHealth(30 + (pos / 2));
-                snake.setDefense(1 + (pos / 20));
+                snake.setBehavior("Stealthy");
+                snake.setAttack(3 + (tier * 3));      // ATK: 6,  9,  12
+                snake.setHealth(20 + (tier * 12));    // HP:  32, 44, 56
+                snake.setDefense(tier);               // DEF: 1,  2,  3
                 snake.setReward("Shadow Fang");
                 break;
         }
