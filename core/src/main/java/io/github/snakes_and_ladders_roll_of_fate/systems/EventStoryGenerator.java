@@ -219,9 +219,81 @@ public class EventStoryGenerator {
         }
     }
 
+    // --- CROSSROADS / ROUTE FORK POOLS ---
+    private static final String[] ACT1_CROSSROADS_TITLES = {
+        "Fork in the Verdant Trail", "Mossy Waystone Junction"
+    };
+    private static final String[] ACT1_CROSSROADS_DESCRIPTIONS = {
+        "Two diverging paths cut through the forest: a steep rockslide ridge above and a winding brook below.",
+        "A weathered signpost splits into a perilous shortcut across fallen timber and a gentle pilgrim's trail."
+    };
+
+    private static final String[] ACT2_CROSSROADS_TITLES = {
+        "Split of the Sunken Chasm", "Cavern Switchback Junction"
+    };
+    private static final String[] ACT2_CROSSROADS_DESCRIPTIONS = {
+        "A narrow limestone ledge hangs above a subterranean river while crystal steps descend into quiet mist.",
+        "Ancient rail tracks veer dangerously up a cavern incline beside a sheltered alcove of glowing moss."
+    };
+
+    private static final String[] ACT3_CROSSROADS_TITLES = {
+        "Crossroads of the Spire", "Summit Threshold Fork"
+    };
+    private static final String[] ACT3_CROSSROADS_DESCRIPTIONS = {
+        "Razor-sharp basalt crags offer a blistering sprint toward the peak, while sheltered ruins promise brief respite.",
+        "Gale winds howl over the upper ridge as two pathways test your remaining resolve before the Throne."
+    };
+
+    // --- TREASURE CACHE POOLS ---
+    private static final String[] ACT1_TREASURE_TITLES = {
+        "Overgrown Scout Coffer", "Moss-Bound Supply Chest"
+    };
+    private static final String[] ACT1_TREASURE_DESCRIPTIONS = {
+        "An iron-riveted satchel box rests half-buried under roots, its brass clasp rigged with taut wire.",
+        "A forgotten ranger's cache gleams beside the flagstones, smelling faintly of alchemical oils."
+    };
+
+    private static final String[] ACT2_TREASURE_TITLES = {
+        "Sunken Vault Strongbox", "Sealed Dwarven Reliquary"
+    };
+    private static final String[] ACT2_TREASURE_DESCRIPTIONS = {
+        "Beneath cracked marble sits a heavy lockbox guarded by pressurized dart vents along its hinges.",
+        "An ornate obsidian chest hums with stored charge, tempting bold hands to pry its twin latches."
+    };
+
+    private static final String[] ACT3_TREASURE_TITLES = {
+        "Celestial Dragon's Hoard", "Vault of the High Pilgrims"
+    };
+    private static final String[] ACT3_TREASURE_DESCRIPTIONS = {
+        "Radiant relics glint within a scorched chest chained to volcanic stone, trembling with volatile heat.",
+        "An ancient gilded coffer rests upon an altar pedestal, sealed by a shimmering arcana ward."
+    };
+
     // Backward compatibility overloads (defaulting to mid-board position 50)
     public static String[] generateShrineStory() { return generateShrineStory(50); }
     public static String[] generateSnakeStory() { return generateSnakeStory(50); }
     public static String[] generateLadderStory() { return generateLadderStory(50); }
     public static String[] generateMerchantStory() { return generateMerchantStory(50); }
+
+    public static String[] generateCrossroadsStory(int tilePosition) {
+        int act = getAct(tilePosition);
+        if (act == 1) {
+            return new String[] { pick(ACT1_CROSSROADS_TITLES), pick(ACT1_CROSSROADS_DESCRIPTIONS) };
+        } else if (act == 2) {
+            return new String[] { pick(ACT2_CROSSROADS_TITLES), pick(ACT2_CROSSROADS_DESCRIPTIONS) };
+        } else {
+            return new String[] { pick(ACT3_CROSSROADS_TITLES), pick(ACT3_CROSSROADS_DESCRIPTIONS) };
+        }
+    }
+
+    public static String[] generateTreasureStory(int tilePosition) {
+        int act = getAct(tilePosition);
+        if (act == 1) {
+            return new String[] { pick(ACT1_TREASURE_TITLES), pick(ACT1_TREASURE_DESCRIPTIONS) };
+        } else if (act == 2) {
+            return new String[] { pick(ACT2_TREASURE_TITLES), pick(ACT2_TREASURE_DESCRIPTIONS) };
+        } else {
+            return new String[] { pick(ACT3_TREASURE_TITLES), pick(ACT3_TREASURE_DESCRIPTIONS) };
+        }
+    }
 }

@@ -54,6 +54,10 @@ public class Inventory {
         }
 
         Item item = items.get(index);
+        if (item.getItemType() == ItemType.CURSE) {
+            System.out.println("\n  [CURSED] " + item.getName() + " cannot be used or discarded! Cleanse at a Sanctuary or Barter it.");
+            return false;
+        }
         System.out.println("\n> " + player.getName() + " uses " + item.getName() + "...");
         item.use(player);
 
@@ -83,9 +87,12 @@ public class Inventory {
         }
         for (int i = 0; i < items.size(); i++) {
             Item item = items.get(i);
-            if (item.getItemType() == ItemType.EQUIPMENT) {
-                System.out.printf("  [%d] %s (Durability: %d/%d) - %s%n",
-                    (i + 1), item.getName(), item.getDurability(), item.getMaxDurability(), item.getEffect());
+            if (item.getItemType() == ItemType.CURSE) {
+                System.out.printf("  [%d] %s [CURSE] - %s%n",
+                    (i + 1), item.getName(), item.getEffect());
+            } else if (item.getItemType() == ItemType.EQUIPMENT) {
+                System.out.printf("  [%d] %s [1-Use Relic] - %s%n",
+                    (i + 1), item.getName(), item.getEffect());
             } else {
                 System.out.printf("  [%d] %s - %s%n",
                     (i + 1), item.getName(), item.getEffect());

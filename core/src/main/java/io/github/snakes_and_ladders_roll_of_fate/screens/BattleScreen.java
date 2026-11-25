@@ -14,6 +14,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
@@ -408,7 +409,9 @@ public class BattleScreen implements Screen {
     }
 
     private void buildTopBanner() {
-        topBannerLabel = new Label("AMBUSH: " + enemy.getEnemyType().toUpperCase() + "!",
+        int act = (snakeTile != null) ? ((snakeTile.getPosition() <= 30) ? 1 : ((snakeTile.getPosition() <= 70) ? 2 : 3)) : 1;
+        String actRoman = (act == 1) ? "ACT I" : ((act == 2) ? "ACT II" : "ACT III");
+        topBannerLabel = new Label(actRoman + " AMBUSH: " + enemy.getEnemyType().toUpperCase() + "!",
             new Label.LabelStyle(topBannerFont, Color.valueOf("#fffdfa")));
         topBannerLabel.setAlignment(Align.center);
         Table banner = new Table();
@@ -504,7 +507,7 @@ public class BattleScreen implements Screen {
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
                     spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
-                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "+5 DEF GUARD", Color.valueOf("#ffd54f"), false);
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "GUARD & RIPOSTE", Color.valueOf("#ffd54f"), false);
                     battleSystem.onPlayerDefend();
                     syncUi();
                 }
@@ -683,7 +686,7 @@ public class BattleScreen implements Screen {
                 modalSubtitleLabel.setText("THE " + enemy.getEnemyType().toUpperCase() + " HAS BEEN VANQUISHED!");
 
                 int exp = 15 + (snakeTile.getPosition() / 2);
-                rewardExpLabel.setText("EXP Gained: +" + exp + " EXP  (Total: " + player.getExperience() + " EXP)");
+                rewardExpLabel.setText("EXP Gained: +" + exp + " EXP  (Total: " + player.getTotalExperience() + " EXP)");
                 rewardExpLabel.setColor(Color.valueOf("#ffd54f"));
 
                 if (outcomeMessage.contains("Loot: ")) {
@@ -798,33 +801,65 @@ public class BattleScreen implements Screen {
             Table row = new Table();
             row.pad(6, 12, 6, 12);
 
-            // Item Name
-            Label nameLbl = new Label(item.getName(), new Label.LabelStyle(titleFont, Color.WHITE));
-            row.add(nameLbl).expandX().left().padRight(10);
+            boolean isCurse = item.isCurse();
+            io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType eff = item.getEffectType();
+            boolean isBoardOnly = (eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.MOVE
+                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_EXACT
+                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_CLAMP
+                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SNAKE_WARD
+                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SWAP_PLAYER
+                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SCOUT);
+            boolean lethalCost = (item.getSecondaryEffectType() == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.HEALTH
+                && item.getSecondaryEffectValue() < 0
+                && player.getHealth() + item.getSecondaryEffectValue() <= 0);
+            boolean canUseInBattle = !isCurse && !isBoardOnly && !lethalCost;
+
+            // Item Icon
+            Texture iconTex = game.getAssetManager().get(Assets.getItemIcon(item));
+            Image iconImg = new Image(iconTex);
+            iconImg.setScaling(Scaling.fit);
+            if (isCurse) {
+                iconImg.setColor(Color.valueOf("#ff8a80"));
+            }
+            row.add(iconImg).size(36, 36).padRight(10).center();
+
+            // Item Name & Effect Summary
+            String rowText = item.getName() + " (" + item.getEffect() + ")";
+            Color rowColor = isCurse ? Color.valueOf("#fca5a5") : (isBoardOnly ? Color.valueOf("#d6ccc2") : Color.WHITE);
+            Label nameLbl = new Label(rowText, new Label.LabelStyle(titleFont, rowColor));
+            nameLbl.setWrap(true);
+            row.add(nameLbl).width(394).left().padRight(10);
 
             // USE Button
             TextButton.TextButtonStyle useStyle = new TextButton.TextButtonStyle();
-            useStyle.up = UIUtils.createRoundedDrawable(90, 40, 10, Color.valueOf("#2e7d32"));
+            useStyle.up = UIUtils.createRoundedDrawable(105, 40, 10,
+                canUseInBattle ? Color.valueOf("#2e7d32") : (isCurse ? Color.valueOf("#6b1a1a") : Color.valueOf("#5c4a3e")));
             useStyle.font = titleFont;
             useStyle.fontColor = Color.WHITE;
 
-            TextButton useBtn = new TextButton("USE", useStyle);
+            String btnText = isCurse ? "CURSED" : (isBoardOnly ? "BOARD" : (lethalCost ? "LOW HP" : "USE"));
+            TextButton useBtn = new TextButton(btnText, useStyle);
 
-            useBtn.addListener(new ChangeListener() {
-                @Override
-                public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                    if (game.getAudioManager() != null) {
-                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+            if (canUseInBattle) {
+                useBtn.addListener(new ChangeListener() {
+                    @Override
+                    public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
+                        spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
+                        spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, item.getName().toUpperCase(), Color.valueOf("#81c784"), false);
+                        battleSystem.onPlayerUseItem(slotIndex);
+                        itemPopup.setVisible(false); // Close popup after using
+                        syncUi(); // Refresh HP/Log
                     }
-                    spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
-                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, item.getName().toUpperCase(), Color.valueOf("#81c784"), false);
-                    battleSystem.onPlayerUseItem(slotIndex);
-                    itemPopup.setVisible(false); // Close popup after using
-                    syncUi(); // Refresh HP/Log
-                }
-            });
+                });
+            } else {
+                useBtn.setDisabled(true);
+                useBtn.setTouchable(com.badlogic.gdx.scenes.scene2d.Touchable.disabled);
+            }
 
-            row.add(useBtn).size(90, 40).right();
+            row.add(useBtn).size(105, 40).right();
             itemPopup.add(row).width(580).height(56).padBottom(6).center().row();
         }
 
@@ -1007,7 +1042,14 @@ public class BattleScreen implements Screen {
             if (enemyFlinchTimer > 0.12f) {
                 batch.setColor(1f, 0.25f, 0.25f, enemyAlpha); // Red hurt flash
             } else {
-                batch.setColor(1f, 1f, 1f, enemyAlpha);
+                int tilePos = (snakeTile != null) ? snakeTile.getPosition() : 1;
+                if (tilePos <= 30) {
+                    batch.setColor(0.85f, 1.0f, 0.88f, enemyAlpha); // Act 1: Verdant Moss / Emerald Hue
+                } else if (tilePos <= 70) {
+                    batch.setColor(0.80f, 0.88f, 1.0f, enemyAlpha); // Act 2: Deep Cavern Sapphire / Indigo Hue
+                } else {
+                    batch.setColor(1.0f, 0.78f, 0.72f, enemyAlpha); // Act 3: Scorched Magma / Crimson Ember Hue
+                }
             }
             float drawEX = ENEMY_X + eLungeX + eFlinchX;
             float drawEY = ENEMY_DRAW_Y + (enemy.getHealth() <= 0 ? -12f : eBob) + eLungeY;

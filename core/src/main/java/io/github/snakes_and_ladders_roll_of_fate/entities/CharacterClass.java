@@ -24,7 +24,7 @@ public enum CharacterClass {
         5,
         "Iron Shell: Heavy armor and natural resilience against hazards.",
         "Turtle Shell Buckler",
-        "+3 DEF (1 Turn Buff)"
+        "+3 DEF (1-Use Relic / Deflect)"
     ),
     FOX(
         "Fox",
@@ -35,7 +35,7 @@ public enum CharacterClass {
         20,
         "Silver Tongue: Sharp offensive instincts and keen survival senses.",
         "Fox's Hunting Fang",
-        "+3 ATK (1 Turn Buff)"
+        "+3 ATK (1-Use Relic)"
     ),
     RACCOON(
         "Raccoon",

@@ -12,11 +12,20 @@ public class BoardTest {
     public static void main(String[] args) {
         System.out.println("=== RUNNING TWO-PASS BOARD GENERATION TEST SUITE ===");
 
-        // Run across 1,000 distinct seeds to verify edge cases
+        // Run across 1,000 distinct seeds to verify edge cases across ALL BoardModifiers
+        BoardModifier[] modifiers = BoardModifier.values();
         for (int run = 0; run < 1000; run++) {
             Random rng = new Random(run * 31337L + 7L);
             Board board = new Board(100, rng);
-            board.generateBoard();
+            BoardModifier mod = modifiers[run % modifiers.length];
+            board.generateBoard(mod);
+
+            if (board.getActiveModifier() != mod) {
+                throw new AssertionError("Board activeModifier mismatch");
+            }
+            if (board.getPoiCount(TileLandmark.CROSSROADS) < 3) {
+                throw new AssertionError("Board should place at least 3 Crossroads across Acts, found: " + board.getPoiCount(TileLandmark.CROSSROADS));
+            }
 
             List<Tile> tiles = board.getTiles();
             if (tiles.size() != 100) {
@@ -60,10 +69,13 @@ public class BoardTest {
                         throw new AssertionError("Ladder destination overshot board: " + dest);
                     }
 
-                    // Safe landing guarantee: landing MUST be NormalTile
+                    // Safe landing guarantee: landing MUST be plain NormalTile (not special & not POI landmark)
                     Tile destTile = board.getTile(dest);
                     if (!(destTile instanceof NormalTile)) {
                         throw new AssertionError("Ladder at " + i + " landed on non-normal tile: " + destTile.getClass().getSimpleName() + " at " + dest);
+                    }
+                    if (destTile.getLandmark() != TileLandmark.NONE) {
+                        throw new AssertionError("Ladder at " + i + " landed on a POI landmark: " + destTile.getLandmark() + " at " + dest);
                     }
                 } else if (tile instanceof SnakeTile) {
                     SnakeTile snake = (SnakeTile) tile;
@@ -84,10 +96,13 @@ public class BoardTest {
                         throw new AssertionError("Snake destination undershot board: " + dest);
                     }
 
-                    // Safe landing guarantee: landing MUST be NormalTile
+                    // Safe landing guarantee: landing MUST be plain NormalTile (not special & not POI landmark)
                     Tile destTile = board.getTile(dest);
                     if (!(destTile instanceof NormalTile)) {
                         throw new AssertionError("Snake at " + i + " dropped onto non-normal tile: " + destTile.getClass().getSimpleName() + " at " + dest);
+                    }
+                    if (destTile.getLandmark() != TileLandmark.NONE) {
+                        throw new AssertionError("Snake at " + i + " dropped onto a POI landmark: " + destTile.getLandmark() + " at " + dest);
                     }
                 }
             }

@@ -10,15 +10,23 @@ public class Player extends Entity {
     private int level;
     private int expThresh;
     private int experience;
+    private int totalExperience;
     private int tempAttack = 0;
     private int tempDefense = 0;
     private int turnsSinceLastEvent = 99; // Starts ready for encounter
     private CharacterClass characterClass;
+    private int maxHealthBonus = 0;
+
+    // Active Board Utility Modifiers (Single-Use Item Effects)
+    private boolean pendingDiceChoice = false;
+    private int maxDiceRollCap = 0; // 0 = uncapped, >0 = next roll capped to max
+    private boolean hasSnakeWard = false;
 
     public Player(String name) {
         this.name = name;
         this.level = 1;
         this.experience = 0;
+        this.totalExperience = 0;
         this.inventory = new Inventory(4);
         this.expThresh = 100;
     }
@@ -30,6 +38,7 @@ public class Player extends Entity {
 
     public void applyCharacterClass(CharacterClass characterClass) {
         this.characterClass = characterClass;
+        this.maxHealthBonus = 0;
         if (characterClass != null) {
             setEntityClass(characterClass.getName());
             setHealth(characterClass.getBaseHealth());
@@ -47,7 +56,18 @@ public class Player extends Entity {
     }
 
     public int getMaxHealth() {
-        return characterClass != null ? characterClass.getBaseHealth() : 100;
+        int base = characterClass != null ? characterClass.getBaseHealth() : 100;
+        return Math.max(20, base + maxHealthBonus);
+    }
+
+    public void modifyMaxHealth(int delta) {
+        this.maxHealthBonus += delta;
+        int newMax = getMaxHealth();
+        if (delta > 0) {
+            setHealth(getHealth() + delta);
+        } else if (getHealth() > newMax) {
+            setHealth(newMax);
+        }
     }
 
     @Override
@@ -116,14 +136,68 @@ public class Player extends Entity {
     public int getBaseAttack() { return super.getAttack(); }
     public int getBaseDefense() { return super.getDefense(); }
 
+    public int getCurseAttackPenalty() {
+        if (inventory == null) return 0;
+        int penalty = 0;
+        for (Item item : inventory.getItems()) {
+            if (item.isCurse() && item.getEffectType() == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.ATTACK) {
+                penalty += item.getEffectValue();
+            }
+        }
+        return penalty;
+    }
+
+    public int getCurseDefensePenalty() {
+        if (inventory == null) return 0;
+        int penalty = 0;
+        for (Item item : inventory.getItems()) {
+            if (item.isCurse() && item.getEffectType() == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DEFENSE) {
+                penalty += item.getEffectValue();
+            }
+        }
+        return penalty;
+    }
+
+    public int getCurseDiceModifier() {
+        if (inventory == null) return 0;
+        int mod = 0;
+        for (Item item : inventory.getItems()) {
+            if (item.isCurse() && item.getEffectType() == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.MOVE) {
+                mod += item.getEffectValue();
+            }
+        }
+        return mod;
+    }
+
+    public boolean hasCurse() {
+        return hasItemType(ItemType.CURSE);
+    }
+
+    /**
+     * Purifies all passive curse burdens from the player's inventory (e.g., at a Sanctuary or Shrine).
+     * @return Number of curses cleansed.
+     */
+    public int cleanseCurses() {
+        if (inventory == null) return 0;
+        int removed = 0;
+        java.util.Iterator<Item> it = inventory.getItems().iterator();
+        while (it.hasNext()) {
+            if (it.next().isCurse()) {
+                it.remove();
+                removed++;
+            }
+        }
+        return removed;
+    }
+
     @Override
     public int getAttack() {
-        return super.getAttack() + tempAttack;
+        return Math.max(1, super.getAttack() + tempAttack + getCurseAttackPenalty());
     }
 
     @Override
     public int getDefense() {
-        return super.getDefense() + tempDefense;
+        return Math.max(0, super.getDefense() + tempDefense + getCurseDefensePenalty());
     }
 
     public boolean hasActiveBuffs() {
@@ -150,6 +224,7 @@ public class Player extends Entity {
         int totalExpGained = exp + bonusExp;
 
         this.experience += totalExpGained;
+        this.totalExperience += totalExpGained;
 
         // Optional: Notify the player that they received a class bonus
         if (bonusExp > 0) {
@@ -181,7 +256,18 @@ public class Player extends Entity {
 
     public int getLevel() { return level; }
     public int getExperience() { return experience; }
-    public void setExperience(int experience) { this.experience = Math.max(0, experience); }
+    public void setExperience(int experience) {
+        this.experience = Math.max(0, experience);
+        if (this.totalExperience < this.experience) {
+            this.totalExperience = this.experience;
+        }
+    }
+    public int getTotalExperience() { return totalExperience; }
+    public void setTotalExperience(int totalExperience) { this.totalExperience = Math.max(0, totalExperience); }
+    public void spendTotalExperience(int amount) {
+        if (amount <= 0) return;
+        this.totalExperience = Math.max(0, this.totalExperience - amount);
+    }
     public int getExpThresh() { return expThresh; }
     public void setExpThresh(int expThresh) { this.expThresh = expThresh; }
 
@@ -191,4 +277,13 @@ public class Player extends Entity {
     public int getTurnsSinceLastEvent() { return turnsSinceLastEvent; }
     public void incrementTurnsSinceLastEvent() { this.turnsSinceLastEvent++; }
     public void resetEventCooldown() { this.turnsSinceLastEvent = 0; }
+
+    public boolean hasPendingDiceChoice() { return pendingDiceChoice; }
+    public void setPendingDiceChoice(boolean pendingDiceChoice) { this.pendingDiceChoice = pendingDiceChoice; }
+
+    public int getMaxDiceRollCap() { return maxDiceRollCap; }
+    public void setMaxDiceRollCap(int maxDiceRollCap) { this.maxDiceRollCap = maxDiceRollCap; }
+
+    public boolean hasSnakeWard() { return hasSnakeWard; }
+    public void setHasSnakeWard(boolean hasSnakeWard) { this.hasSnakeWard = hasSnakeWard; }
 }
