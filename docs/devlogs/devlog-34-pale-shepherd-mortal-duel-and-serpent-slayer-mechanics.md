@@ -1,7 +1,7 @@
 # Devlog 34: The Pale Shepherd Mortal Duel, Snake Slaying Stat Mastery & Tail Slide Acrobatics Overhaul
 
 * **Date:** November 26, 2026
-* **Author:** Dorothy Anne R. Domanico (Design Lead)
+* **Author:** John Calvin D. Samson (Project Leader)
 * **Sprint / Milestone:** Week 6 – Combat Stakes, Pursuer High-Noon & Serpent Risk/Reward Overhaul
 * **Branch:** `feat/board-adventure-screen`
 
