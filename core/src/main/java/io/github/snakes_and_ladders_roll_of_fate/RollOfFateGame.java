@@ -222,6 +222,7 @@ public class RollOfFateGame extends Game {
     public Screen getCurrentScreen() { return currentScreen; }
     public Board getBoard() { return board; }
     public List<Player> getPlayers() { return players; }
+    public void setPlayers(List<Player> players) { this.players = players; }
     public int getCurrentTurn() { return currentTurn; }
     public Player getCurrentPlayer() {
         return players.isEmpty() ? null : players.get(currentTurn);

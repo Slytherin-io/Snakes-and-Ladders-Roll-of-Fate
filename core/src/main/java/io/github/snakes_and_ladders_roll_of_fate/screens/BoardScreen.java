@@ -2388,17 +2388,20 @@ public class BoardScreen implements Screen {
             return;
         }
 
-        if (isShepherdAmbushActive) {
-            isShepherdAmbushActive = false;
-            turnState = TurnState.WAITING_FOR_ROLL;
-            topBannerLabel.setText(player.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
-            return;
-        }
+        boolean wasShepherdAmbush = isShepherdAmbushActive;
+        isShepherdAmbushActive = false;
 
         if (specialSlideTarget != -1) {
             boolean isLadder = (specialSlideTarget > player.getPosition());
+            if (wasShepherdAmbush) {
+                // After surging forward away from the Shepherd, player continues into roll phase
+                isItemMovement = true;
+            }
             startSpecialMove(player.getPosition(), specialSlideTarget, isLadder);
             specialSlideTarget = -1;
+        } else if (wasShepherdAmbush) {
+            turnState = TurnState.WAITING_FOR_ROLL;
+            topBannerLabel.setText(player.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
         } else {
             if (player != null && player.getPosition() >= 100) {
                 triggerDawnWardenSummitTrial(player);
@@ -2763,15 +2766,39 @@ public class BoardScreen implements Screen {
                                 isSpecialMoving = false;
                                 specialMovePhase = SpecialMovePhase.NONE;
 
-                                if (!isLadderMove && game.getPaleShepherdTile() > 0 && player.getPosition() <= game.getPaleShepherdTile()) {
+                                int finalPos = player.getPosition();
+                                if (finalPos >= 100) {
+                                    triggerDawnWardenSummitTrial(player);
+                                    return;
+                                }
+
+                                // Check if player landed directly on the pursuer's tile
+                                if (game.getPaleShepherdTile() > 0 && finalPos == game.getPaleShepherdTile()) {
                                     triggerPaleShepherdEncounter(player);
+                                    return;
+                                }
+
+                                // If player slid down behind the reaper, reaper relocates to trail behind
+                                if (game.getPaleShepherdTile() > 0 && finalPos < game.getPaleShepherdTile()) {
+                                    game.setPaleShepherdTile(Math.max(1, finalPos - 3));
+                                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
+                                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
+                                    game.setShepherdPauseRounds(1);
+                                    updateMiniMapProgress();
+                                }
+
+                                // Check if destination tile triggers a ladder, snake, or landmark (Fix Bug A)
+                                Tile landedTile = board.getTile(finalPos);
+                                if (landedTile instanceof LadderTile || landedTile instanceof SnakeTile
+                                    || (landedTile != null && landedTile.getLandmark() != TileLandmark.NONE)) {
+                                    handleTileArrival(player, finalPos);
                                     return;
                                 }
 
                                 if (isItemMovement) {
                                     isItemMovement = false;
                                     turnState = TurnState.WAITING_FOR_ROLL;
-                                    topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + player.getPosition() + "! ROLL THE DICE!");
+                                    topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + finalPos + "! ROLL THE DICE!");
                                 } else {
                                     turnState = TurnState.TURN_TRANSITION;
                                     actionPauseTimer = 0.5f;
@@ -2883,8 +2910,17 @@ public class BoardScreen implements Screen {
             isShepherdGliding = false;
         }
 
-        float tileCenterX = shepherdDisplayX;
-        float groundY = shepherdDisplayY;
+        // When sharing a tile with a player, offset the pursuer slightly left and elevated
+        // so both the reaper and player sprites remain distinctly visible without swallowing/occlusion
+        boolean sharesTileWithPlayer = false;
+        for (Player p : game.getPlayers()) {
+            if (p.getHealth() > 0 && p.getPosition() == shepherdTile) {
+                sharesTileWithPlayer = true;
+                break;
+            }
+        }
+        float tileCenterX = shepherdDisplayX + (sharesTileWithPlayer ? -32f : 0f);
+        float groundY = shepherdDisplayY + (sharesTileWithPlayer ? 26f : 0f);
         float size = CHAR_DISPLAY_SIZE;
 
         // Smooth floating hover oscillation: gentle, steady sine wave when idle, steady height when gliding
@@ -3063,13 +3099,30 @@ public class BoardScreen implements Screen {
             speed = Math.min(6, speed + 1);
         }
 
-        game.advancePaleShepherd(speed);
+        // Pursuer must always trail behind and never overshoot players
+        if (gap > 0) {
+            speed = Math.min(speed, gap);
+        } else {
+            speed = 0;
+        }
+
+        if (speed > 0) {
+            game.advancePaleShepherd(speed);
+        }
         updateMiniMapProgress();
 
-        Player current = game.getCurrentPlayer();
-        if (current != null && current.getHealth() > 0 && game.getPaleShepherdTile() >= current.getPosition()) {
-            triggerPaleShepherdEncounter(current);
-        } else {
+        // Check if any active player was intercepted on the shepherd's tile
+        Player interceptedPlayer = null;
+        for (Player p : game.getPlayers()) {
+            if (p.getHealth() > 0 && p.getPosition() == game.getPaleShepherdTile()) {
+                interceptedPlayer = p;
+                break;
+            }
+        }
+
+        if (interceptedPlayer != null) {
+            triggerPaleShepherdEncounter(interceptedPlayer);
+        } else if (speed > 0) {
             topBannerLabel.setText("THE PALE SHEPHERD ADVANCES TO TILE " + game.getPaleShepherdTile() + " (+" + speed + " TILES)!");
         }
     }
@@ -3148,7 +3201,7 @@ public class BoardScreen implements Screen {
         Color struggleTagBg = canStruggle ? Color.valueOf("#914621") : Color.valueOf("#5c493e");
         Color struggleTagBorder = canStruggle ? Color.valueOf("#d68860") : Color.valueOf("#8c7769");
         String struggleSummary = canStruggle
-            ? "Endure the mortal chill. (Cost: 20 HP)"
+            ? "Endure the mortal chill. (Cost: 20 HP -> Surge +3 Tiles)"
             : "Requires more than 20 HP to withstand.";
         Button struggleCard = buildShepherdChoiceCard(struggleTitle, struggleTag, struggleTagBg, struggleTagBorder, struggleSummary, canStruggle);
         if (canStruggle) {
@@ -3159,13 +3212,16 @@ public class BoardScreen implements Screen {
                         game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     }
                     player.setHealth(player.getHealth() - 20);
-                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 3));
-                    player.setPosition(Math.min(99, player.getPosition() + 3));
+                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 5));
+                    game.setShepherdPauseRounds(2);
+                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
+                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
+                    specialSlideTarget = Math.min(99, player.getPosition() + 3);
                     updateHudDisplay();
                     updateMiniMapProgress();
                     EventChoice.EventResult res = new EventChoice.EventResult();
                     res.consequences.add("You grit your teeth and push through the cold mist! (-20 HP)");
-                    res.consequences.add("Surged +3 tiles ahead! The Pale Shepherd steps back respectfully.");
+                    res.consequences.add("Surged +3 tiles ahead! The Pale Shepherd is repelled 5 tiles and paused for 2 rounds.");
                     showOutcomeView("Will to Live Prevails!", res, false);
                 }
             });
@@ -3179,7 +3235,7 @@ public class BoardScreen implements Screen {
         Color sootheTagBg = hasItem ? Color.valueOf("#855918") : Color.valueOf("#5c493e");
         Color sootheTagBorder = hasItem ? Color.valueOf("#cfa259") : Color.valueOf("#8c7769");
         String sootheSummary = hasItem
-            ? "Present a relic to calm the restless spirit."
+            ? "Present a relic to calm the restless spirit. (Repels 5 Tiles | Halts 2 Rounds)"
             : "Your satchel holds no relics to offer.";
         Button sootheCard = buildShepherdChoiceCard(sootheTitle, sootheTag, sootheTagBg, sootheTagBorder, sootheSummary, hasItem);
         if (hasItem) {
@@ -3192,12 +3248,14 @@ public class BoardScreen implements Screen {
                     Item offered = player.getInventory().getItem(0);
                     player.getInventory().removeItem(0);
                     game.setShepherdPauseRounds(2);
-                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 2));
+                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 5));
+                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
+                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
                     updateHudDisplay();
                     refreshInventoryUI();
                     EventChoice.EventResult res = new EventChoice.EventResult();
                     res.consequences.add("You offered [" + offered.getName() + "] to the crimson reaper.");
-                    res.consequences.add("The spirit lowers its golden scythe in silent understanding. Pursuit halted for 2 rounds!");
+                    res.consequences.add("The spirit lowers its golden scythe in silent understanding. Repelled 5 tiles and pursuit halted for 2 rounds!");
                     showOutcomeView("Memory Cherished!", res, false);
                 }
             });
@@ -3209,7 +3267,7 @@ public class BoardScreen implements Screen {
         String trialTag = "D20 (DC 10)";
         Color trialTagBg = Color.valueOf("#8f5e16");
         Color trialTagBorder = Color.valueOf("#d6a549");
-        String trialSummary = "Confront the reaper with inner resolve.";
+        String trialSummary = "Roll D20: >=10 Repels Shepherd 6 Tiles | <10 Drain 15 HP & Scramble Ahead";
         Button trialCard = buildShepherdChoiceCard(trialTitle, trialTag, trialTagBg, trialTagBorder, trialSummary, true);
         UIUtils.addScaleHoverEffect(trialCard);
         trialCard.addListener(new ChangeListener() {
@@ -3223,17 +3281,24 @@ public class BoardScreen implements Screen {
                 res.d20Roll = roll;
                 res.checkSucceeded = (roll >= 10);
                 if (roll >= 10) {
-                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 4));
+                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 6));
+                    game.setShepherdPauseRounds(2);
+                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
+                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
                     res.consequences.add("D20 Roll: " + roll + " (SUCCESS!)");
-                    res.consequences.add("Your soul burns with fierce resolve! The Shepherd recedes 4 tiles.");
+                    res.consequences.add("Your soul burns with fierce resolve! The Shepherd recedes 6 tiles and pauses for 2 rounds.");
                     showOutcomeView("Indomitable Spirit!", res, false);
                 } else {
                     player.setHealth(player.getHealth() - 15);
-                    player.setPosition(Math.min(99, player.getPosition() + 1));
+                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 4));
+                    game.setShepherdPauseRounds(1);
+                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
+                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
+                    specialSlideTarget = Math.min(99, player.getPosition() + 2);
                     updateHudDisplay();
                     updateMiniMapProgress();
                     res.consequences.add("D20 Roll: " + roll + " (FAILED!)");
-                    res.consequences.add("The cold chill numbs your limbs (-15 HP), but you scramble forward 1 tile.");
+                    res.consequences.add("The cold chill numbs your limbs (-15 HP), but you scramble forward 2 tiles as the reaper recoils.");
                     showOutcomeView("Shaken Resolve!", res, false);
                 }
             }
