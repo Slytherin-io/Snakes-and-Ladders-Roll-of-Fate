@@ -14,6 +14,7 @@ public abstract class Tile {
     private static final Random tileGen = new Random();
     private EventCategory category;
     private boolean revealed = false;
+    private TileLandmark landmark = TileLandmark.NONE;
 
     public Tile(int position, String type, String effect, EventCategory category) {
         this.position = position;
@@ -21,6 +22,15 @@ public abstract class Tile {
         this.effect = effect;
         this.category = category;
         this.revealed = false;
+        this.landmark = TileLandmark.NONE;
+    }
+
+    public TileLandmark getLandmark() {
+        return landmark;
+    }
+
+    public void setLandmark(TileLandmark landmark) {
+        this.landmark = (landmark != null) ? landmark : TileLandmark.NONE;
     }
 
     public boolean isRevealed() {

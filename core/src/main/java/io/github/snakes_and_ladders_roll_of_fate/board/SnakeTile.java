@@ -30,45 +30,54 @@ public class SnakeTile extends Tile {
         startCombat(player);
     }
 
-    /** Factory: builds a balanced, position-scaled snake for combat and the BattleScreen. */
-    /** Factory: builds balanced, tier-scaled snakes to prevent late-game damage sponges. */
+    private static final String[][] SPECIES_NAMES = {
+        {"Emerald Viper", "Obsidian Cobra", "Magma Wyrm"},                 // Venomous / Aggressive
+        {"Forest Python", "Crag Carapace Serpent", "Abyssal Basilisk"},     // Defensive / Regenerating
+        {"Moss Adder", "Cave Rattler", "Apex Celestial Serpent"}            // Stealthy / Evasive
+    };
+
+    private static final String[][] SPECIES_REWARDS = {
+        {"Emerald Scales", "Obsidian Scale", "Heart of Magma"},
+        {"Python Leather", "Crag Serpent Plate", "Basilisk Carapace"},
+        {"Adder Venom Sac", "Rattler Fang", "Celestial Serpent Crest"}
+    };
+
+    /**
+     * Factory: builds Act-themed, tier-balanced serpents (matching upstream's capped stats
+     * to prevent late-game damage sponges while keeping Act I-III species variety).
+     * Act I (Tiles 1-30): Emerald Viper, Forest Python, Moss Adder
+     * Act II (Tiles 31-70): Obsidian Cobra, Crag Carapace Serpent, Cave Rattler
+     * Act III (Tiles 71-100): Magma Wyrm, Abyssal Basilisk, Apex Celestial Serpent
+     */
     public Enemy createSnakeEnemy() {
         int pos = getPosition();
-        Enemy snake;
+        int tier = (pos <= 30) ? 1 : ((pos <= 70) ? 2 : 3);
+        int idx = tier - 1;
+        int variant = random.nextInt(3);
 
-        // 1. Determine Board Zone for predictable, fair scaling
-        int tier;
-        if (pos <= 33) tier = 1;       // Early Game (Tiles 1-33)
-        else if (pos <= 66) tier = 2;  // Mid-Game (Tiles 34-66)
-        else tier = 3;                 // Late Game (Tiles 67-99)
+        Enemy snake = new Enemy(SPECIES_NAMES[variant][idx]);
+        snake.setReward(SPECIES_REWARDS[variant][idx]);
 
-        // 2. Generate Variation based on Tier
-        switch (random.nextInt(3)) {
-            case 0: // VENOMOUS VIPER (Glass Cannon / Aggressive)
-                snake = new Enemy("Venomous Viper");
-                snake.setBehavior("Aggressive");
+        switch (variant) {
+            case 0: // Venomous / Aggressive (Glass Cannon — Toxic Bite)
+                snake.setBehavior("Aggressive (Venomous)");
                 snake.setAttack(4 + (tier * 3));      // ATK: 7, 10, 13
                 snake.setHealth(15 + (tier * 10));    // HP:  25, 35, 45
                 snake.setDefense(tier);               // DEF: 1,  2,  3
-                snake.setReward("Viper Venom Sac");
                 break;
 
-            case 1: // ARMORED PYTHON (Tank / Defensive)
-                snake = new Enemy("Armored Python");
-                snake.setBehavior("Defensive");
-                snake.setAttack(2 + (tier * 2));      // ATK: 4,  6,  8 (Low threat)
-                snake.setHealth(25 + (tier * 15));    // HP:  40, 55, 70 (High bulk)
-                snake.setDefense(1 + tier);           // DEF: 2,  3,  4 (Capped! Prevents damage immunity)
-                snake.setReward("Python Scales");
+            case 1: // Defensive / Regenerating Tank (High Bulk, Capped DEF)
+                snake.setBehavior("Defensive (Regenerating)");
+                snake.setAttack(2 + (tier * 2));      // ATK: 4,  6,  8
+                snake.setHealth(25 + (tier * 15));    // HP:  40, 55, 70
+                snake.setDefense(1 + tier);           // DEF: 2,  3,  4 (Capped to prevent immunity)
                 break;
 
-            default: // SHADOW ASP (Rogue / Balanced)
-                snake = new Enemy("Shadow Asp");
-                snake.setBehavior("Stealthy");
+            default: // Stealthy / Evasive Striker (20% Dodge, Crit Strikes)
+                snake.setBehavior("Stealthy (Evasive)");
                 snake.setAttack(3 + (tier * 3));      // ATK: 6,  9,  12
                 snake.setHealth(20 + (tier * 12));    // HP:  32, 44, 56
                 snake.setDefense(tier);               // DEF: 1,  2,  3
-                snake.setReward("Shadow Fang");
                 break;
         }
         return snake;

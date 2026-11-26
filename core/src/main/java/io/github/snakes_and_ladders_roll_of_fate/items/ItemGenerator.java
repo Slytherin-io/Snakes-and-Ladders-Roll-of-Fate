@@ -3,122 +3,220 @@ package io.github.snakes_and_ladders_roll_of_fate.items;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import java.util.Random;
 
+/**
+ * Generates single-use tactical relics, board-control utilities, double-edged artifacts, and passive curses.
+ */
 public class ItemGenerator {
     private static final Random random = new Random();
 
     // --- Name Generation Pools ---
-    private static final String[] PREFIXES = {
-        "Minor", "Greater", "Ancient", "Rusty", "Blessed", "Cursed",
-        "Iron", "Crystal", "Shadow", "Radiant", "Swift", "Sturdy"
-    };
-
-    private static final String[] CONSUMABLE_BASES = {
-        "Potion", "Elixir", "Draught", "Tonic", "Scroll", "Feather", "Tome", "Torch", "Lens"
-    };
-
-    private static final String[] EQUIPMENT_BASES = {
-        "Sword", "Shield", "Dagger", "Amulet", "Ring", "Gauntlets", "Boots", "Blade"
-    };
+    private static final String[] POTION_PREFIXES = { "Minor", "Greater", "Radiant", "Blessed", "Alchemical" };
+    private static final String[] GEAR_PREFIXES = { "Iron", "Crystal", "Blessed", "Tempered", "Ancient", "Sturdy" };
+    private static final String[] WEAPON_BASES = { "Blade", "Fang", "Dagger", "Edge", "Talon" };
+    private static final String[] SHIELD_BASES = { "Buckler", "Aegis", "Ward", "Shield", "Talisman" };
 
     /**
-     * Generates a random item scaled to a specific tier.
-     * @param tier The tier of the item (e.g., Player Level, or Board Tile / 10).
-     * @return A procedurally generated Item.
+     * Generates a random single-use beneficial or double-edged item scaled to the given tier.
+     * @param tier Scaling tier (e.g. Player Level or Act/Tile tier).
+     * @return A single-use Item.
      */
     public static Item generateItem(int tier) {
-        // Ensure tier is at least 1 to prevent division/zero issues
         tier = Math.max(1, tier);
+        int roll = random.nextInt(100);
 
-        // 1. Determine if it's a Consumable or Equipment (50/50 chance)
-        boolean isConsumable = random.nextBoolean();
-        ItemType type = isConsumable ? ItemType.CONSUMABLE : ItemType.EQUIPMENT;
+        // 35% Board Utility Relics (High spatial agency on the board)
+        if (roll < 35) {
+            return generateBoardUtilityItem(tier);
+        }
+        // 20% Double-Edged Artifacts (High reward paired with a tactical cost)
+        if (roll < 55) {
+            return generateDoubleEdgedItem(tier);
+        }
+        // 45% Combat & Healing Essentials (Single-use potions, 1-turn ATK/DEF relics, EXP tomes)
+        return generateCombatOrRecoveryItem(tier);
+    }
 
-        // 2. Determine the Effect Type randomly
-        EventEffectType[] effects = EventEffectType.values();
-        EventEffectType effectType = effects[random.nextInt(effects.length)];
-
-        // 3. Generate Name
-        String name = generateName(type);
-
-        // 4. Calculate Effect Value (Scales dynamically with tier)
-        int effectValue = calculateEffectValue(effectType, tier);
-
-        // 5. Generate Description
-        String effectDesc = generateDescription(effectType, effectValue, type);
-
-        // 6. Create and return the item using your existing factory methods
-        if (isConsumable) {
-            return Item.createConsumable(name, effectType, effectValue, effectDesc);
-        } else {
-            // Equipment durability scales slightly with tier
-            int minDur = 2 + (tier / 2);
-            int maxDur = 4 + tier;
-            return Item.createEquipment(name, effectType, effectValue, minDur, maxDur, effectDesc);
+    /**
+     * Generates a board-centric utility item (Dice control, Snake ward, Scout, Leap, Transposition).
+     */
+    public static Item generateBoardUtilityItem(int tier) {
+        int pick = random.nextInt(6);
+        switch (pick) {
+            case 0:
+                return Item.createConsumable(
+                    "Loaded Golden Die",
+                    EventEffectType.DICE_EXACT,
+                    6,
+                    "Pick your exact roll (1-6) on next turn"
+                );
+            case 1:
+                return Item.createConsumable(
+                    "Snake Charmer's Flute",
+                    EventEffectType.SNAKE_WARD,
+                    1,
+                    "Pacifies next Snake (skips fight & slide)"
+                );
+            case 2:
+                return Item.createConsumable(
+                    "Heavy Lead Boots",
+                    EventEffectType.DICE_CLAMP,
+                    2,
+                    "Caps your next dice roll at 2 max"
+                );
+            case 3: {
+                int leap = Math.min(4, 2 + (tier / 2));
+                return Item.createConsumable(
+                    "Vaulting Hook",
+                    EventEffectType.MOVE,
+                    leap,
+                    "Leap forward " + leap + " tiles, skipping hazards"
+                );
+            }
+            case 4: {
+                int range = Math.min(8, 4 + tier);
+                return Item.createConsumable(
+                    "Eye of the Pathfinder",
+                    EventEffectType.SCOUT,
+                    range,
+                    "Reveals " + range + " uncharted tiles ahead"
+                );
+            }
+            case 5:
+            default:
+                return Item.createConsumable(
+                    "Transposition Orb",
+                    EventEffectType.SWAP_PLAYER,
+                    5,
+                    "Swap with lead rival (or +5 tiles solo)"
+                );
         }
     }
 
-    private static String generateName(ItemType type) {
-        String prefix = PREFIXES[random.nextInt(PREFIXES.length)];
-        String base = (type == ItemType.CONSUMABLE)
-            ? CONSUMABLE_BASES[random.nextInt(CONSUMABLE_BASES.length)]
-            : EQUIPMENT_BASES[random.nextInt(EQUIPMENT_BASES.length)];
-
-        return prefix + " " + base;
-    }
-
-    private static int calculateEffectValue(EventEffectType effect, int tier) {
-        int baseValue;
-        int variance;
-
-        // Scale base values depending on the effect type
-        switch (effect) {
-            case HEALTH:
-                baseValue = 15 + (tier * 10); // e.g., Tier 1 = 25 HP, Tier 5 = 65 HP
-                variance = 10;
-                break;
-            case ATTACK:
-            case DEFENSE:
-                baseValue = 2 + (tier * 2);   // e.g., Tier 1 = 4 ATK/DEF, Tier 5 = 12 ATK/DEF
-                variance = 2;
-                break;
-            case MOVE:
-                baseValue = 2 + (tier / 2);   // e.g., Tier 1 = 2 tiles, Tier 5 = 4 tiles
-                variance = 1;
-                break;
-            case SCOUT:
-                baseValue = 3 + (tier / 2);   // e.g., Tier 1 = 3-4 tiles, Tier 4 = 5 tiles
-                variance = 1;
-                break;
-            case EXPERIENCE:
-                baseValue = 20 + (tier * 15); // e.g., Tier 1 = 35 EXP, Tier 5 = 95 EXP
-                variance = 15;
-                break;
-            default:
-                baseValue = 10;
-                variance = 5;
+    /**
+     * Generates a double-edged relic offering high value in exchange for HP or dice penalties.
+     */
+    public static Item generateDoubleEdgedItem(int tier) {
+        int pick = random.nextInt(3);
+        switch (pick) {
+            case 0: {
+                int atk = 7 + (tier * 2);
+                return Item.createDoubleEdged(
+                    "Berserker's Blood Draught",
+                    EventEffectType.ATTACK,
+                    atk,
+                    EventEffectType.HEALTH,
+                    -15,
+                    "+" + atk + " ATK (1 Turn), costs 15 HP"
+                );
+            }
+            case 1: {
+                int exp = 45 + (tier * 20);
+                return Item.createDoubleEdged(
+                    "Idol of Greed",
+                    EventEffectType.EXPERIENCE,
+                    exp,
+                    EventEffectType.DICE_CLAMP,
+                    3,
+                    "+" + exp + " EXP, caps next roll at 3"
+                );
+            }
+            case 2:
+            default: {
+                int leap = Math.min(6, 4 + (tier / 2));
+                return Item.createDoubleEdged(
+                    "Blood-Pact Stride",
+                    EventEffectType.MOVE,
+                    leap,
+                    EventEffectType.HEALTH,
+                    -12,
+                    "Leap +" + leap + " tiles, costs 12 HP"
+                );
+            }
         }
-
-        // Apply random variance (+/-)
-        int randomSpread = random.nextInt(variance * 2 + 1) - variance;
-        return Math.max(1, baseValue + randomSpread);
     }
 
-    private static String generateDescription(EventEffectType effect, int value, ItemType type) {
-        switch (effect) {
-            case HEALTH:
-                return "Restores " + value + " HP";
-            case ATTACK:
-                return type == ItemType.EQUIPMENT ? "+" + value + " ATK (1 Turn Buff)" : "Grants +" + value + " ATK";
-            case DEFENSE:
-                return type == ItemType.EQUIPMENT ? "+" + value + " DEF (1 Turn Buff)" : "Grants +" + value + " DEF";
-            case MOVE:
-                return "Advances " + value + " tiles";
-            case SCOUT:
-                return "Scouts and reveals " + value + " tiles ahead";
-            case EXPERIENCE:
-                return "Grants " + value + " EXP";
+    /**
+     * Generates single-use healing elixirs, 1-use combat attack/defense relics, or EXP scrolls.
+     */
+    public static Item generateCombatOrRecoveryItem(int tier) {
+        int pick = random.nextInt(4);
+        switch (pick) {
+            case 0: {
+                int heal = 20 + (tier * 12) + random.nextInt(11);
+                String prefix = POTION_PREFIXES[Math.min(POTION_PREFIXES.length - 1, tier - 1)];
+                return Item.createConsumable(
+                    prefix + " Health Elixir",
+                    EventEffectType.HEALTH,
+                    heal,
+                    "Restores " + heal + " HP"
+                );
+            }
+            case 1: {
+                int atk = 3 + (tier * 2) + random.nextInt(2);
+                String name = GEAR_PREFIXES[random.nextInt(GEAR_PREFIXES.length)] + " "
+                    + WEAPON_BASES[random.nextInt(WEAPON_BASES.length)];
+                return Item.createEquipment(
+                    name,
+                    EventEffectType.ATTACK,
+                    atk,
+                    1, 1,
+                    "+" + atk + " ATK (1 Turn / 1 Use)"
+                );
+            }
+            case 2: {
+                int def = 3 + (tier * 2) + random.nextInt(2);
+                String name = GEAR_PREFIXES[random.nextInt(GEAR_PREFIXES.length)] + " "
+                    + SHIELD_BASES[random.nextInt(SHIELD_BASES.length)];
+                return Item.createEquipment(
+                    name,
+                    EventEffectType.DEFENSE,
+                    def,
+                    1, 1,
+                    "+" + def + " DEF (1 Turn / Deflect)"
+                );
+            }
+            case 3:
+            default: {
+                int exp = 25 + (tier * 15) + random.nextInt(15);
+                return Item.createConsumable(
+                    "Ancient Wisdom Scroll",
+                    EventEffectType.EXPERIENCE,
+                    exp,
+                    "Grants +" + exp + " EXP"
+                );
+            }
+        }
+    }
+
+    /**
+     * Generates a passive Curse item that clogs a satchel slot and penalizes the player
+     * until cleansed at a Sanctuary (Tiles 30 & 70) or bartered away to a merchant.
+     */
+    public static Item generateCurse() {
+        int pick = random.nextInt(3);
+        switch (pick) {
+            case 0:
+                return Item.createCurse(
+                    "Cursed Obsidian Slab",
+                    EventEffectType.MOVE,
+                    -1,
+                    "Passive: -1 Dice Roll (Cleanse/Barter)"
+                );
+            case 1:
+                return Item.createCurse(
+                    "Viper's Hex Totem",
+                    EventEffectType.ATTACK,
+                    -2,
+                    "Passive: -2 ATK (Cleanse/Barter)"
+                );
+            case 2:
             default:
-                return "Mystic Energy";
+                return Item.createCurse(
+                    "Rusted Iron Shackles",
+                    EventEffectType.DEFENSE,
+                    -2,
+                    "Passive: -2 DEF (Cleanse/Barter)"
+                );
         }
     }
 }

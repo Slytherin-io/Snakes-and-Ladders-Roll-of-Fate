@@ -19,6 +19,7 @@ public class Board {
     private List<Tile> tiles;
     private int boardSize;
     private Random random;
+    private BoardModifier activeModifier = BoardModifier.BALANCED_ASCENT;
 
     private enum PlannedType {
         NORMAL,
@@ -37,17 +38,34 @@ public class Board {
     }
 
     /**
-     * Executes the Two-Pass Board Generation algorithm.
+     * Executes the Two-Pass Board Generation algorithm with a dynamically rolled Run Fate Modifier.
      */
     public void generateBoard() {
+        BoardModifier[] modifiers = BoardModifier.values();
+        BoardModifier rolledModifier = modifiers[random.nextInt(modifiers.length)];
+        generateBoard(rolledModifier);
+    }
+
+    /**
+     * Executes the Multi-Pass Board Generation algorithm using a specific Run Fate Modifier:
+     * - Pass 1: Layout & Act-weighted Ladders/Snakes modified by activeModifier (with anti-clustering)
+     * - Pass 2: Safe Destination Resolution & Loop Elimination
+     * - Pass 2.5: Visible Point of Interest (Shrine, Merchant, Treasure, Crossroads) Placement
+     * - Pass 3: Tile Instantiation
+     * - Pass 4: Fog of War / Initial Discovered Landmarks
+     */
+    public void generateBoard(BoardModifier modifier) {
         this.tiles.clear();
+        this.activeModifier = (modifier != null) ? modifier : BoardModifier.BALANCED_ASCENT;
 
         PlannedType[] planned = new PlannedType[boardSize + 1];
+        TileLandmark[] landmarks = new TileLandmark[boardSize + 1];
         int[] destinations = new int[boardSize + 1];
 
-        // Default all to NORMAL
+        // Default all to NORMAL with no special landmark
         for (int i = 1; i <= boardSize; i++) {
             planned[i] = PlannedType.NORMAL;
+            landmarks[i] = TileLandmark.NONE;
             destinations[i] = i;
         }
 
@@ -78,32 +96,40 @@ public class Board {
                 continue;
             }
 
-            // Act-based probability weighting
+            // Act-based probability weighting shaped by the Run Fate Modifier
             int roll = random.nextInt(100);
             PlannedType chosen = PlannedType.NORMAL;
 
+            int baseLadderPct;
+            int baseSnakePct;
             if (pos <= 30) {
-                // Act I: 20% Ladder, 10% Snake, 70% Normal (High climbing momentum)
-                if (roll < 20) chosen = PlannedType.LADDER;
-                else if (roll < 30) chosen = PlannedType.SNAKE;
+                baseLadderPct = 20;
+                baseSnakePct = 10;
             } else if (pos <= 70) {
-                // Act II: 14% Ladder, 18% Snake, 68% Normal (Balanced adventure tension)
-                if (roll < 14) chosen = PlannedType.LADDER;
-                else if (roll < 32) chosen = PlannedType.SNAKE;
+                baseLadderPct = 14;
+                baseSnakePct = 18;
             } else {
-                // Act III: 8% Ladder, 24% Snake, 68% Normal (High stakes perilous endgame)
-                if (roll < 8) chosen = PlannedType.LADDER;
-                else if (roll < 32) chosen = PlannedType.SNAKE;
+                baseLadderPct = 8;
+                baseSnakePct = 24;
+            }
+
+            int ladderPct = Math.max(4, baseLadderPct + activeModifier.getLadderChanceDelta());
+            int snakePct = Math.max(5, baseSnakePct + activeModifier.getSnakeChanceDelta());
+
+            if (roll < ladderPct) {
+                chosen = PlannedType.LADDER;
+            } else if (roll < ladderPct + snakePct) {
+                chosen = PlannedType.SNAKE;
             }
 
             // Validate that special tiles have room for minimum 6-tile jumps
             if (chosen == PlannedType.LADDER) {
-                if (pos + 6 <= boardSize - 1) {
+                if (pos + activeModifier.getMinLadderJump() <= boardSize - 1) {
                     planned[pos] = PlannedType.LADDER;
                     lastSpecialPos = pos;
                 }
             } else if (chosen == PlannedType.SNAKE) {
-                if (pos - 6 >= 1) {
+                if (pos - activeModifier.getMinSnakeDrop() >= 1) {
                     planned[pos] = PlannedType.SNAKE;
                     lastSpecialPos = pos;
                 }
@@ -115,12 +141,12 @@ public class Board {
         // =========================================================================
         Set<Integer> reservedDestinations = new HashSet<>();
 
-        // 1. Resolve Ladders (must jump >= 6 tiles forward to a safe Normal tile)
+        // 1. Resolve Ladders (must jump >= minLadderJump forward to a safe Normal tile)
         for (int pos = 1; pos <= boardSize; pos++) {
             if (planned[pos] != PlannedType.LADDER) continue;
 
-            int minDest = pos + 6;
-            int maxDest = Math.min(boardSize - 1, pos + 18); // Don't skip directly over the Throne
+            int minDest = pos + activeModifier.getMinLadderJump();
+            int maxDest = Math.min(boardSize - 1, pos + activeModifier.getMaxLadderJump());
 
             List<Integer> candidates = new ArrayList<>();
             for (int candidate = minDest; candidate <= maxDest; candidate++) {
@@ -140,12 +166,12 @@ public class Board {
             }
         }
 
-        // 2. Resolve Snakes (must drop >= 6 tiles backward to a safe Normal tile)
+        // 2. Resolve Snakes (must drop >= minSnakeDrop backward to a safe Normal tile)
         for (int pos = 1; pos <= boardSize; pos++) {
             if (planned[pos] != PlannedType.SNAKE) continue;
 
-            int minDest = Math.max(1, pos - 20);
-            int maxDest = pos - 6;
+            int minDest = Math.max(1, pos - activeModifier.getMaxSnakeDrop());
+            int maxDest = pos - activeModifier.getMinSnakeDrop();
 
             List<Integer> candidates = new ArrayList<>();
             for (int candidate = minDest; candidate <= maxDest; candidate++) {
@@ -166,21 +192,45 @@ public class Board {
         }
 
         // =========================================================================
+        // PASS 2.5: Visible Points of Interest (POIs) & Crossroads Placement
+        // =========================================================================
+        Set<Integer> poiPositions = new HashSet<>();
+
+        // Place 1 Crossroads dilemma per Act (strategic decision nodes)
+        placePoiInBand(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, 12, 24, TileLandmark.CROSSROADS, 1);
+        placePoiInBand(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, 42, 58, TileLandmark.CROSSROADS, 1);
+        placePoiInBand(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, 76, 89, TileLandmark.CROSSROADS, 1);
+
+        // Place extra Crossroads if Shrouded Labyrinth modifier is active
+        if (activeModifier == BoardModifier.SHROUDED_LABYRINTH) {
+            placePoiInBand(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, 25, 41, TileLandmark.CROSSROADS, 1);
+            placePoiInBand(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, 59, 75, TileLandmark.CROSSROADS, 1);
+        }
+
+        // Distribute Shrines, Merchants, and Treasure Caches across the full board
+        placePoiDistributed(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, TileLandmark.SHRINE, activeModifier.getTargetShrines());
+        placePoiDistributed(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, TileLandmark.MERCHANT, activeModifier.getTargetMerchants());
+        placePoiDistributed(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, TileLandmark.TREASURE, activeModifier.getTargetTreasures());
+
+        // =========================================================================
         // PASS 3: Tile Instantiation
         // =========================================================================
         for (int pos = 1; pos <= boardSize; pos++) {
+            Tile created;
             switch (planned[pos]) {
                 case LADDER:
-                    this.tiles.add(new LadderTile(pos, destinations[pos]));
+                    created = new LadderTile(pos, destinations[pos]);
                     break;
                 case SNAKE:
-                    this.tiles.add(new SnakeTile(pos, destinations[pos]));
+                    created = new SnakeTile(pos, destinations[pos]);
                     break;
                 case NORMAL:
                 default:
-                    this.tiles.add(new NormalTile(pos));
+                    created = new NormalTile(pos);
+                    created.setLandmark(landmarks[pos]);
                     break;
             }
+            this.tiles.add(created);
         }
 
         // =========================================================================
@@ -221,16 +271,88 @@ public class Board {
         return count;
     }
 
+    /**
+     * Places up to `targetCount` landmarks inside [minPos, maxPos] on clean Normal tiles.
+     */
+    private void placePoiInBand(PlannedType[] planned, TileLandmark[] landmarks,
+                                Set<Integer> protectedSafeTiles, Set<Integer> reservedDestinations,
+                                Set<Integer> poiPositions, int minPos, int maxPos,
+                                TileLandmark landmark, int targetCount) {
+        List<Integer> candidates = new ArrayList<>();
+        for (int pos = Math.max(4, minPos); pos <= Math.min(boardSize - 3, maxPos); pos++) {
+            if (isPoiCandidate(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, pos, 3)) {
+                candidates.add(pos);
+            }
+        }
+        Collections.shuffle(candidates, random);
+        int placed = 0;
+        for (int pos : candidates) {
+            if (placed >= targetCount) break;
+            if (!isNearExistingPoi(poiPositions, pos, 3)) {
+                landmarks[pos] = landmark;
+                poiPositions.add(pos);
+                placed++;
+            }
+        }
+    }
+
+    /**
+     * Distributes landmarks across the entire board evenly across Acts while maintaining spacing.
+     */
+    private void placePoiDistributed(PlannedType[] planned, TileLandmark[] landmarks,
+                                     Set<Integer> protectedSafeTiles, Set<Integer> reservedDestinations,
+                                     Set<Integer> poiPositions, TileLandmark landmark, int targetCount) {
+        if (targetCount <= 0) return;
+        List<Integer> candidates = new ArrayList<>();
+        for (int pos = 4; pos <= boardSize - 3; pos++) {
+            if (isPoiCandidate(planned, landmarks, protectedSafeTiles, reservedDestinations, poiPositions, pos, 3)) {
+                candidates.add(pos);
+            }
+        }
+        Collections.shuffle(candidates, random);
+        int placed = 0;
+        for (int pos : candidates) {
+            if (placed >= targetCount) break;
+            if (!isNearExistingPoi(poiPositions, pos, 3)) {
+                landmarks[pos] = landmark;
+                poiPositions.add(pos);
+                placed++;
+            }
+        }
+    }
+
+    private boolean isPoiCandidate(PlannedType[] planned, TileLandmark[] landmarks,
+                                   Set<Integer> protectedSafeTiles, Set<Integer> reservedDestinations,
+                                   Set<Integer> poiPositions, int pos, int minSpacing) {
+        if (planned[pos] != PlannedType.NORMAL) return false;
+        if (landmarks[pos] != TileLandmark.NONE) return false;
+        if (protectedSafeTiles.contains(pos)) return false;
+        if (reservedDestinations.contains(pos)) return false;
+        return !isNearExistingPoi(poiPositions, pos, minSpacing);
+    }
+
+    private boolean isNearExistingPoi(Set<Integer> poiPositions, int pos, int minSpacing) {
+        for (int existing : poiPositions) {
+            if (Math.abs(existing - pos) < minSpacing) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void displayBoard() {
         System.out.println("\n=== SNAKES AND LADDERS: ROLL OF FATE (ADVENTURE BOARD) ===");
+        System.out.println("  [FATE MODIFIER] " + activeModifier.getDisplayName() + " - " + activeModifier.getDescription());
         for (Tile tile : tiles) {
             String desc = tile.getType();
             if (tile instanceof LadderTile) {
                 desc += "(->" + ((LadderTile) tile).getDestination() + ")";
             } else if (tile instanceof SnakeTile) {
                 desc += "(->" + ((SnakeTile) tile).getDestination() + ")";
+            } else if (tile.getLandmark() != TileLandmark.NONE) {
+                desc = tile.getLandmark().name();
             }
-            System.out.print(String.format("%3d:%-10s|", tile.getPosition(), desc));
+            System.out.print(String.format("%3d:%-11s|", tile.getPosition(), desc));
 
             if (tile.getPosition() % 10 == 0) {
                 System.out.println();
@@ -274,4 +396,14 @@ public class Board {
     public int getBoardSize() { return boardSize; }
 
     public List<Tile> getTiles() { return tiles; }
+
+    public BoardModifier getActiveModifier() { return activeModifier; }
+
+    public int getPoiCount(TileLandmark landmark) {
+        int count = 0;
+        for (Tile t : tiles) {
+            if (t.getLandmark() == landmark) count++;
+        }
+        return count;
+    }
 }

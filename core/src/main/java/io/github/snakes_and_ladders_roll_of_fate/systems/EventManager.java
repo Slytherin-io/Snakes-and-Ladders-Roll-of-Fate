@@ -6,9 +6,9 @@ import java.util.List;
 import java.util.Random;
 
 public class EventManager {
-    public static final double BASE_AMBIENT_CHANCE = 0.32;
+    public static final double BASE_AMBIENT_CHANCE = 0.28;
     public static final int COOLDOWN_TURNS = 1;
-    public static final double LADDER_EVENT_CHANCE = 0.40;
+    public static final double LADDER_EVENT_CHANCE = 0.55;
 
     private List<Event> events;
     private Event activeEvent;
@@ -57,13 +57,31 @@ public class EventManager {
             return activeEvent;
         }
 
-        // For NORMAL / ambient encounters: 40% Shrine, 30% Merchant, 30% static zoned traps/caches
-        int ambientRoll = random.nextInt(100);
-        if (ambientRoll < 40) {
+        if (category == EventCategory.SHRINE) {
             this.activeEvent = EventRepository.createProceduralShrineEvent(playerTilePosition);
             return activeEvent;
-        } else if (ambientRoll < 70) {
+        }
+
+        if (category == EventCategory.CROSSROADS) {
+            this.activeEvent = EventRepository.createProceduralCrossroadsEvent(playerTilePosition);
+            return activeEvent;
+        }
+
+        if (category == EventCategory.TREASURE || category == EventCategory.BLESSING) {
+            this.activeEvent = EventRepository.createProceduralTreasureEvent(playerTilePosition);
+            return activeEvent;
+        }
+
+        // For plain NORMAL / ambient encounters: 35% Shrine, 25% Merchant, 15% Treasure, 25% static zoned traps
+        int ambientRoll = random.nextInt(100);
+        if (ambientRoll < 35) {
+            this.activeEvent = EventRepository.createProceduralShrineEvent(playerTilePosition);
+            return activeEvent;
+        } else if (ambientRoll < 60) {
             this.activeEvent = EventRepository.createProceduralMerchantEvent(playerTilePosition);
+            return activeEvent;
+        } else if (ambientRoll < 75) {
+            this.activeEvent = EventRepository.createProceduralTreasureEvent(playerTilePosition);
             return activeEvent;
         }
 

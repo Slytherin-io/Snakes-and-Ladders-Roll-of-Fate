@@ -1,6 +1,7 @@
 package io.github.snakes_and_ladders_roll_of_fate;
 
 import io.github.snakes_and_ladders_roll_of_fate.board.Board;
+import io.github.snakes_and_ladders_roll_of_fate.board.TileLandmark;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
@@ -99,6 +100,13 @@ public class ConsoleTestGame {
 
         board = new Board(100);
         board.generateBoard();
+
+        EventEffect.setScoutHandler((player, tilesAhead) -> {
+            int start = player.getPosition() + 1;
+            int end = Math.min(board.getBoardSize(), player.getPosition() + tilesAhead);
+            return board.revealRange(start, end);
+        });
+
         board.displayBoard();
 
         gameState = "PLAYING";
@@ -252,7 +260,7 @@ public class ConsoleTestGame {
         if (category == EventCategory.SNAKE) {
             SnakeTile snakeTile = (SnakeTile) currentTile;
             Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.SNAKE);
-            int choice = 3; // Default to fleeing if skipped
+            int choice = 3; // Default to fleeing/plunge if skipped
 
             if (event != null) {
                 eventManager.triggerEvent(currentPlayer);
@@ -267,20 +275,18 @@ public class ConsoleTestGame {
             EventChoice chosen = (event != null && choice >= 1 && choice <= event.getChoices().size())
                 ? event.getChoices().get(choice - 1) : null;
 
-            if (chosen != null && chosen.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY) {
-                // Shield deflection: successfully held ground without battle or slide!
-                System.out.println("  [HELD GROUND] You warded off the serpent and held your position!");
-            } else if (choice == 1) {
-                // Choice 1: Draw weapon and engage in battle
+            if (chosen != null && chosen.isTriggersCombat()) {
                 snakeTile.startCombat(currentPlayer);
+            } else if (chosen != null && (chosen.isSkipsSpecialMove() || chosen.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY)) {
+                System.out.println("  [EVADED] You navigated past the serpent without sliding down!");
             } else {
-                // Choice 3 (or retreat/flee): Slide down safely without combat!
-                System.out.println("  [RETREAT] You fled down the slope to escape the beast!");
+                System.out.println("  [PLUNGE] You rode the serpent's coils down the slope!");
                 snakeTile.applyEffect(currentPlayer);
             }
         } else if (category == EventCategory.LADDER) {
             LadderTile ladderTile = (LadderTile) currentTile;
             boolean canClimb = true;
+            int bonusMove = 0;
 
             if (eventManager.shouldTriggerLadderEvent()) {
                 Event event = eventManager.selectEventForTile(currentTile.getPosition(), EventCategory.LADDER);
@@ -290,11 +296,16 @@ public class ConsoleTestGame {
                     if (sc.hasNextInt()) {
                         int choice = sc.nextInt();
                         sc.nextLine();
+                        int posBefore = currentPlayer.getPosition();
                         eventManager.resolveEvent(choice, currentPlayer);
+                        bonusMove = currentPlayer.getPosition() - posBefore;
 
                         EventChoice chosen = (choice >= 1 && choice <= event.getChoices().size())
                             ? event.getChoices().get(choice - 1) : null;
-                        if (chosen != null && chosen.getDifficultyClass() > 0 && !chosen.didLastCheckSucceed()) {
+                        if (chosen != null && chosen.isSkipsSpecialMove()) {
+                            System.out.println("  [FOREGONE] You stayed at the ladder's base to gather your prize.");
+                            canClimb = false;
+                        } else if (chosen != null && chosen.getDifficultyClass() > 0 && !chosen.didLastCheckSucceed()) {
                             System.out.println("  [SLIPPED] Your grip gave out! You tumbled off the ladder and could not ascend!");
                             canClimb = false;
                         }
@@ -305,11 +316,31 @@ public class ConsoleTestGame {
             }
 
             if (canClimb) {
-                ladderTile.applyEffect(currentPlayer);
+                int finalDest = Math.min(board.getBoardSize(), ladderTile.getDestination() + Math.max(0, bonusMove));
+                currentPlayer.setPosition(finalDest);
+                System.out.println("  [ASCENT] Climbed up to Tile " + finalDest);
             }
         } else {
-            // Normal tile: Dynamic pacing check with cooldown & bad-luck protection
-            if (eventManager.shouldTriggerAmbientEvent(currentPlayer)) {
+            TileLandmark landmark = currentTile.getLandmark();
+            if (landmark != TileLandmark.NONE) {
+                EventCategory poiCat = EventCategory.NORMAL;
+                if (landmark == TileLandmark.SHRINE) poiCat = EventCategory.SHRINE;
+                else if (landmark == TileLandmark.MERCHANT) poiCat = EventCategory.MERCHANT;
+                else if (landmark == TileLandmark.TREASURE) poiCat = EventCategory.TREASURE;
+                else if (landmark == TileLandmark.CROSSROADS) poiCat = EventCategory.CROSSROADS;
+
+                Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), poiCat);
+                if (event != null) {
+                    eventManager.triggerEvent(currentPlayer);
+                    System.out.print("Enter your choice (1-" + event.getChoices().size() + "): ");
+                    if (sc.hasNextInt()) {
+                        int choice = sc.nextInt();
+                        sc.nextLine();
+                        eventManager.resolveEvent(choice, currentPlayer);
+                    }
+                    currentPlayer.resetEventCooldown();
+                }
+            } else if (eventManager.shouldTriggerAmbientEvent(currentPlayer)) {
                 Event event = eventManager.selectEventForTile(currentPlayer.getPosition(), EventCategory.NORMAL);
                 if (event != null) {
                     eventManager.triggerEvent(currentPlayer);

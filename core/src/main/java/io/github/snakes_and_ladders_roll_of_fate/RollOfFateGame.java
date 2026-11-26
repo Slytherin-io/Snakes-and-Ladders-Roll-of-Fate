@@ -110,7 +110,7 @@ public class RollOfFateGame extends Game {
                 "Minor Health Potion", io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.HEALTH, 25, "Restores 25 HP"
             ));
             player.addItem(io.github.snakes_and_ladders_roll_of_fate.items.Item.createEquipment(
-                "Iron Sword", io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.ATTACK, 4, 2, 4, "+4 ATK (1 Turn Buff)"
+                "Iron Sword", io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.ATTACK, 4, 1, 1, "+4 ATK (1-Use Relic)"
             ));
             players.add(player);
         }

@@ -12,7 +12,8 @@ public class EventChoice {
         MIN_HEALTH,
         MIN_EXPERIENCE,
         CONSUME_ANY_ITEM,
-        EQUIPMENT_DURABILITY
+        EQUIPMENT_DURABILITY,
+        HAS_CURSE
     }
 
     @FunctionalInterface
@@ -30,6 +31,8 @@ public class EventChoice {
     private int requirementValue = 0;
     private ItemType requiredItemType = null;
     private boolean lastCheckSucceeded = true;
+    private boolean skipsSpecialMove = false;
+    private boolean triggersCombat = false;
     private static final Dice d20 = new Dice(20);
 
     // Guaranteed choice constructor
@@ -85,12 +88,34 @@ public class EventChoice {
         return choice;
     }
 
-    // Factory method: Equipment-Assisted Choice (Consumes 1 durability of equipment to guarantee safety)
+    // Factory method: Equipment-Assisted Choice (Expends single-use relic to deflect hazard safely)
     public static EventChoice createEquipmentAssistedChoice(String text, ItemType requiredType) {
         EventChoice choice = new EventChoice(text);
         choice.requirementType = ChoiceRequirementType.EQUIPMENT_DURABILITY;
         choice.requiredItemType = requiredType;
         return choice;
+    }
+
+    // Factory method: Cleanse Curse Choice (Only visible/available when player carries a Curse)
+    public static EventChoice createCleanseCurseChoice(String text) {
+        EventChoice choice = new EventChoice(text);
+        choice.requirementType = ChoiceRequirementType.HAS_CURSE;
+        return choice;
+    }
+
+    // Fluent helper for custom EventEffect instances (e.g., curse drops)
+    public EventChoice onSuccess(EventEffect effect) {
+        if (effect != null) {
+            this.successEffects.add(effect);
+        }
+        return this;
+    }
+
+    public EventChoice onFailure(EventEffect effect) {
+        if (effect != null) {
+            this.failureEffects.add(effect);
+        }
+        return this;
     }
 
     // Fluent helper for item rewards
@@ -176,11 +201,13 @@ public class EventChoice {
             case MIN_HEALTH:
                 return player.getHealth() > requirementValue;
             case MIN_EXPERIENCE:
-                return player.getExperience() >= requirementValue;
+                return player.getTotalExperience() >= requirementValue;
             case CONSUME_ANY_ITEM:
                 return player.getInventory() != null && !player.getInventory().isEmpty();
             case EQUIPMENT_DURABILITY:
                 return player.hasItemType(requiredItemType != null ? requiredItemType : ItemType.EQUIPMENT);
+            case HAS_CURSE:
+                return player.hasCurse();
             case NONE:
             default:
                 return true;
@@ -196,7 +223,9 @@ public class EventChoice {
             case CONSUME_ANY_ITEM:
                 return "(Requires an item in inventory to barter)";
             case EQUIPMENT_DURABILITY:
-                return "(Requires an equipment item to deflect)";
+                return "(Requires a 1-use relic to deflect)";
+            case HAS_CURSE:
+                return "(Requires a Curse in satchel)";
             case NONE:
             default:
                 return "";
@@ -232,12 +261,12 @@ public class EventChoice {
             case MIN_HEALTH:
                 player.setHealth(player.getHealth() - requirementValue);
                 System.out.printf("  [BLOOD SACRIFICE] Paid %d HP (Remaining HP: %d)%n", requirementValue, player.getHealth());
-                result.consequences.add(String.format("Sacrifice: -%d HP (Current: %d)", requirementValue, player.getHealth()));
+                result.consequences.add(String.format("Sacrifice: -%d HP", requirementValue));
                 break;
             case MIN_EXPERIENCE:
-                player.setExperience(player.getExperience() - requirementValue);
-                System.out.printf("  [KNOWLEDGE TRIBUTE] Paid %d EXP (Remaining EXP: %d)%n", requirementValue, player.getExperience());
-                result.consequences.add(String.format("Tribute: -%d EXP (Total: %d)", requirementValue, player.getExperience()));
+                player.spendTotalExperience(requirementValue);
+                System.out.printf("  [KNOWLEDGE TRIBUTE] Paid %d EXP (Remaining Total EXP: %d)%n", requirementValue, player.getTotalExperience());
+                result.consequences.add(String.format("Tribute: -%d EXP", requirementValue));
                 break;
             case CONSUME_ANY_ITEM:
                 Item traded = null;
@@ -259,15 +288,19 @@ public class EventChoice {
                     result.shieldDeflected = true;
                     System.out.printf("  [DEFLECTED] %s absorbed the blow! Remaining uses: %d/%d%n",
                         eq.getName(), eq.getDurability(), eq.getMaxDurability());
-                    result.consequences.add(String.format("Deflected: %s absorbed the impact! (%d/%d uses)",
-                        eq.getName(), eq.getDurability(), eq.getMaxDurability()));
+                    result.consequences.add(String.format("Deflected: %s absorbed the impact!", eq.getName()));
                     if (eq.isBroken()) {
                         result.brokenItem = eq;
-                        System.out.println("  [BROKEN] " + eq.getName() + " shattered from the impact!");
-                        result.consequences.add("Shattered: " + eq.getName() + " broke from the strain!");
+                        System.out.println("  [EXPENDED] " + eq.getName() + " shattered from the impact!");
+                        result.consequences.add("Expended: " + eq.getName() + " broke after protecting you!");
                         player.getInventory().removeItem(eq);
                     }
                 }
+                break;
+            case HAS_CURSE:
+                int cleansed = player.cleanseCurses();
+                System.out.println("  [PURIFIED] Cleansed " + cleansed + " curse(s) from satchel!");
+                result.consequences.add("Purified: Cleansed " + cleansed + " cursed burden(s) from your satchel!");
                 break;
             case NONE:
             default:
@@ -331,4 +364,18 @@ public class EventChoice {
     public int getRequirementValue() { return requirementValue; }
     public ItemType getRequiredItemType() { return requiredItemType; }
     public boolean didLastCheckSucceed() { return lastCheckSucceeded; }
+
+    public EventChoice skipsSpecialMove() {
+        this.skipsSpecialMove = true;
+        return this;
+    }
+
+    public boolean isSkipsSpecialMove() { return skipsSpecialMove; }
+
+    public EventChoice triggersCombat() {
+        this.triggersCombat = true;
+        return this;
+    }
+
+    public boolean isTriggersCombat() { return triggersCombat; }
 }
