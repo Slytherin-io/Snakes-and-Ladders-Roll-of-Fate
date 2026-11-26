@@ -12,11 +12,16 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.ui.Button;
 import com.badlogic.gdx.scenes.scene2d.ui.Cell;
 import com.badlogic.gdx.scenes.scene2d.ui.Image;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.Slider;
+import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
@@ -173,6 +178,23 @@ public class BattleScreen implements Screen {
     private BitmapFont damageFont, critFont;
     private BitmapFont modalTitleFont, modalSubFont, modalRewardFont, modalNarrativeFont, modalStatusFont;
 
+    // Pause, Settings, & Leave Menu Fonts & UI References
+    private BitmapFont topPauseFont;
+    private BitmapFont pauseBadgeFont;
+    private BitmapFont pauseTitleFont;
+    private BitmapFont pauseSubFont;
+    private BitmapFont pauseBodyFont;
+    private BitmapFont pauseBtnFont;
+    private BitmapFont pauseTipFont;
+    private BitmapFont sliderFont;
+
+    private boolean isPaused = false;
+    private Button pauseBtn;
+    private Table pauseModalScrim;
+    private Table pauseModalTable;
+    private Table settingsModalTable;
+    private Table leaveConfirmModalTable;
+
     // UI Elements
     private Label topBannerLabel, battleLogLabel, playerHpLabel, enemyHpLabel;
     private Table battleLogContainer;
@@ -213,8 +235,16 @@ public class BattleScreen implements Screen {
         this.battleSystem = new BattleSystem();
     }
 
+    public boolean isDawnWardenBattle() {
+        return enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Dawn Warden");
+    }
+
+    public boolean isPaleShepherdBattle() {
+        return enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Pale Shepherd");
+    }
+
     public boolean isBossBattle() {
-        return snakeTile == null || (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Dawn Warden"));
+        return isDawnWardenBattle() || isPaleShepherdBattle() || snakeTile == null;
     }
 
     private void triggerScreenShake(float intensity, float duration) {
@@ -344,6 +374,17 @@ public class BattleScreen implements Screen {
         modalNarrativeFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.WHITE);
         modalStatusFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 24, Color.WHITE);
 
+        Color darkBrown = Color.valueOf("#5a2d0c");
+        Color pillBrown = Color.valueOf("#854b25");
+        topPauseFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 25, Color.WHITE);
+        pauseBadgeFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
+        pauseTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, darkBrown);
+        pauseSubFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, darkBrown);
+        pauseBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, darkBrown);
+        pauseBtnFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
+        pauseTipFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#54280e"));
+        sliderFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, darkBrown);
+
         // Register Battle Listeners for Dynamic FX
         battleSystem.setBattleListener((attacker, defender, damage, isCrit, isMiss) -> {
             if (attacker == player) {
@@ -385,7 +426,14 @@ public class BattleScreen implements Screen {
         }
 
         // Load Enemy Animation
-        if (isBossBattle()) {
+        if (isPaleShepherdBattle()) {
+            Texture shepherdSheet = game.getAssetManager().get(Assets.CHAR_PALE_SHEPHERD);
+            TextureRegion[][] shepherdGrid = TextureRegion.split(shepherdSheet, 256, 256);
+            enemyIdleAnim = new Animation<>(0.20f, shepherdGrid[0]);
+            enemyIdleAnim.setPlayMode(Animation.PlayMode.LOOP);
+            enemyAttackAnim = new Animation<>(0.16f, shepherdGrid[1]);
+            enemyAttackAnim.setPlayMode(Animation.PlayMode.NORMAL);
+        } else if (isDawnWardenBattle() || isBossBattle()) {
             Texture bossSheet = game.getAssetManager().get(Assets.BOSS_DAWN_WARDEN);
             TextureRegion[][] bossGrid = TextureRegion.split(bossSheet, 344, 384);
             enemyIdleAnim = new Animation<>(0.22f, bossGrid[0]);
@@ -409,11 +457,13 @@ public class BattleScreen implements Screen {
 
         // Build UI
         buildTopBanner();
+        buildPauseButton();
         buildBattleLog();
         buildHealthPills();
         buildActionButtons();
         buildItemPopup();
         buildContinueOverlay();
+        buildPauseAndSettingsModals(darkBrown, pillBrown);
         syncUi();
 
     }
@@ -436,25 +486,69 @@ public class BattleScreen implements Screen {
     private void buildTopBanner() {
         int act;
         String bannerText;
-        if (isBossBattle()) {
+        Color bannerBgColor;
+        if (isPaleShepherdBattle()) {
+            act = (player.getPosition() <= 30) ? 1 : ((player.getPosition() <= 70) ? 2 : 3);
+            bannerText = "MORTAL CLASH: THE PALE SHEPHERD!";
+            bannerBgColor = Color.valueOf("#540d18");
+        } else if (isDawnWardenBattle()) {
             act = 3;
             bannerText = "SUMMIT TRIAL: THE DAWN WARDEN!";
+            bannerBgColor = Color.valueOf("#b86518");
         } else {
             act = (snakeTile != null) ? ((snakeTile.getPosition() <= 30) ? 1 : ((snakeTile.getPosition() <= 70) ? 2 : 3)) : 1;
             String actRoman = (act == 1) ? "ACT I" : ((act == 2) ? "ACT II" : "ACT III");
-            bannerText = actRoman + " AMBUSH: " + enemy.getEnemyType().toUpperCase() + "!";
+            bannerText = actRoman + " AMBUSH: " + (enemy != null ? enemy.getEnemyType().toUpperCase() : "SNAKE") + "!";
+            bannerBgColor = Color.valueOf("#854b25");
         }
         topBannerLabel = new Label(bannerText,
             new Label.LabelStyle(topBannerFont, Color.valueOf("#fffdfa")));
         topBannerLabel.setAlignment(Align.center);
         Table banner = new Table();
-        banner.setBackground(UIUtils.createRoundedDrawable(920, 70, 20, isBossBattle() ? Color.valueOf("#b86518") : Color.valueOf("#854b25")));
+        banner.setBackground(UIUtils.createRoundedDrawable(920, 70, 20, bannerBgColor));
         banner.add(topBannerLabel).pad(8, 36, 8, 36);
         Table outer = new Table();
         outer.setFillParent(true);
         outer.top().padTop(22);
         outer.add(banner).center();
         hudStage.addActor(outer);
+    }
+
+    /**
+     * Top-Right Pause Button (|| PAUSE) matching BoardScreen proportions and styling.
+     */
+    private void buildPauseButton() {
+        Color pillBrown = Color.valueOf("#854b25");
+        Button.ButtonStyle pauseStyle = new Button.ButtonStyle();
+        pauseStyle.up = UIUtils.createRoundedDrawable(164, 70, 18, pillBrown);
+        pauseStyle.over = UIUtils.createRoundedDrawable(164, 70, 18, Color.valueOf("#9c572b"));
+
+        pauseBtn = new Button(pauseStyle);
+        UIUtils.addScaleHoverEffect(pauseBtn);
+
+        Label pauseLabel = new Label("|| PAUSE", new Label.LabelStyle(topPauseFont, Color.WHITE));
+        pauseBtn.add(pauseLabel).center();
+
+        pauseBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                if (!isPaused) {
+                    pauseGame();
+                } else {
+                    resumeGame();
+                }
+            }
+        });
+
+        Table container = new Table();
+        container.setFillParent(true);
+        container.top().right().padTop(22).padRight(35);
+        container.add(pauseBtn).size(164, 70);
+
+        hudStage.addActor(container);
     }
 
     private void buildBattleLog() {
@@ -572,7 +666,7 @@ public class BattleScreen implements Screen {
         bottomBar.setFillParent(true);
         bottomBar.bottom().padBottom(30);
 
-        if (isBossBattle()) {
+        if (isDawnWardenBattle()) {
             bottomBar.add(btnAttack).size(200, 100).padRight(20);
             bottomBar.add(btnDefend).size(200, 100).padRight(20);
             bottomBar.add(btnItem).size(200, 100);
@@ -653,13 +747,30 @@ public class BattleScreen implements Screen {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
-                if (isBossBattle()) {
+                if (isDawnWardenBattle()) {
                     BattleOutcome outcome = battleSystem.getFinalOutcome();
                     boolean won = (outcome == BattleOutcome.VICTORY);
                     if (game.getRunTracker() != null && won) {
                         game.getRunTracker().recordThroneClaimed(player);
                     }
                     game.setScreen(new GameSummaryScreen(game, won, player));
+                    return;
+                }
+                if (isPaleShepherdBattle()) {
+                    BattleOutcome outcome = battleSystem.getFinalOutcome();
+                    if (outcome == null) {
+                        outcome = (player.getHealth() <= 0) ? BattleOutcome.DEFEAT : BattleOutcome.ESCAPED;
+                    }
+                    if (outcome == BattleOutcome.DEFEAT || player.getHealth() <= 0) {
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordPlayerFallen(player);
+                        }
+                        if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                            game.setScreen(new GameSummaryScreen(game, false, player));
+                            return;
+                        }
+                    }
+                    game.setScreen(new BoardScreen(game, outcome, enemy));
                     return;
                 }
                 if (player.getHealth() <= 0) {
@@ -689,6 +800,283 @@ public class BattleScreen implements Screen {
         hudStage.addActor(continueTable);
     }
 
+    /**
+     * Builds the unified Parchment Scroll Modals for Pause, Settings, and Leave Game confirmation in BattleScreen.
+     */
+    private void buildPauseAndSettingsModals(Color darkBrown, Color pillBrown) {
+        // Fullscreen translucent backdrop that softly dims the scene without obscuring it
+        pauseModalScrim = new Table();
+        pauseModalScrim.setFillParent(true);
+        pauseModalScrim.setBackground(UIUtils.createRoundedDrawable(1920, 1080, 0, new Color(0f, 0f, 0f, 0.45f)));
+        pauseModalScrim.setVisible(false);
+        pauseModalScrim.setTouchable(Touchable.enabled);
+        hudStage.addActor(pauseModalScrim);
+
+        TextButton.TextButtonStyle menuBtnStyle = new TextButton.TextButtonStyle();
+        menuBtnStyle.up = UIUtils.createRoundedDrawable(340, 52, 16, pillBrown);
+        menuBtnStyle.over = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#9c572b"));
+        menuBtnStyle.font = pauseBtnFont;
+        menuBtnStyle.fontColor = Color.WHITE;
+
+        TextButton.TextButtonStyle dangerBtnStyle = new TextButton.TextButtonStyle();
+        dangerBtnStyle.up = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#8a2424"));
+        dangerBtnStyle.over = UIUtils.createRoundedDrawable(340, 52, 16, Color.valueOf("#a63232"));
+        dangerBtnStyle.font = pauseBtnFont;
+        dangerBtnStyle.fontColor = Color.WHITE;
+
+        // =====================================================================
+        // 1. PAUSE MODAL
+        // =====================================================================
+        Label pauseBadge = new Label("BATTLE PAUSED", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
+        pauseBadge.setAlignment(Align.center);
+        Table pauseBadgeTable = new Table();
+        pauseBadgeTable.setBackground(UIUtils.createRoundedDrawable(340, 58, 18, pillBrown));
+        pauseBadgeTable.add(pauseBadge).pad(6, 36, 6, 36);
+
+        Table pauseContent = new Table();
+        Label pauseSub = new Label("The clash halts at your command.", new Label.LabelStyle(pauseSubFont, darkBrown));
+        pauseSub.setAlignment(Align.center);
+        pauseContent.add(pauseSub).padTop(12).padBottom(20).center().row();
+
+        TextButton resumeBtn = new TextButton("RESUME", menuBtnStyle);
+        UIUtils.addScaleHoverEffect(resumeBtn);
+        resumeBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                resumeGame();
+            }
+        });
+
+        TextButton settingsBtn = new TextButton("SETTINGS", menuBtnStyle);
+        UIUtils.addScaleHoverEffect(settingsBtn);
+        settingsBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                showSettingsMenu();
+            }
+        });
+
+        TextButton leaveBtn = new TextButton("FORFEIT & LEAVE", dangerBtnStyle);
+        UIUtils.addScaleHoverEffect(leaveBtn);
+        leaveBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                showLeaveConfirmMenu();
+            }
+        });
+
+        pauseContent.add(resumeBtn).size(340, 52).padBottom(12).center().row();
+        pauseContent.add(settingsBtn).size(340, 52).padBottom(12).center().row();
+        pauseContent.add(leaveBtn).size(340, 52).padBottom(16).center().row();
+
+        Label escTip = new Label("Press ESC or P to resume", new Label.LabelStyle(pauseTipFont, Color.valueOf("#54280e")));
+        escTip.setAlignment(Align.center);
+        pauseContent.add(escTip).padTop(4).padBottom(10).center();
+
+        Image pauseScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
+        pauseScrollBg.setScaling(Scaling.stretch);
+
+        Stack pauseScrollStack = new Stack();
+        pauseScrollStack.add(pauseScrollBg);
+        pauseScrollStack.add(pauseContent);
+
+        pauseModalTable = new Table();
+        pauseModalTable.setFillParent(true);
+        pauseModalTable.setVisible(false);
+        pauseModalTable.add(pauseBadgeTable).size(340, 58).padBottom(-22).center().row();
+        pauseModalTable.add(pauseScrollStack).size(800, 580).center().row();
+
+        hudStage.addActor(pauseModalTable);
+
+        // =====================================================================
+        // 2. SETTINGS MODAL
+        // =====================================================================
+        Label settingsBadge = new Label("SETTINGS", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
+        settingsBadge.setAlignment(Align.center);
+        Table settingsBadgeTable = new Table();
+        settingsBadgeTable.setBackground(UIUtils.createRoundedDrawable(280, 58, 18, pillBrown));
+        settingsBadgeTable.add(settingsBadge).pad(6, 36, 6, 36);
+
+        Slider.SliderStyle sliderStyle = UIUtils.createSliderStyle(darkBrown, darkBrown);
+
+        Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
+        int musicVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getMusicVolume() * 10f) : 7;
+        musicSlider.setValue(musicVal);
+        Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(sliderFont, darkBrown));
+        musicSlider.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                int val = (int) musicSlider.getValue();
+                musicNum.setText(String.valueOf(val));
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().setMusicVolume(val / 10f);
+                }
+            }
+        });
+
+        Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
+        int sfxVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getSfxVolume() * 10f) : 8;
+        sfxSlider.setValue(sfxVal);
+        Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(sliderFont, darkBrown));
+        sfxSlider.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                int val = (int) sfxSlider.getValue();
+                sfxNum.setText(String.valueOf(val));
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().setSfxVolume(val / 10f);
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+            }
+        });
+
+        Image soundIcon = new Image(game.getAssetManager().get(Assets.ICON_SOUND));
+        Image musicIcon = new Image(game.getAssetManager().get(Assets.ICON_MUSIC));
+
+        Table settingsContent = new Table();
+
+        Label musicLabel = new Label("MUSIC VOLUME", new Label.LabelStyle(pauseTitleFont, darkBrown));
+        settingsContent.add(musicLabel).colspan(3).center().padBottom(10).row();
+        settingsContent.add(musicIcon).size(38, 38).padRight(16);
+        settingsContent.add(musicSlider).width(340).padRight(16);
+        settingsContent.add(musicNum).width(44).left().padBottom(26).row();
+
+        Label sfxLabel = new Label("SFX VOLUME", new Label.LabelStyle(pauseTitleFont, darkBrown));
+        settingsContent.add(sfxLabel).colspan(3).center().padBottom(10).row();
+        settingsContent.add(soundIcon).size(38, 38).padRight(16);
+        settingsContent.add(sfxSlider).width(340).padRight(16);
+        settingsContent.add(sfxNum).width(44).left().row();
+
+        Image settingsScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
+        settingsScrollBg.setScaling(Scaling.stretch);
+
+        Stack settingsScrollStack = new Stack();
+        settingsScrollStack.add(settingsScrollBg);
+        settingsScrollStack.add(settingsContent);
+
+        TextButton backSettingsBtn = new TextButton("BACK", menuBtnStyle);
+        UIUtils.addScaleHoverEffect(backSettingsBtn);
+        backSettingsBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                showPauseMenu();
+            }
+        });
+
+        settingsModalTable = new Table();
+        settingsModalTable.setFillParent(true);
+        settingsModalTable.setVisible(false);
+        settingsModalTable.add(settingsBadgeTable).size(280, 58).padBottom(-22).center().row();
+        settingsModalTable.add(settingsScrollStack).size(800, 580).center().row();
+        settingsModalTable.add(backSettingsBtn).size(180, 52).padTop(-22).center().row();
+
+        hudStage.addActor(settingsModalTable);
+
+        // =====================================================================
+        // 3. LEAVE GAME CONFIRMATION MODAL
+        // =====================================================================
+        Label leaveBadge = new Label("LEAVE BATTLE?", new Label.LabelStyle(pauseBadgeFont, Color.WHITE));
+        leaveBadge.setAlignment(Align.center);
+        Table leaveBadgeTable = new Table();
+        leaveBadgeTable.setBackground(UIUtils.createRoundedDrawable(300, 58, 18, Color.valueOf("#8a2424")));
+        leaveBadgeTable.add(leaveBadge).pad(6, 36, 6, 36);
+
+        Table leaveContent = new Table();
+
+        Label leaveWarningTitle = new Label("Abandon Current Battle?", new Label.LabelStyle(pauseTitleFont, darkBrown));
+        leaveWarningTitle.setAlignment(Align.center);
+        leaveContent.add(leaveWarningTitle).padTop(10).padBottom(16).center().row();
+
+        Label leaveWarningBody = new Label("Are you sure you want to return to the main menu?\nAny unsaved progress on this battle will be lost.", new Label.LabelStyle(pauseBodyFont, darkBrown));
+        leaveWarningBody.setAlignment(Align.center);
+        leaveWarningBody.setWrap(true);
+        leaveContent.add(leaveWarningBody).width(500).padBottom(28).center().row();
+
+        Table leaveBtnRow = new Table();
+        TextButton stayBtn = new TextButton("STAY", menuBtnStyle);
+        UIUtils.addScaleHoverEffect(stayBtn);
+        stayBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                showPauseMenu();
+            }
+        });
+
+        TextButton confirmLeaveBtn = new TextButton("LEAVE", dangerBtnStyle);
+        UIUtils.addScaleHoverEffect(confirmLeaveBtn);
+        confirmLeaveBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                leaveGameToMainMenu();
+            }
+        });
+
+        leaveBtnRow.add(stayBtn).size(170, 52).padRight(20);
+        leaveBtnRow.add(confirmLeaveBtn).size(170, 52);
+        leaveContent.add(leaveBtnRow).padBottom(12).center();
+
+        Image leaveScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
+        leaveScrollBg.setScaling(Scaling.stretch);
+
+        Stack leaveScrollStack = new Stack();
+        leaveScrollStack.add(leaveScrollBg);
+        leaveScrollStack.add(leaveContent);
+
+        leaveConfirmModalTable = new Table();
+        leaveConfirmModalTable.setFillParent(true);
+        leaveConfirmModalTable.setVisible(false);
+        leaveConfirmModalTable.add(leaveBadgeTable).size(300, 58).padBottom(-22).center().row();
+        leaveConfirmModalTable.add(leaveScrollStack).size(800, 580).center().row();
+
+        hudStage.addActor(leaveConfirmModalTable);
+    }
+
+    private void pauseGame() {
+        if (continueTable != null && continueTable.isVisible()) return;
+        isPaused = true;
+        if (itemPopup != null) itemPopup.setVisible(false);
+        showPauseMenu();
+    }
+
+    private void resumeGame() {
+        isPaused = false;
+        pauseModalScrim.setVisible(false);
+        pauseModalTable.setVisible(false);
+        settingsModalTable.setVisible(false);
+        leaveConfirmModalTable.setVisible(false);
+    }
+
+    private void showPauseMenu() {
+        pauseModalScrim.setVisible(true);
+        pauseModalTable.setVisible(true);
+        settingsModalTable.setVisible(false);
+        leaveConfirmModalTable.setVisible(false);
+    }
+
+    private void showSettingsMenu() {
+        pauseModalScrim.setVisible(true);
+        pauseModalTable.setVisible(false);
+        settingsModalTable.setVisible(true);
+        leaveConfirmModalTable.setVisible(false);
+    }
+
+    private void showLeaveConfirmMenu() {
+        pauseModalScrim.setVisible(true);
+        pauseModalTable.setVisible(false);
+        settingsModalTable.setVisible(false);
+        leaveConfirmModalTable.setVisible(true);
+    }
+
+    private void leaveGameToMainMenu() {
+        game.setScreen(new MainMenuScreen(game));
+    }
+
     private void syncUi() {
         BattleState state = battleSystem.getCurrentState();
         boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f);
@@ -706,11 +1094,18 @@ public class BattleScreen implements Screen {
         btnAttack.setDisabled(!playerTurn);
         btnDefend.setDisabled(!playerTurn);
         btnItem.setDisabled(!playerTurn);
-        if (isBossBattle()) {
+        if (isDawnWardenBattle()) {
             btnEscape.setDisabled(true);
             btnEscape.setVisible(false);
         } else {
             btnEscape.setDisabled(!playerTurn);
+            btnEscape.setVisible(true);
+        }
+
+        if (continueTable != null && continueTable.isVisible()) {
+            if (pauseBtn != null) pauseBtn.setVisible(false);
+        } else if (pauseBtn != null && !isPaused) {
+            pauseBtn.setVisible(true);
         }
 
         // Dim disabled buttons
@@ -718,7 +1113,7 @@ public class BattleScreen implements Screen {
         btnAttack.setColor(1, 1, 1, alpha);
         btnDefend.setColor(1, 1, 1, alpha);
         btnItem.setColor(1, 1, 1, alpha);
-        if (!isBossBattle()) {
+        if (!isDawnWardenBattle()) {
             btnEscape.setColor(1, 1, 1, alpha);
         }
 
@@ -726,7 +1121,15 @@ public class BattleScreen implements Screen {
         if (ended && !outcomeResolved) {
             outcomeResolved = true;
             BattleOutcome o = battleSystem.getFinalOutcome();
-            if (isBossBattle()) {
+            if (isPaleShepherdBattle()) {
+                if (o == BattleOutcome.VICTORY) {
+                    outcomeMessage = "The Pale Shepherd dissolves into crimson mist, his golden scythe shattered!";
+                } else if (o == BattleOutcome.ESCAPED) {
+                    outcomeMessage = "You barely evaded Death's scythe! (-20 HP Parting Blow)";
+                } else {
+                    outcomeMessage = "The Pale Shepherd harvested your soul.";
+                }
+            } else if (isDawnWardenBattle()) {
                 outcomeMessage = (o == BattleOutcome.VICTORY) ? "The Dawn Warden bestows the breath of life!" : "Your spirit finds peace atop the clouds.";
             } else if (snakeTile != null) {
                 outcomeMessage = snakeTile.resolveOutcome(player, enemy, o); // Apply EXP/Loot/Slide
@@ -739,7 +1142,76 @@ public class BattleScreen implements Screen {
                 battleLogContainer.setVisible(false);
             }
 
-            if (isBossBattle()) {
+            if (isPaleShepherdBattle()) {
+                if (o == BattleOutcome.VICTORY) {
+                    topBannerLabel.setText("DEATH BANISHED!");
+                    modalTitleLabel.setText("MORTAL TRIUMPH!");
+                    modalTitleLabel.setColor(Color.valueOf("#ffd54f"));
+                    modalSubtitleLabel.setText("YOU STRUCK DOWN THE PALE SHEPHERD!");
+
+                    rewardExpLabel.setText("+50 EXP  |  The Pale Shepherd is banished 15 tiles back!");
+                    rewardExpLabel.setColor(Color.valueOf("#69f0ae"));
+
+                    rewardLootLabel.setText("Pursuit Halted for 3 Rounds of Contemplation!");
+                    rewardLootLabel.setColor(Color.valueOf("#ffd54f"));
+
+                    rewardStatusLabel.setText("Hero Health: " + player.getHealth() + " / " + maxHp + " HP   |   Mortal Defiance!");
+                    rewardStatusLabel.setColor(Color.valueOf("#ffe0b2"));
+
+                    continueBtn.setText("RESUME ASCENT");
+                    continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#2e7d32"), Color.valueOf("#1b5e20"), 2);
+                    continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#388e3c"), Color.valueOf("#2e7d32"), 2);
+                    if (continueBtnCell != null) continueBtnCell.width(340);
+
+                    spawnCelebrationSparks(960f, 540f);
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
+                    }
+                } else if (o == BattleOutcome.ESCAPED) {
+                    topBannerLabel.setText("DESPERATE FLIGHT!");
+                    modalTitleLabel.setText("HASTY ESCAPE!");
+                    modalTitleLabel.setColor(Color.valueOf("#ffb74d"));
+                    modalSubtitleLabel.setText("YOU BARELY EVADED THE GOLDEN SCYTHE!");
+
+                    rewardExpLabel.setText("Suffered heavy parting wound (-20 HP)");
+                    rewardExpLabel.setColor(Color.valueOf("#ff8a80"));
+
+                    rewardLootLabel.setText("Scrambled 3 tiles ahead! Shepherd paused for 1 round.");
+                    rewardLootLabel.setColor(Color.valueOf("#ffd54f"));
+
+                    rewardStatusLabel.setText("Hero Health: " + Math.max(1, player.getHealth() - 20) + " / " + maxHp + " HP");
+                    rewardStatusLabel.setColor(Color.valueOf("#ffe0b2"));
+
+                    continueBtn.setText("SCRAMBLE AHEAD");
+                    continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                    continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                    if (continueBtnCell != null) continueBtnCell.width(340);
+                } else {
+                    topBannerLabel.setText("CLAIMED BY DEATH");
+                    modalTitleLabel.setText("REST IN PEACE");
+                    modalTitleLabel.setColor(Color.valueOf("#ef5350"));
+                    modalSubtitleLabel.setText("THE PALE SHEPHERD HARVESTED YOUR SPIRIT");
+
+                    rewardExpLabel.setText("Your ascent has ended on the mountain trail.");
+                    rewardExpLabel.setColor(Color.valueOf("#cfd8dc"));
+
+                    rewardLootLabel.setText("No more climbing, no more pain.");
+                    rewardLootLabel.setColor(Color.valueOf("#ffffff"));
+
+                    rewardStatusLabel.setText("Hero Status: Fallen (0 / " + maxHp + " HP)");
+                    rewardStatusLabel.setColor(Color.valueOf("#cfd8dc"));
+
+                    continueBtn.setText("VIEW EXPEDITION SUMMARY");
+                    continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                    continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                    if (continueBtnCell != null) continueBtnCell.width(460);
+                }
+                victoryCard.invalidateHierarchy();
+                continueTable.setVisible(true);
+                return;
+            }
+
+            if (isDawnWardenBattle()) {
                 if (o == BattleOutcome.VICTORY) {
                     if (game.getRunTracker() != null) {
                         game.getRunTracker().recordThroneClaimed(player);
@@ -773,7 +1245,7 @@ public class BattleScreen implements Screen {
                     modalTitleLabel.setColor(Color.valueOf("#ffa726"));
                     modalSubtitleLabel.setText("YOUR SPIRIT RESTS TRANQUIL ATOP THE SPIRE OF FATE");
 
-                    rewardExpLabel.setText("The Pale Shepherd covers you with a warm blanket of rest.");
+                    rewardExpLabel.setText("The Dawn Warden covers you with a warm blanket of rest.");
                     rewardExpLabel.setColor(Color.valueOf("#ffb74d"));
 
                     rewardLootLabel.setText("The long climb has ended. No more cold, no more pain.");
@@ -1007,6 +1479,25 @@ public class BattleScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        float hudDelta = delta;
+
+        // Hotkeys: Toggle pause with ESC or P, or step back in modal hierarchy
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+            if (isPaused) {
+                if (settingsModalTable.isVisible() || leaveConfirmModalTable.isVisible()) {
+                    showPauseMenu();
+                } else {
+                    resumeGame();
+                }
+            } else if (continueTable == null || !continueTable.isVisible()) {
+                pauseGame();
+            }
+        }
+
+        if (isPaused) {
+            delta = 0f;
+        }
+
         stateTime += delta;
         int tile = (snakeTile != null) ? snakeTile.getPosition() : 100;
 
@@ -1075,10 +1566,12 @@ public class BattleScreen implements Screen {
 
         // HUD Render
         hudStage.getViewport().apply();
-        hudStage.act(delta);
+        hudStage.act(hudDelta);
         hudStage.draw();
 
-        syncUi(); // Keep UI in sync with state machine
+        if (!isPaused) {
+            syncUi(); // Keep UI in sync with state machine
+        }
     }
 
     private void renderArena(float delta) {
@@ -1170,7 +1663,9 @@ public class BattleScreen implements Screen {
             float enemyAlpha = (enemy.getHealth() <= 0) ? 0.35f : 1.0f;
             if (enemyFlinchTimer > 0.12f) {
                 batch.setColor(1f, 0.25f, 0.25f, enemyAlpha); // Red hurt flash
-            } else if (isBossBattle()) {
+            } else if (isPaleShepherdBattle()) {
+                batch.setColor(1.0f, 0.88f, 0.88f, enemyAlpha); // Spectral Pale Crimson Light
+            } else if (isDawnWardenBattle() || isBossBattle()) {
                 batch.setColor(1.0f, 0.95f, 0.80f, enemyAlpha); // Radiant Golden Dawn Light
             } else {
                 int tilePos = (snakeTile != null) ? snakeTile.getPosition() : 1;
@@ -1182,10 +1677,11 @@ public class BattleScreen implements Screen {
                     batch.setColor(1.0f, 0.78f, 0.72f, enemyAlpha); // Act 3: Scorched Magma / Crimson Ember Hue
                 }
             }
+            float hover = isPaleShepherdBattle() ? ((float) Math.sin(stateTime * 2.2f) * 8f) : 0f;
             float drawEX = ENEMY_X + eLungeX + eFlinchX;
-            float drawEY = ENEMY_DRAW_Y + (enemy.getHealth() <= 0 ? -12f : eBob) + eLungeY;
-            float enemyW = isBossBattle() ? 320f : CHAR_DISPLAY_SIZE;
-            float enemyH = isBossBattle() ? (enemy.getHealth() <= 0 ? 250f : 350f) : ((enemy.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE);
+            float drawEY = ENEMY_DRAW_Y + (isPaleShepherdBattle() ? (16f + hover) : (enemy.getHealth() <= 0 ? -12f : eBob)) + eLungeY;
+            float enemyW = isPaleShepherdBattle() ? 280f : (isBossBattle() ? 320f : CHAR_DISPLAY_SIZE);
+            float enemyH = isPaleShepherdBattle() ? ((enemy.getHealth() <= 0) ? 220f : 280f) : (isBossBattle() ? (enemy.getHealth() <= 0 ? 250f : 350f) : ((enemy.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE));
             batch.draw(eFrame,
                 drawEX - enemyW / 2, drawEY,
                 enemyW / 2, enemyH / 2,
@@ -1432,5 +1928,13 @@ public class BattleScreen implements Screen {
         if (modalRewardFont != null) modalRewardFont.dispose();
         if (modalNarrativeFont != null) modalNarrativeFont.dispose();
         if (modalStatusFont != null) modalStatusFont.dispose();
+        if (topPauseFont != null) topPauseFont.dispose();
+        if (pauseBadgeFont != null) pauseBadgeFont.dispose();
+        if (pauseTitleFont != null) pauseTitleFont.dispose();
+        if (pauseSubFont != null) pauseSubFont.dispose();
+        if (pauseBodyFont != null) pauseBodyFont.dispose();
+        if (pauseBtnFont != null) pauseBtnFont.dispose();
+        if (pauseTipFont != null) pauseTipFont.dispose();
+        if (sliderFont != null) sliderFont.dispose();
     }
 }

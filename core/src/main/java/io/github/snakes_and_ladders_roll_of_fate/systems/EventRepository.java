@@ -185,10 +185,8 @@ public class EventRepository {
         Collections.shuffle(counterPool);
         snake.addChoice(counterPool.get(0));
 
-        // Option 3: Strategic Tail Slide (Avoids lethal battle, slides safely down the tail)
-        int plungeExp = (act == 1) ? 15 : ((act == 2) ? 25 : 35);
-        snake.addChoice(new EventChoice("[Slide Down the Tail] Drop safely down the serpent's tail (Avoids combat, drops back)")
-            .withEffect(EventEffectType.EXPERIENCE, plungeExp));
+        // Option 3: Strategic Tail Slide (Avoids lethal battle, plunges down the tail with Acrobatics D20 check)
+        snake.addChoice(new EventChoice("[Slide Down the Tail] Plunge down the serpent's tail (Acrobatics D20: 20=0 DMG | 10-19=10 DMG | <10=20 DMG)"));
 
         return snake;
     }

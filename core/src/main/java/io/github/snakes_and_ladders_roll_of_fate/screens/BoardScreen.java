@@ -272,15 +272,28 @@ public class BoardScreen implements Screen {
     // Post-Battle Resolution Transition Fields
     private BattleOutcome pendingBattleOutcome = null;
     private SnakeTile pendingBattleTile = null;
+    private Enemy pendingBossEnemy = null;
 
     public BoardScreen(RollOfFateGame game) {
-        this(game, null, null);
+        this(game, null, (SnakeTile) null);
     }
 
     public BoardScreen(RollOfFateGame game, BattleOutcome battleOutcome, SnakeTile battleTile) {
         this.game = game;
         this.pendingBattleOutcome = battleOutcome;
         this.pendingBattleTile = battleTile;
+        this.pendingBossEnemy = null;
+        this.board = game.getBoard() != null ? game.getBoard() : new Board(100);
+        if (game.getBoard() == null) {
+            this.board.generateBoard();
+        }
+    }
+
+    public BoardScreen(RollOfFateGame game, BattleOutcome battleOutcome, Enemy bossEnemy) {
+        this.game = game;
+        this.pendingBattleOutcome = battleOutcome;
+        this.pendingBattleTile = null;
+        this.pendingBossEnemy = bossEnemy;
         this.board = game.getBoard() != null ? game.getBoard() : new Board(100);
         if (game.getBoard() == null) {
             this.board.generateBoard();
@@ -460,12 +473,22 @@ public class BoardScreen implements Screen {
                 rollButton.setColor(1f, 1f, 1f, 0.5f);
                 startSpecialMove(battleTilePos, pendingBattleTile.getDestination(), false);
             } else if (pendingBattleOutcome == BattleOutcome.VICTORY) {
-                if (current != null) {
-                    topBannerLabel.setText(current.getName().toUpperCase() + " VANQUISHED THE BEAST!");
+                // Slayed the Serpent!
+                // Serpent's Bane: Repels The Pale Shepherd 4 tiles back and pauses him for 1 round!
+                if (game.getPaleShepherdTile() > 0) {
+                    int repelled = Math.max(1, game.getPaleShepherdTile() - 4);
+                    game.setPaleShepherdTile(repelled);
+                    shepherdDisplayX = getTileCenterX(repelled);
+                    shepherdDisplayY = getCharacterDrawY(repelled);
+                    game.setShepherdPauseRounds(Math.max(game.getShepherdPauseRounds(), 1));
+                    updateMiniMapProgress();
                 }
-                rollButton.setColor(1f, 1f, 1f, 0.5f);
-                turnState = TurnState.TURN_TRANSITION;
-                actionPauseTimer = 1.0f;
+                // Adrenaline Surge: Victorious player immediately gains an extra roll!
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " SLAYED THE SERPENT! REAPER REPELLED! ADRENALINE SURGE: ROLL AGAIN!");
+                }
+                turnState = TurnState.WAITING_FOR_ROLL;
+                rollButton.setColor(1f, 1f, 1f, 1f);
             } else if (pendingBattleOutcome == BattleOutcome.DEFEAT) {
                 if (current != null) {
                     topBannerLabel.setText(current.getName().toUpperCase() + " HAS FALLEN IN BATTLE! NEXT TRAVELER'S TURN...");
@@ -477,6 +500,56 @@ public class BoardScreen implements Screen {
 
             pendingBattleOutcome = null;
             pendingBattleTile = null;
+        } else if (pendingBattleOutcome != null && pendingBossEnemy != null) {
+            // Returning from Boss / Pale Shepherd combat!
+            int curPos = (current != null) ? current.getPosition() : 1;
+            float startX = getTileCenterX(curPos);
+            lastTrackedAct = (curPos <= 30) ? 1 : ((curPos <= 70) ? 2 : 3);
+            float startY = 540f + (getTileBottomY(curPos) - 220f);
+            worldCamera.position.set(startX, startY, 0f);
+            worldCamera.update();
+
+            updateHudDisplay();
+
+            if (pendingBossEnemy.getEnemyType() != null && pendingBossEnemy.getEnemyType().contains("Pale Shepherd")) {
+                if (pendingBattleOutcome == BattleOutcome.VICTORY) {
+                    if (current != null) {
+                        current.gainExperience(50);
+                    }
+                    int repelled = Math.max(0, game.getPaleShepherdTile() - 15);
+                    game.setPaleShepherdTile(repelled);
+                    shepherdDisplayX = getTileCenterX(repelled);
+                    shepherdDisplayY = getCharacterDrawY(repelled);
+                    game.setShepherdPauseRounds(3);
+                    updateMiniMapProgress();
+                    if (current != null) {
+                        topBannerLabel.setText(current.getName().toUpperCase() + " STRUCK DOWN DEATH! REAPER BANISHED 15 TILES! ROLL THE DICE!");
+                    }
+                    turnState = TurnState.WAITING_FOR_ROLL;
+                    rollButton.setColor(1f, 1f, 1f, 1f);
+                } else if (pendingBattleOutcome == BattleOutcome.ESCAPED) {
+                    // Parting blow taken: -20 HP
+                    if (current != null) {
+                        current.setHealth(Math.max(1, current.getHealth() - 20));
+                    }
+                    game.setShepherdPauseRounds(1);
+                    int scrambleDest = (current != null) ? Math.min(99, current.getPosition() + 3) : 1;
+                    if (current != null) {
+                        topBannerLabel.setText(current.getName().toUpperCase() + " SCRAMBLED AWAY FROM DEATH! (-20 HP, +3 TILES AHEAD)!");
+                    }
+                    startSpecialMove(curPos, scrambleDest, false);
+                } else {
+                    if (current != null) {
+                        topBannerLabel.setText(current.getName().toUpperCase() + " HAS BEEN CLAIMED BY THE PALE SHEPHERD...");
+                    }
+                    rollButton.setColor(1f, 1f, 1f, 0.5f);
+                    turnState = TurnState.TURN_TRANSITION;
+                    actionPauseTimer = 1.2f;
+                }
+            }
+
+            pendingBattleOutcome = null;
+            pendingBossEnemy = null;
         } else {
             if (current != null) {
                 Tile curTile = board.getTile(current.getPosition());
@@ -1947,7 +2020,27 @@ public class BoardScreen implements Screen {
                 showOutcomeView(cleanTitle, res, false);
                 return;
             } else {
-                // Tactical Plunge / Controlled Retreat: slide down to snake destination (keeping collected loot/EXP)
+                // Tail Slide: Acrobatics D20 Tumble check!
+                // Natural 20 = 0 DMG (flawless); 10-19 = 10 DMG (standard tumble); <10 = 20 DMG (rough crash)
+                int tumbleRoll = com.badlogic.gdx.math.MathUtils.random(1, 20);
+                int tumbleDmg;
+                String rollDesc;
+                if (tumbleRoll == 20) {
+                    tumbleDmg = 0;
+                    rollDesc = "Acrobatics D20: [20 - NATURAL 20!] Flawless landing! Avoided all fall damage!";
+                } else if (tumbleRoll >= 10) {
+                    tumbleDmg = 10;
+                    rollDesc = "Acrobatics D20: [" + tumbleRoll + "] Controlled slide. Suffered standard tumble damage (-10 HP).";
+                } else {
+                    tumbleDmg = 20;
+                    rollDesc = "Acrobatics D20: [" + tumbleRoll + " - ROUGH TUMBLE!] Slipped on venomous scales! Crash damage (-20 HP).";
+                }
+                if (tumbleDmg > 0) {
+                    player.setHealth(Math.max(1, player.getHealth() - tumbleDmg));
+                }
+                res.consequences.clear();
+                res.consequences.add(rollDesc);
+                res.consequences.add("Tumbled down to Tile " + ((SnakeTile) tile).getDestination() + ".");
                 specialSlideTarget = ((SnakeTile) tile).getDestination();
                 showOutcomeView(cleanTitle, res, true);
                 return;
@@ -3128,47 +3221,11 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Builds a two-row choice card button for The Pale Shepherd encounter, matching normal event styling.
-     */
-    private Button buildShepherdChoiceCard(String actionTitle, String tagText, Color tagColor,
-                                           Color tagBorderColor, String summary, boolean available) {
-        Button cardBtn = new Button(available ? eventChoiceCardStyle : eventChoiceCardDisabledStyle);
-        cardBtn.pad(5, 14, 5, 14);
-
-        Label titleLbl = new Label(actionTitle, new Label.LabelStyle(choiceCardTitleFont,
-            available ? Color.valueOf("#fff8ea") : Color.valueOf("#b8a89a")));
-        titleLbl.setAlignment(Align.left);
-        titleLbl.setWrap(true);
-
-        Table tagPill = new Table();
-        tagPill.setBackground(UIUtils.createRoundedDrawable(110, 24, 6, tagColor, tagBorderColor, 2));
-        Label tagLbl = new Label(tagText, new Label.LabelStyle(choiceTagFont, Color.WHITE));
-        tagLbl.setColor(available ? Color.valueOf("#fff8ea") : Color.valueOf("#cfc0b4"));
-        tagLbl.setAlignment(Align.center);
-        tagPill.add(tagLbl).pad(2, 8, 2, 8);
-
-        cardBtn.add(titleLbl).width(368).expandX().left().padRight(8);
-        cardBtn.add(tagPill).right().row();
-
-        Label summaryLbl = new Label(summary, new Label.LabelStyle(choiceBtnFont,
-            available ? Color.valueOf("#f2dcc2") : Color.valueOf("#9e8e80")));
-        summaryLbl.setAlignment(Align.left);
-        summaryLbl.setWrap(true);
-        cardBtn.add(summaryLbl).colspan(2).width(494).left().padTop(2);
-
-        return cardBtn;
-    }
-
-    /**
-     * Triggers the dramatic encounter modal when The Pale Shepherd catches a player.
+     * Triggers the mortal clash encounter when The Pale Shepherd catches a player.
+     * Launches direct, high-stakes combat against Death itself!
      */
     private void triggerPaleShepherdEncounter(final Player player) {
         if (player == null || player.getHealth() <= 0) return;
-        isShepherdAmbushActive = true;
-        isEventModalActive = true;
-        modalScrim.setVisible(true);
-        eventModalTable.setVisible(true);
-        turnState = TurnState.RESOLVING_TILE_EVENT;
 
         if (game.getAudioManager() != null) {
             game.getAudioManager().playSound(AudioManager.SoundEffect.REAPER_APPEAR, 0.85f);
@@ -3176,159 +3233,21 @@ public class BoardScreen implements Screen {
 
         if (inventoryPopup != null) inventoryPopup.setVisible(false);
         if (dicePickerPopup != null) dicePickerPopup.setVisible(false);
+        if (modalScrim != null) modalScrim.setVisible(false);
+        if (eventModalTable != null) eventModalTable.setVisible(false);
+        isEventModalActive = false;
+        isShepherdAmbushActive = false;
 
-        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 54, 16, Color.valueOf("#4a0e17"), Color.valueOf("#2b1304"), 2));
-        eventBadgeLabel.setText("THE PALE SHEPHERD'S EMBRACE  -  TILE " + game.getPaleShepherdTile());
+        // Build Pale Shepherd Boss Enemy with high-stakes pursuer stats
+        Enemy shepherd = new Enemy("The Pale Shepherd");
+        shepherd.setBehavior("Harvester of Souls");
+        shepherd.setHealth(80);
+        shepherd.setAttack(12);
+        shepherd.setDefense(4);
+        shepherd.setReward("Shattered Scythe Shard");
 
-        eventContentTable.clear();
-
-        Label titleLbl = new Label("THE PALE SHEPHERD DESCENDS", new Label.LabelStyle(eventTitleFont, Color.valueOf("#4a0e17")));
-        titleLbl.setAlignment(Align.center);
-        titleLbl.setWrap(true);
-        eventContentTable.add(titleLbl).width(580).padTop(2).padBottom(4).center().row();
-
-        String loreMsg = "The Pale Shepherd hovers before you with his golden scythe. "
-            + "His glowing eyes offer peaceful release, yet your spirit yearns for the summit.";
-        Label narrativeLbl = new Label(loreMsg, new Label.LabelStyle(eventDescFont, Color.valueOf("#361704")));
-        narrativeLbl.setAlignment(Align.center);
-        narrativeLbl.setWrap(true);
-        eventContentTable.add(narrativeLbl).width(600).padBottom(10).center().row();
-
-        // Choice 1: Struggle for Life
-        boolean canStruggle = (player.getHealth() > 20);
-        String struggleTitle = "Struggle for Life";
-        String struggleTag = canStruggle ? "SACRIFICE" : "LOCKED";
-        Color struggleTagBg = canStruggle ? Color.valueOf("#914621") : Color.valueOf("#5c493e");
-        Color struggleTagBorder = canStruggle ? Color.valueOf("#d68860") : Color.valueOf("#8c7769");
-        String struggleSummary = canStruggle
-            ? "Endure the mortal chill. (Cost: 20 HP -> Surge +3 Tiles)"
-            : "Requires more than 20 HP to withstand.";
-        Button struggleCard = buildShepherdChoiceCard(struggleTitle, struggleTag, struggleTagBg, struggleTagBorder, struggleSummary, canStruggle);
-        if (canStruggle) {
-            UIUtils.addScaleHoverEffect(struggleCard);
-            struggleCard.addListener(new ChangeListener() {
-                @Override public void changed(ChangeEvent evt, Actor actor) {
-                    if (game.getAudioManager() != null) {
-                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                    }
-                    player.setHealth(player.getHealth() - 20);
-                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 5));
-                    game.setShepherdPauseRounds(2);
-                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
-                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
-                    specialSlideTarget = Math.min(99, player.getPosition() + 3);
-                    updateHudDisplay();
-                    updateMiniMapProgress();
-                    EventChoice.EventResult res = new EventChoice.EventResult();
-                    res.consequences.add("You grit your teeth and push through the cold mist! (-20 HP)");
-                    res.consequences.add("Surged +3 tiles ahead! The Pale Shepherd is repelled 5 tiles and paused for 2 rounds.");
-                    showOutcomeView("Will to Live Prevails!", res, false);
-                }
-            });
-        }
-        eventContentTable.add(struggleCard).width(530).minHeight(48).padBottom(5f).center().row();
-
-        // Choice 2: Soothe with Memory
-        boolean hasItem = (player.getInventory().size() > 0);
-        String sootheTitle = "Soothe with Memory";
-        String sootheTag = hasItem ? "OFFERING" : "LOCKED";
-        Color sootheTagBg = hasItem ? Color.valueOf("#855918") : Color.valueOf("#5c493e");
-        Color sootheTagBorder = hasItem ? Color.valueOf("#cfa259") : Color.valueOf("#8c7769");
-        String sootheSummary = hasItem
-            ? "Present a relic to calm the restless spirit. (Repels 5 Tiles | Halts 2 Rounds)"
-            : "Your satchel holds no relics to offer.";
-        Button sootheCard = buildShepherdChoiceCard(sootheTitle, sootheTag, sootheTagBg, sootheTagBorder, sootheSummary, hasItem);
-        if (hasItem) {
-            UIUtils.addScaleHoverEffect(sootheCard);
-            sootheCard.addListener(new ChangeListener() {
-                @Override public void changed(ChangeEvent evt, Actor actor) {
-                    if (game.getAudioManager() != null) {
-                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                    }
-                    Item offered = player.getInventory().getItem(0);
-                    player.getInventory().removeItem(0);
-                    game.setShepherdPauseRounds(2);
-                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 5));
-                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
-                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
-                    updateHudDisplay();
-                    refreshInventoryUI();
-                    EventChoice.EventResult res = new EventChoice.EventResult();
-                    res.consequences.add("You offered [" + offered.getName() + "] to the crimson reaper.");
-                    res.consequences.add("The spirit lowers its golden scythe in silent understanding. Repelled 5 tiles and pursuit halted for 2 rounds!");
-                    showOutcomeView("Memory Cherished!", res, false);
-                }
-            });
-        }
-        eventContentTable.add(sootheCard).width(530).minHeight(48).padBottom(5f).center().row();
-
-        // Choice 3: Trial of Will (Roll D20)
-        String trialTitle = "Trial of Will";
-        String trialTag = "D20 (DC 10)";
-        Color trialTagBg = Color.valueOf("#8f5e16");
-        Color trialTagBorder = Color.valueOf("#d6a549");
-        String trialSummary = "Roll D20: >=10 Repels Shepherd 6 Tiles | <10 Drain 15 HP & Scramble Ahead";
-        Button trialCard = buildShepherdChoiceCard(trialTitle, trialTag, trialTagBg, trialTagBorder, trialSummary, true);
-        UIUtils.addScaleHoverEffect(trialCard);
-        trialCard.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent evt, Actor actor) {
-                if (game.getAudioManager() != null) {
-                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                }
-                int roll = MathUtils.random(1, 20);
-                EventChoice.EventResult res = new EventChoice.EventResult();
-                res.difficultyClass = 10;
-                res.d20Roll = roll;
-                res.checkSucceeded = (roll >= 10);
-                if (roll >= 10) {
-                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 6));
-                    game.setShepherdPauseRounds(2);
-                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
-                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
-                    res.consequences.add("D20 Roll: " + roll + " (SUCCESS!)");
-                    res.consequences.add("Your soul burns with fierce resolve! The Shepherd recedes 6 tiles and pauses for 2 rounds.");
-                    showOutcomeView("Indomitable Spirit!", res, false);
-                } else {
-                    player.setHealth(player.getHealth() - 15);
-                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 4));
-                    game.setShepherdPauseRounds(1);
-                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
-                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
-                    specialSlideTarget = Math.min(99, player.getPosition() + 2);
-                    updateHudDisplay();
-                    updateMiniMapProgress();
-                    res.consequences.add("D20 Roll: " + roll + " (FAILED!)");
-                    res.consequences.add("The cold chill numbs your limbs (-15 HP), but you scramble forward 2 tiles as the reaper recoils.");
-                    showOutcomeView("Shaken Resolve!", res, false);
-                }
-            }
-        });
-        eventContentTable.add(trialCard).width(530).minHeight(48).padBottom(5f).center().row();
-
-        // Choice 4: Yield to the Scythe
-        String restTitle = "Yield to the Scythe";
-        String restTag = "SURRENDER";
-        Color restTagBg = Color.valueOf("#8c2a24");
-        Color restTagBorder = Color.valueOf("#d46e66");
-        String restSummary = "Accept peaceful rest upon the mountain.";
-        Button restCard = buildShepherdChoiceCard(restTitle, restTag, restTagBg, restTagBorder, restSummary, true);
-        UIUtils.addScaleHoverEffect(restCard);
-        restCard.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent evt, Actor actor) {
-                if (game.getAudioManager() != null) {
-                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                }
-                modalScrim.setVisible(false);
-                eventModalTable.setVisible(false);
-                isEventModalActive = false;
-                isShepherdAmbushActive = false;
-                if (game.getRunTracker() != null) {
-                    game.getRunTracker().recordPlayerFallen(player);
-                }
-                game.setScreen(new GameSummaryScreen(game, false, player));
-            }
-        });
-        eventContentTable.add(restCard).width(530).minHeight(48).padBottom(4f).center().row();
+        topBannerLabel.setText("THE PALE SHEPHERD DESCENDS! MORTAL DUEL!");
+        game.setScreen(new BattleScreen(game, player, shepherd));
     }
 
     /**

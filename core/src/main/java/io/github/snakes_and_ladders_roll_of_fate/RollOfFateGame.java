@@ -36,7 +36,7 @@ public class RollOfFateGame extends Game {
 
     // The Pale Shepherd (The Pursuer of the Ascending Trail)
     private int paleShepherdTile = 0;
-    private int shepherdDormantTurns = 3;
+    private int shepherdDormantTurns = com.badlogic.gdx.math.MathUtils.random(4, 7);
     private int totalRounds = 0;
     private int shepherdPauseRounds = 0;
 
@@ -64,6 +64,7 @@ public class RollOfFateGame extends Game {
         paleShepherdTile = 0;
         totalRounds = 0;
         shepherdPauseRounds = 0;
+        shepherdDormantTurns = com.badlogic.gdx.math.MathUtils.random(4, 7);
         createPlayer();
 
         currentTurn = 0; // Player 1
@@ -91,6 +92,7 @@ public class RollOfFateGame extends Game {
         this.paleShepherdTile = 0;
         this.totalRounds = 0;
         this.shepherdPauseRounds = 0;
+        this.shepherdDormantTurns = com.badlogic.gdx.math.MathUtils.random(4, 7);
 
         for (int i = 0; i < chosenClasses.size(); i++) {
             Player player = new Player("Player " + (i + 1), chosenClasses.get(i));
@@ -256,6 +258,7 @@ public class RollOfFateGame extends Game {
     public int getTotalRounds() { return totalRounds; }
     public void incrementTotalRounds() { this.totalRounds++; }
     public int getShepherdDormantTurns() { return shepherdDormantTurns; }
+    public void setShepherdDormantTurns(int turns) { this.shepherdDormantTurns = turns; }
     public int getShepherdPauseRounds() { return shepherdPauseRounds; }
     public void setShepherdPauseRounds(int rounds) { this.shepherdPauseRounds = rounds; }
     public void decrementShepherdPauseRounds() { if (this.shepherdPauseRounds > 0) this.shepherdPauseRounds--; }
