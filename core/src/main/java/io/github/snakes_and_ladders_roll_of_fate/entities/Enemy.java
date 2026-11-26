@@ -5,8 +5,10 @@ public class Enemy extends Entity {
     private String behavior;
     private String reward;
 
+
     public Enemy(String enemyType) {
         this.enemyType = enemyType;
+
     }
 
     public void defend() {}

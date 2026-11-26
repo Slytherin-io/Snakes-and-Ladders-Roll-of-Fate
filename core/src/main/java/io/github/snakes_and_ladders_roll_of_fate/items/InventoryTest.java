@@ -1,0 +1,664 @@
+package io.github.snakes_and_ladders_roll_of_fate.items;
+
+import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
+import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
+import io.github.snakes_and_ladders_roll_of_fate.systems.Event;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventChoice;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffect;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventRepository;
+
+public class InventoryTest {
+    public static void main(String[] args) {
+        System.out.println("=== RUNNING INVENTORY & EVENT INTEGRATION TESTS ===");
+
+        Player player = new Player("Hero");
+        player.setHealth(50);
+        player.setAttack(10);
+        player.setDefense(10);
+
+        Inventory inv = player.getInventory();
+        if (inv == null) throw new AssertionError("Inventory should not be null!");
+        if (inv.getCapacity() != 4) throw new AssertionError("Inventory capacity should be 4, was: " + inv.getCapacity());
+
+        // 1. Add Consumable
+        System.out.println("\n[Test 1] Adding Consumable...");
+        Item potion = Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP");
+        boolean added1 = player.addItem(potion);
+        if (!added1) throw new AssertionError("Potion should be added successfully");
+
+        // 2. Add Equipment (fixed durability for testing)
+        System.out.println("\n[Test 2] Adding Equipment with 2 Durability...");
+        Item shield = new Item("Wooden Shield", ItemType.EQUIPMENT, 2, EventEffectType.DEFENSE, 3, "+3 DEF (1 Turn Buff)");
+        boolean added2 = player.addItem(shield);
+        if (!added2) throw new AssertionError("Shield should be added successfully");
+
+        // 3. Add 2 more items to fill capacity to 4/4
+        System.out.println("\n[Test 3] Filling inventory to 4/4 slots...");
+        Item sword = new Item("Iron Sword", ItemType.EQUIPMENT, 3, EventEffectType.ATTACK, 5, "+5 ATK (1 Turn Buff)");
+        Item feather = Item.createConsumable("Hermes Feather", EventEffectType.MOVE, 2, "Move 2 tiles");
+        player.addItem(sword);
+        player.addItem(feather);
+        if (!inv.isFull()) throw new AssertionError("Inventory should now be full (4/4)");
+
+        // 4. Try adding 5th item - should be rejected with [INVENTORY FULL]
+        System.out.println("\n[Test 4] Attempting to add 5th item when full...");
+        Item extra = Item.createConsumable("Extra Potion", EventEffectType.HEALTH, 10, "+10 HP");
+        boolean added5 = player.addItem(extra);
+        if (added5) throw new AssertionError("5th item should be rejected when full!");
+
+        inv.displayInventory();
+
+        // 5. Test Consumable Usage
+        System.out.println("\n[Test 5] Using consumable potion from Slot 1...");
+        int initialHp = player.getHealth();
+        boolean usedSlot1 = player.useItem(0); // Uses Minor Health Potion
+        if (!usedSlot1) throw new AssertionError("Slot 1 usage should succeed");
+        if (player.getHealth() != initialHp + 25) {
+            throw new AssertionError("Player HP should be " + (initialHp + 25) + ", was " + player.getHealth());
+        }
+        if (inv.size() != 3) {
+            throw new AssertionError("Consumable should be removed after use. Size should be 3, was: " + inv.size());
+        }
+
+        inv.displayInventory();
+
+        // 6. Test Equipment Usage, Temporary Turn Buff, Single-Use Expenditure, and Expiration
+        System.out.println("\n[Test 6] Testing Equipment Temporary Buff & Single-Use Expenditure...");
+        boolean usedShield1 = player.useItem(0); // Uses Wooden Shield (1-Use Relic)
+        if (!usedShield1) throw new AssertionError("Shield usage should succeed");
+        if (player.getDefense() != 13) {
+            throw new AssertionError("Total defense should be 13, was: " + player.getDefense());
+        }
+        if (player.getTempDefense() != 3) {
+            throw new AssertionError("Temporary defense buff should be 3, was: " + player.getTempDefense());
+        }
+        if (player.getBaseDefense() != 10) {
+            throw new AssertionError("Base defense should remain 10, was: " + player.getBaseDefense());
+        }
+
+        // End of Turn: Buff expires
+        System.out.println("\n[Test 7] Ending Turn and Clearing Buffs...");
+        player.clearTemporaryBuffs();
+        if (player.getDefense() != 10) {
+            throw new AssertionError("Defense should return to base 10 after buff expires, was: " + player.getDefense());
+        }
+
+        // Single-use equipment check: Wooden Shield expended and removed from inventory
+        System.out.println("\n[Test 8] Verifying Single-Use Equipment Removal...");
+        if (inv.size() != 2 || player.hasItemNamed("Wooden Shield")) {
+            throw new AssertionError("Expended shield should be removed. Size should be 2, was: " + inv.size());
+        }
+
+        // 7. EventEffect Item Grant
+        System.out.println("\n[Test 9] EventEffect granting an item...");
+        EventEffect grantItemEffect = new EventEffect(Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP"));
+        grantItemEffect.apply(player);
+        if (inv.size() != 3) {
+            throw new AssertionError("Inventory size should be 3 after event granted item, was: " + inv.size());
+        }
+        if (!player.hasItemNamed("Greater Health Elixir")) {
+            throw new AssertionError("Player should possess Greater Health Elixir!");
+        }
+
+        // 8. Option B: Interactive Swap Handler when full
+        System.out.println("\n[Test 10] Testing Option B Interactive Swap on Full Inventory...");
+        player.addItem(Item.createConsumable("Stoneskin Potion", EventEffectType.DEFENSE, 2, "+2 DEF"));
+        if (!inv.isFull()) throw new AssertionError("Inventory should be 4/4 full now");
+
+        // Set up test swap handler to swap slot 0 (which is Iron Sword)
+        final boolean[] swapCalled = { false };
+        EventEffect.setItemSwapHandler((p, newItem) -> {
+            swapCalled[0] = true;
+            p.replaceItem(0, newItem);
+        });
+
+        Item holyRelic = Item.createEquipment("Holy Avenger", EventEffectType.ATTACK, 8, 3, 3, "+8 ATK (1 Turn Buff)");
+        EventEffect grantRelic = new EventEffect(holyRelic);
+        grantRelic.apply(player);
+
+        if (!swapCalled[0]) throw new AssertionError("ItemSwapHandler should have been invoked!");
+        if (!player.hasItemNamed("Holy Avenger")) throw new AssertionError("Player should now possess Holy Avenger!");
+        if (inv.size() != 4) throw new AssertionError("Inventory should remain at 4/4 capacity!");
+
+        inv.displayInventory();
+
+        // 9. Merchant Encounter: Blood Rite (HP Payment)
+        System.out.println("\n[Test 11] Merchant Blood Rite (HP Cost for Item)...");
+        Event merchantEvent = new Event("Test Merchant", "Merchant Encounter", EventCategory.MERCHANT, 1, 100);
+        merchantEvent.addChoice(EventChoice.createBloodCostChoice("Blood Rite", 20, Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 5, 3, 3, "+5 ATK (1 Turn Buff)")));
+        merchantEvent.addChoice(EventChoice.createExpCostChoice("Knowledge Tribute", 35, Item.createEquipment("Amulet of Wisdom", EventEffectType.DEFENSE, 3, 2, 2, "+3 DEF (1 Turn Buff)")));
+        merchantEvent.addChoice(EventChoice.createBarterChoice("Barter", Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP")));
+
+        int hpBeforeRite = player.getHealth();
+        // Choice 1 is Blood Rite (Cost: 20 HP for Iron Sword)
+        // Free up a slot for the test
+        player.getInventory().removeItem(3);
+        merchantEvent.resolve(1, player);
+        if (player.getHealth() != hpBeforeRite - 20) {
+            throw new AssertionError("Player HP should be reduced by 20, was: " + player.getHealth());
+        }
+        if (!player.hasItemNamed("Iron Sword")) {
+            throw new AssertionError("Player should have received Iron Sword from Blood Rite!");
+        }
+
+        // 10. Merchant Encounter: Knowledge Tribute & Requirement Locking
+        System.out.println("\n[Test 12] Merchant Knowledge Tribute Requirement Locking...");
+        player.setTotalExperience(10);
+        player.setExperience(10); // Less than the 35 EXP required
+        EventChoice expChoice = merchantEvent.getChoices().get(1); // Choice 2: Knowledge Tribute (35 EXP)
+        if (expChoice.isAvailable(player)) {
+            throw new AssertionError("Knowledge Tribute should be locked when EXP < 35!");
+        }
+        int expBefore = player.getTotalExperience();
+        merchantEvent.resolve(2, player); // Attempting to choose locked option
+        if (player.getTotalExperience() != expBefore) {
+            throw new AssertionError("Locked choice should not deduct EXP!");
+        }
+
+        // Now give player enough EXP and retry
+        player.setTotalExperience(50);
+        player.setExperience(50);
+        if (!expChoice.isAvailable(player)) {
+            throw new AssertionError("Knowledge Tribute should be available when EXP >= 35!");
+        }
+        // Free a slot
+        player.getInventory().removeItem(player.getInventory().size() - 1);
+        merchantEvent.resolve(2, player);
+        if (player.getTotalExperience() != 15) {
+            throw new AssertionError("Player Total EXP should be 50 - 35 = 15, was: " + player.getTotalExperience());
+        }
+
+        // 11. Merchant Encounter: Barter (Trade Item for Item)
+        System.out.println("\n[Test 13] Merchant Barter (Item for Item)...");
+        int invSizeBeforeBarter = player.getInventory().size();
+        EventChoice.setItemBarterHandler(p -> p.getInventory().removeItem(0)); // Trade first item
+        merchantEvent.resolve(3, player); // Choice 3: Barter
+        if (player.getInventory().size() != invSizeBeforeBarter) {
+            throw new AssertionError("Inventory size should be identical after 1-for-1 barter trade!");
+        }
+        if (!player.hasItemNamed("Greater Health Elixir")) {
+            throw new AssertionError("Player should have received Greater Health Elixir from Barter!");
+        }
+
+        // 12. Equipment-Assisted Hazard Deflection
+        System.out.println("\n[Test 14] Equipment-Assisted Trap Deflection...");
+        EventChoice shieldDeflect = EventChoice.createEquipmentAssistedChoice("Raise shield against darts", ItemType.EQUIPMENT);
+        if (!shieldDeflect.isAvailable(player)) {
+            throw new AssertionError("Shield deflection should be available when player has equipment!");
+        }
+        Item eqItem = player.findItemByType(ItemType.EQUIPMENT);
+        int durabilityBefore = eqItem.getDurability();
+        shieldDeflect.execute(player);
+        if (eqItem.getDurability() != durabilityBefore - 1) {
+            throw new AssertionError("Equipment durability should be reduced by 1 on deflection!");
+        }
+
+        // 13. Snake Tile & Combat Trigger Harmonization
+        System.out.println("\n[Test 15] Snake Tile Trigger Harmonization (Flee vs Combat)...");
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile snakeTile =
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(15, 5);
+
+        // Test Flee: Slides down with zero combat damage
+        Player fleePlayer = new Player("Runner");
+        fleePlayer.setHealth(100);
+        fleePlayer.setPosition(15);
+        snakeTile.applyEffect(fleePlayer);
+        if (fleePlayer.getPosition() != 5) {
+            throw new AssertionError("Fleeing player should slide down to Tile 5, was: " + fleePlayer.getPosition());
+        }
+        if (fleePlayer.getHealth() != 100) {
+            throw new AssertionError("Fleeing player should take zero combat damage, was: " + fleePlayer.getHealth());
+        }
+
+        // Test Combat: Start combat runs BattleSystem and awards loot on victory
+        Player fightPlayer = new Player("Warrior");
+        fightPlayer.setHealth(100);
+        fightPlayer.setAttack(50); // High attack to guarantee victory in round 1
+        fightPlayer.setPosition(15);
+        snakeTile.startCombat(fightPlayer);
+        if (fightPlayer.getInventory().isEmpty()) {
+            throw new AssertionError("Victorious warrior should receive loot drop from slain serpent!");
+        }
+
+        // 14. Event Pacing Controller & Cooldown Tests
+        System.out.println("\n[Test 16] Pacing Controller Cooldown & Bad-Luck Protection...");
+        io.github.snakes_and_ladders_roll_of_fate.systems.EventManager eventMgr =
+            new io.github.snakes_and_ladders_roll_of_fate.systems.EventManager();
+
+        Player pacingPlayer = new Player("Scout");
+        pacingPlayer.resetEventCooldown(); // 0 turns elapsed
+        if (eventMgr.shouldTriggerAmbientEvent(pacingPlayer)) {
+            throw new AssertionError("Ambient event should NOT trigger immediately after reset (0 turns elapsed)");
+        }
+        pacingPlayer.incrementTurnsSinceLastEvent(); // 1 turn elapsed
+        // Now eligible (turnsSinceLastEvent >= 1)
+        if (pacingPlayer.getTurnsSinceLastEvent() != 1) {
+            throw new AssertionError("Player should have 1 turn elapsed");
+        }
+
+        // 15. Act Stratification & Narrative Scaling Tests
+        System.out.println("\n[Test 17] Act Stratification & Scaling (Act I, II, III)...");
+        int act1 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(15);
+        int act2 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(50);
+        int act3 = io.github.snakes_and_ladders_roll_of_fate.systems.EventStoryGenerator.getAct(85);
+
+        if (act1 != 1) throw new AssertionError("Tile 15 should be in Act 1, was: " + act1);
+        if (act2 != 2) throw new AssertionError("Tile 50 should be in Act 2, was: " + act2);
+        if (act3 != 3) throw new AssertionError("Tile 85 should be in Act 3, was: " + act3);
+
+        Event act1Merchant = EventRepository.createProceduralMerchantEvent(15);
+        Event act3Merchant = EventRepository.createProceduralMerchantEvent(85);
+
+        // Verify procedural merchant events contain requirement choices
+        boolean act1HasCost = act1Merchant.getChoices().stream().anyMatch(c -> c.getRequirementValue() > 0);
+        boolean act3HasCost = act3Merchant.getChoices().stream().anyMatch(c -> c.getRequirementValue() > 0);
+        if (!act1HasCost || !act3HasCost) {
+            throw new AssertionError("Merchant events should contain requirement-based choices");
+        }
+
+        // 16. Combat Rebalance & Mortal Retreat Safeguard Tests
+        System.out.println("\n[Test 18] Snake Combat Stat Rebalance & Mortal Retreat Safeguard...");
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile lowSnake =
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(14, 4);
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile midSnake =
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(49, 20);
+        io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile highSnake =
+            new io.github.snakes_and_ladders_roll_of_fate.board.SnakeTile(98, 40);
+
+        // Verify Act-based stat scaling
+        if (lowSnake.getSnakeAttack() != 8 || lowSnake.getSnakeHealth() != 22) {
+            throw new AssertionError("Tile 14 Snake should have 8 ATK and 22 HP, was: " + lowSnake.getSnakeAttack() + " / " + lowSnake.getSnakeHealth());
+        }
+        if (midSnake.getSnakeAttack() != 13 || midSnake.getSnakeHealth() != 39) {
+            throw new AssertionError("Tile 49 Snake should have 13 ATK and 39 HP, was: " + midSnake.getSnakeAttack() + " / " + midSnake.getSnakeHealth());
+        }
+        if (highSnake.getSnakeAttack() != 20 || highSnake.getSnakeHealth() != 64) {
+            throw new AssertionError("Tile 98 Snake should have 20 ATK and 64 HP, was: " + highSnake.getSnakeAttack() + " / " + highSnake.getSnakeHealth());
+        }
+
+        // Verify BattleSystem damage calculation bounded variance
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem bs =
+            new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        Player atkEntity = new Player("Atk");
+        atkEntity.setAttack(10);
+        Player defEntity = new Player("Def");
+        defEntity.setDefense(5);
+        for (int i = 0; i < 50; i++) {
+            int dmg = bs.calculateDamage(atkEntity, defEntity);
+            // With baseDamage = 5: Miss = 0, Normal = 5 to 9, Crit = 15. Must never exceed 15
+            if (dmg > 15) {
+                throw new AssertionError("Damage should be bounded to at most 15, was: " + dmg);
+            }
+        }
+
+        // Verify Combat Damage and True Mortality:
+        Player doomedPlayer = new Player("Doomed");
+        doomedPlayer.setHealth(20);
+        doomedPlayer.setAttack(1);
+        doomedPlayer.setDefense(-10); // Guarantees incoming damage exceeds 20
+        doomedPlayer.setPosition(98);
+        highSnake.startCombat(doomedPlayer);
+        if (doomedPlayer.getHealth() != 0) {
+            throw new AssertionError("Critically injured player taking lethal combat damage must die (HP 0), was: " + doomedPlayer.getHealth());
+        }
+
+        // Verify Player taking mortal damage dies legitimately (no infinite immortality safeguard)
+        Player mortalPlayer = new Player("Mortal");
+        mortalPlayer.setHealth(30);
+        mortalPlayer.setAttack(1);
+        mortalPlayer.setDefense(-20); // Guarantees incoming damage exceeds 30
+        mortalPlayer.setPosition(98);
+        highSnake.startCombat(mortalPlayer);
+        if (mortalPlayer.getHealth() != 0) {
+            throw new AssertionError("Player taking fatal combat blow must reach 0 HP and die, was: " + mortalPlayer.getHealth());
+        }
+
+        // Verify Victorious Player Survives
+        Player victorPlayer = new Player("Victor");
+        victorPlayer.setHealth(100);
+        victorPlayer.setAttack(100);
+        victorPlayer.setPosition(14);
+        lowSnake.startCombat(victorPlayer);
+        if (victorPlayer.getHealth() <= 0) {
+            throw new AssertionError("Victor player should defeat snake and survive, was: " + victorPlayer.getHealth());
+        }
+
+        // 17. Character Class Archetypes & Starting Gear Tests
+        System.out.println("\n[Test 19] Character Class Selection & Starting Gear...");
+        CharacterClass[] classes = CharacterClass.values();
+        if (classes.length != 4) {
+            throw new AssertionError("There should be 4 playable character classes, found: " + classes.length);
+        }
+
+        // Test Turtle Archetype (Tank)
+        Player turtlePlayer = new Player("Shelly", CharacterClass.TURTLE);
+        if (turtlePlayer.getHealth() != 120) throw new AssertionError("Turtle HP should be 120, was: " + turtlePlayer.getHealth());
+        if (turtlePlayer.getAttack() != 4) throw new AssertionError("Turtle ATK should be 4, was: " + turtlePlayer.getAttack());
+        if (turtlePlayer.getDefense() != 7) throw new AssertionError("Turtle DEF should be 7, was: " + turtlePlayer.getDefense());
+        if (!"Turtle".equals(turtlePlayer.getEntityClass())) throw new AssertionError("Entity class should be Turtle");
+        if (turtlePlayer.getInventory().getItems().size() != 1) throw new AssertionError("Turtle should start with 1 item");
+        if (!"Turtle Shell Buckler".equals(turtlePlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Turtle should start with Turtle Shell Buckler");
+        }
+
+        // Test Cat Archetype (Agile)
+        Player catPlayer = new Player("Shadow", CharacterClass.CAT);
+        if (catPlayer.getHealth() != 90) throw new AssertionError("Cat HP should be 90, was: " + catPlayer.getHealth());
+        if (catPlayer.getAttack() != 6) throw new AssertionError("Cat ATK should be 6, was: " + catPlayer.getAttack());
+        if (catPlayer.getDefense() != 4) throw new AssertionError("Cat DEF should be 4, was: " + catPlayer.getDefense());
+        if (!"Cat's Agility Charm".equals(catPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Cat should start with Cat's Agility Charm");
+        }
+
+        // Test Fox Archetype (Trickster)
+        Player foxPlayer = new Player("Reynard", CharacterClass.FOX);
+        if (foxPlayer.getHealth() != 95) throw new AssertionError("Fox HP should be 95, was: " + foxPlayer.getHealth());
+        if (foxPlayer.getAttack() != 7) throw new AssertionError("Fox ATK should be 7, was: " + foxPlayer.getAttack());
+        if (foxPlayer.getDefense() != 3) throw new AssertionError("Fox DEF should be 3, was: " + foxPlayer.getDefense());
+        if (!"Fox's Hunting Fang".equals(foxPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Fox should start with Fox's Hunting Fang");
+        }
+
+        // Test Raccoon Archetype (Scavenger)
+        Player raccoonPlayer = new Player("Bandit", CharacterClass.RACCOON);
+        if (raccoonPlayer.getHealth() != 100) throw new AssertionError("Raccoon HP should be 100, was: " + raccoonPlayer.getHealth());
+        if (raccoonPlayer.getAttack() != 5) throw new AssertionError("Raccoon ATK should be 5, was: " + raccoonPlayer.getAttack());
+        if (raccoonPlayer.getDefense() != 4) throw new AssertionError("Raccoon DEF should be 4, was: " + raccoonPlayer.getDefense());
+        if (!"Scavenger's First Aid Kit".equals(raccoonPlayer.getInventory().getItems().get(0).getName())) {
+            throw new AssertionError("Raccoon should start with Scavenger's First Aid Kit");
+        }
+
+        // Test using Turtle's starting equipment in combat stance
+        turtlePlayer.useItem(0); // Uses Turtle Shell Buckler (+3 DEF)
+        if (turtlePlayer.getDefense() != 10) { // Base 7 + Buff 3
+            throw new AssertionError("Turtle DEF with active buff should be 10, was: " + turtlePlayer.getDefense());
+        }
+        turtlePlayer.clearTemporaryBuffs();
+        if (turtlePlayer.getDefense() != 7) {
+            throw new AssertionError("Turtle DEF after turn should reset to base 7, was: " + turtlePlayer.getDefense());
+        }
+
+        // Test 14: Ensure health never exceeds maxHealth from item effects, events, or level up
+        System.out.println("\n[Test 14] Ensuring health never exceeds maxHealth...");
+        Player healCapPlayer = new Player("CapHero", CharacterClass.RACCOON);
+        if (healCapPlayer.getHealth() != 100) throw new AssertionError("Raccoon base health should be 100");
+
+        // 1. Using healing item while at full health
+        healCapPlayer.useItem(0); // Uses Scavenger's First Aid Kit (+25 HP)
+        if (healCapPlayer.getHealth() > healCapPlayer.getMaxHealth()) {
+            throw new AssertionError("Health should not exceed maxHealth (100), was: " + healCapPlayer.getHealth());
+        }
+        if (healCapPlayer.getHealth() != 100) {
+            throw new AssertionError("Health should remain 100, was: " + healCapPlayer.getHealth());
+        }
+
+        // 2. Using healing item while wounded (e.g. at 90 HP, +25 HP should cap at 100)
+        healCapPlayer.setHealth(90);
+        Item extraPotion = Item.createConsumable("Potion", EventEffectType.HEALTH, 25, "+25 HP");
+        extraPotion.use(healCapPlayer);
+        if (healCapPlayer.getHealth() > 100) {
+            throw new AssertionError("Health should cap at 100, was: " + healCapPlayer.getHealth());
+        }
+        if (healCapPlayer.getHealth() != 100) {
+            throw new AssertionError("Health should be capped at 100, was: " + healCapPlayer.getHealth());
+        }
+
+        // 3. Event Effect healing (+50 HP)
+        healCapPlayer.setHealth(95);
+        EventEffect bigHeal = new EventEffect(EventEffectType.HEALTH, 50);
+        bigHeal.apply(healCapPlayer);
+        if (healCapPlayer.getHealth() > 100) {
+            throw new AssertionError("EventEffect should not exceed maxHealth, was: " + healCapPlayer.getHealth());
+        }
+        if (healCapPlayer.getHealth() != 100) {
+            throw new AssertionError("Health should be capped at 100, was: " + healCapPlayer.getHealth());
+        }
+
+        // Test 15: Experience & Threshold progression
+        System.out.println("\n[Test 15] Testing Player EXP and Level Threshold progression...");
+        Player expPlayer = new Player("ExpHero", CharacterClass.CAT);
+        if (expPlayer.getLevel() != 1) throw new AssertionError("Player should start at Level 1");
+        if (expPlayer.getExperience() != 0) throw new AssertionError("Player should start at 0 EXP");
+        if (expPlayer.getExpThresh() != 100) throw new AssertionError("Initial exp threshold should be 100");
+
+        // Verify EXP cannot drop below 0
+        expPlayer.setExperience(-50);
+        if (expPlayer.getExperience() != 0) throw new AssertionError("EXP should be clamped to 0, was: " + expPlayer.getExperience());
+        expPlayer.gainExperience(-20);
+        if (expPlayer.getExperience() != 0) throw new AssertionError("Negative gainExperience should be ignored, was: " + expPlayer.getExperience());
+
+        // Cat class has +15% bonus EXP
+        // 50 base exp + 15% bonus = 57 exp
+        expPlayer.gainExperience(50);
+        if (expPlayer.getExperience() != 57) {
+            throw new AssertionError("EXP should be 57 with Cat +15% bonus, was: " + expPlayer.getExperience());
+        }
+        if (expPlayer.getLevel() != 1) throw new AssertionError("Player should still be Level 1");
+
+        // Gain another 50 exp (50 + 7 bonus = 57 exp). Total 57 + 57 = 114 >= 100 => Level up!
+        // Surplus 114 - 100 = 14 carries over to Level 2
+        expPlayer.gainExperience(50);
+        if (expPlayer.getLevel() != 2) throw new AssertionError("Player should have leveled up to Level 2");
+        if (expPlayer.getExperience() != 14) throw new AssertionError("Rollover EXP should be 14, was: " + expPlayer.getExperience());
+        if (expPlayer.getTotalExperience() != 114) {
+            throw new AssertionError("Total EXP should be 114, was: " + expPlayer.getTotalExperience());
+        }
+        // expThresh increases by 10% on level up (100 + 10 = 110)
+        if (expPlayer.getExpThresh() != 110) {
+            throw new AssertionError("Exp threshold should increase to 110 on Level 2, was: " + expPlayer.getExpThresh());
+        }
+
+        // Verify that totalExperience satisfies MIN_EXPERIENCE even when current level experience < requirementValue
+        EventChoice chasmChoice = EventChoice.createExpCostChoice("The Smuggler's Switchback", 25, null);
+        if (!chasmChoice.isAvailable(expPlayer)) {
+            throw new AssertionError("Smuggler's Switchback (25 EXP) should be available with 114 Total EXP, even though current level EXP is 14!");
+        }
+        chasmChoice.executeWithResult(expPlayer);
+        if (expPlayer.getTotalExperience() != 89) { // 114 - 25 = 89
+            throw new AssertionError("Total EXP should be 114 - 25 = 89 after spending, was: " + expPlayer.getTotalExperience());
+        }
+        if (expPlayer.getExperience() != 14) {
+            throw new AssertionError("Current level EXP progress (14) toward next level should be preserved when spending total EXP, was: " + expPlayer.getExperience());
+        }
+
+        // Test 20: BattleSystem State Transitions & Mortality Verification
+        System.out.println("\n[Test 20] BattleSystem Execution & True Mortality Verification...");
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem bsSys =
+            new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        Player testHero = new Player("Hero", CharacterClass.CAT);
+        testHero.setHealth(50);
+        testHero.setDefense(0);
+        Enemy testEnemy = new Enemy("Test Serpent");
+        testEnemy.setAttack(15);
+        testEnemy.setHealth(100);
+
+        bsSys.startBattle(testHero, testEnemy);
+        // Force ENEMY_TURN
+        try {
+            java.lang.reflect.Field stateField = io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.class.getDeclaredField("currentState");
+            stateField.setAccessible(true);
+            stateField.set(bsSys, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        // Enemy attacks: 50 HP taking ~15 damage should leave ~35 HP and return to PLAYER_TURN
+        bsSys.executeEnemyAttack();
+        if (testHero.getHealth() <= 0 || testHero.getHealth() > 50) {
+            throw new AssertionError("Non-lethal hit should reduce health correctly, was: " + testHero.getHealth());
+        }
+        if (bsSys.getCurrentState() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.PLAYER_TURN) {
+            throw new AssertionError("Combat should continue on PLAYER_TURN after non-lethal hit, was: " + bsSys.getCurrentState());
+        }
+
+        // Now test lethal damage in BattleSystem (loop until hit lands in case of a natural 1 miss):
+        testHero.setHealth(5);
+        while (testHero.getHealth() > 0 && bsSys.getCurrentState() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.BATTLE_END) {
+            try {
+                java.lang.reflect.Field stateField = io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.class.getDeclaredField("currentState");
+                stateField.setAccessible(true);
+                stateField.set(bsSys, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            bsSys.executeEnemyAttack();
+        }
+        if (testHero.getHealth() != 0) {
+            throw new AssertionError("Hero taking lethal blow in BattleSystem must have 0 HP, was: " + testHero.getHealth());
+        }
+        if (bsSys.getFinalOutcome() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome.DEFEAT) {
+            throw new AssertionError("Outcome must be DEFEAT, was: " + bsSys.getFinalOutcome());
+        }
+        if (bsSys.getCurrentState() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.BATTLE_END) {
+            throw new AssertionError("State must be BATTLE_END, was: " + bsSys.getCurrentState());
+        }
+
+        System.out.println("  [CONFIRMED] Player takes lethal damage, reaches 0 HP, and correctly triggers DEFEAT!");
+
+        // Test 21: Dynamic Board Fate Modifiers, Equal-Value Dilemmas, MaxHP & Scout Effects
+        System.out.println("\n[Test 21] Dynamic Fate Modifiers, Equal-Value Dilemmas, MaxHP & Scout...");
+        io.github.snakes_and_ladders_roll_of_fate.board.Board dynBoard =
+            new io.github.snakes_and_ladders_roll_of_fate.board.Board(100, new java.util.Random(42L));
+        dynBoard.generateBoard(io.github.snakes_and_ladders_roll_of_fate.board.BoardModifier.MERCHANT_CARAVAN);
+        if (dynBoard.getPoiCount(io.github.snakes_and_ladders_roll_of_fate.board.TileLandmark.MERCHANT) < 4) {
+            throw new AssertionError("Merchant Caravan modifier should populate visible Merchant POIs");
+        }
+        if (dynBoard.getPoiCount(io.github.snakes_and_ladders_roll_of_fate.board.TileLandmark.CROSSROADS) < 3) {
+            throw new AssertionError("Dynamic board should contain at least 3 Crossroads POIs");
+        }
+
+        Player dilemmaHero = new Player("Explorer", CharacterClass.FOX);
+        dilemmaHero.setPosition(10);
+        EventEffect.setScoutHandler((p, ahead) -> dynBoard.revealRange(p.getPosition() + 1, p.getPosition() + ahead));
+
+        int baseMax = dilemmaHero.getMaxHealth();
+        new EventEffect(EventEffectType.MAX_HEALTH, -15).apply(dilemmaHero);
+        if (dilemmaHero.getMaxHealth() != baseMax - 15) {
+            throw new AssertionError("MAX_HEALTH trade-off should reduce maxHP cleanly, was: " + dilemmaHero.getMaxHealth());
+        }
+        if (dilemmaHero.getHealth() > dilemmaHero.getMaxHealth()) {
+            throw new AssertionError("Current health must clamp to new lower maxHP");
+        }
+
+        dilemmaHero.setTotalExperience(40);
+        dilemmaHero.setExperience(40);
+        new EventEffect(EventEffectType.EXPERIENCE, -25).apply(dilemmaHero);
+        if (dilemmaHero.getTotalExperience() != 15) {
+            throw new AssertionError("Negative EXP trade-off should leave 15 Total EXP, was: " + dilemmaHero.getTotalExperience());
+        }
+
+        new EventEffect(EventEffectType.SCOUT, 8).apply(dilemmaHero);
+        for (int t = 11; t <= 18; t++) {
+            if (!dynBoard.getTile(t).isRevealed()) {
+                throw new AssertionError("SCOUT effect should reveal tile " + t);
+            }
+        }
+
+        Event shrineEvt = EventRepository.createProceduralShrineEvent(50);
+        Event crossEvt = EventRepository.createProceduralCrossroadsEvent(50);
+        Event chestEvt = EventRepository.createProceduralTreasureEvent(50);
+        Event snakeEvt = EventRepository.createProceduralSnakeEvent(50);
+        Event ladderEvt = EventRepository.createProceduralLadderEvent(50);
+        if (shrineEvt.getChoices().size() != 3 || crossEvt.getChoices().size() != 3 || chestEvt.getChoices().size() != 3) {
+            throw new AssertionError("Procedural dilemma events should offer 3 equal-value dilemma choices");
+        }
+        if (!snakeEvt.getChoices().get(0).isTriggersCombat()) {
+            throw new AssertionError("Snake dilemma option 1 must flag triggersCombat()");
+        }
+        if (!ladderEvt.getChoices().get(2).isSkipsSpecialMove()) {
+            throw new AssertionError("Ladder dilemma option 3 (Scavenge) must flag skipsSpecialMove()");
+        }
+
+        // Test 22: Single-Use Enforcement, Board Utility Relics, Double-Edged Items & Curses
+        System.out.println("\n[Test 22] Single-Use Items, Board Utilities, Double-Edged Relics & Curses...");
+        Player utilHero = new Player("Tactician", CharacterClass.FOX);
+        utilHero.getInventory().removeItem(0); // Start with clean empty satchel
+        utilHero.setHealth(80);
+        utilHero.setAttack(10);
+        utilHero.setDefense(5);
+
+        // 1. Verify single-use enforcement even on EQUIPMENT
+        Item relicBlade = Item.createEquipment("Relic Blade", EventEffectType.ATTACK, 4, 3, 5, "+4 ATK (1-Use Relic)");
+        if (relicBlade.getDurability() != 1 || relicBlade.getMaxDurability() != 1) {
+            throw new AssertionError("All items must be single-use (durability = 1), was: " + relicBlade.getDurability());
+        }
+
+        // 2. Board Utility Relics (Loaded Golden Die, Heavy Lead Boots, Snake Charmer's Flute)
+        Item goldenDie = Item.createConsumable("Loaded Golden Die", EventEffectType.DICE_EXACT, 6, "Pick exact roll");
+        Item leadBoots = Item.createConsumable("Heavy Lead Boots", EventEffectType.DICE_CLAMP, 2, "Cap roll at 2");
+        Item snakeFlute = Item.createConsumable("Snake Charmer's Flute", EventEffectType.SNAKE_WARD, 1, "Pacify next snake");
+        utilHero.addItem(goldenDie);
+        utilHero.addItem(leadBoots);
+        utilHero.addItem(snakeFlute);
+
+        utilHero.useItem(0); // Golden Die
+        if (!utilHero.hasPendingDiceChoice()) {
+            throw new AssertionError("Loaded Golden Die must enable pendingDiceChoice");
+        }
+        utilHero.useItem(0); // Heavy Lead Boots
+        if (utilHero.getMaxDiceRollCap() != 2) {
+            throw new AssertionError("Heavy Lead Boots must set maxDiceRollCap to 2, was: " + utilHero.getMaxDiceRollCap());
+        }
+        utilHero.useItem(0); // Snake Charmer's Flute
+        if (!utilHero.hasSnakeWard()) {
+            throw new AssertionError("Snake Charmer's Flute must activate Snake Ward");
+        }
+
+        // 3. Double-Edged Relic (Berserker's Blood Draught: +10 ATK, -15 HP)
+        Item draught = Item.createDoubleEdged("Berserker's Blood Draught", EventEffectType.ATTACK, 10, EventEffectType.HEALTH, -15, "+10 ATK, -15 HP");
+        utilHero.addItem(draught);
+        utilHero.useItem(0);
+        if (utilHero.getAttack() != 20) {
+            throw new AssertionError("Double-edged draught should grant +10 ATK (total 20), was: " + utilHero.getAttack());
+        }
+        if (utilHero.getHealth() != 65) {
+            throw new AssertionError("Double-edged draught should cost 15 HP (remaining 65), was: " + utilHero.getHealth());
+        }
+        utilHero.clearTemporaryBuffs();
+
+        // 4. Passive Curses: cannot be consumed, penalize stats/rolls, can be cleansed or bartered
+        Item rollCurse = Item.createCurse("Cursed Obsidian Slab", EventEffectType.MOVE, -1, "Passive: -1 Roll");
+        Item atkCurse = Item.createCurse("Viper's Hex Totem", EventEffectType.ATTACK, -2, "Passive: -2 ATK");
+        Item defCurse = Item.createCurse("Rusted Iron Shackles", EventEffectType.DEFENSE, -2, "Passive: -2 DEF");
+        utilHero.addItem(rollCurse);
+        utilHero.addItem(atkCurse);
+        utilHero.addItem(defCurse);
+
+        if (utilHero.useItem(0)) {
+            throw new AssertionError("Curses must NOT be usable/discardable via normal useItem()");
+        }
+        if (utilHero.getCurseDiceModifier() != -1) {
+            throw new AssertionError("Cursed Obsidian Slab must apply -1 dice modifier, was: " + utilHero.getCurseDiceModifier());
+        }
+        if (utilHero.getAttack() != 8 || utilHero.getDefense() != 3) {
+            throw new AssertionError("Curses must passively penalize ATK (8) and DEF (3), got ATK=" + utilHero.getAttack() + " DEF=" + utilHero.getDefense());
+        }
+
+        // Verify BattleSystem blocks curse & board-only items mid-combat
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem utilBs =
+            new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        Enemy dummySnake = new Enemy("Test Viper");
+        dummySnake.setHealth(50);
+        utilBs.startBattle(utilHero, dummySnake);
+        utilBs.onPlayerUseItem(0); // Trying to use Curse in combat should NOT end turn
+        if (utilBs.getCurrentState() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.PLAYER_TURN) {
+            throw new AssertionError("BattleSystem must reject Curse usage without wasting player's turn");
+        }
+
+        // Verify Shrine HAS_CURSE purification cleanses all curses
+        EventChoice purifyChoice = EventChoice.createCleanseCurseChoice("Purify curses");
+        if (!purifyChoice.isAvailable(utilHero)) {
+            throw new AssertionError("HAS_CURSE purify choice must be available when cursed");
+        }
+        purifyChoice.execute(utilHero);
+        if (utilHero.hasCurse() || utilHero.getAttack() != 10 || utilHero.getDefense() != 5 || utilHero.getCurseDiceModifier() != 0) {
+            throw new AssertionError("Purifying curses must remove all curses and restore stats!");
+        }
+        System.out.println("  [CONFIRMED] Single-use enforcement, board utilities, double-edged items, and curses verified!");
+
+        System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");
+    }
+}

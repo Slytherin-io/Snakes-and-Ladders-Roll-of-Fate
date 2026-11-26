@@ -19,6 +19,9 @@ apply plugin: 'io.github.fourlastor.construo'
 import io.github.fourlastor.construo.Target
 
 sourceSets.main.resources.srcDirs += [ rootProject.file('assets').path ]
+processResources {
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
 application.mainClass = 'io.github.snakes_and_ladders_roll_of_fate.lwjgl3.Lwjgl3Launcher'
 application.applicationName = appName
 eclipse.project.name = appName + '-lwjgl3'
@@ -29,6 +32,7 @@ if (JavaVersion.current().isJava9Compatible()) {
 }
 
 dependencies {
+  implementation "com.badlogicgames.gdx-video:gdx-video-lwjgl3:1.3.4"
   implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
   implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
   implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
@@ -60,6 +64,46 @@ run {
   jvmArgs += "--enable-native-access=ALL-UNNAMED"
   jvmArgs += "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
 // On macOS, we need to set this for the run task to allow debugging in IDEA or AS to work.
+  if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+}
+
+task runCapture(type: JavaExec) {
+  dependsOn classes
+  mainClass = 'io.github.snakes_and_ladders_roll_of_fate.lwjgl3.SummaryCaptureLauncher'
+  classpath = sourceSets.main.runtimeClasspath
+  workingDir = rootProject.file('assets').path
+  jvmArgs += "--enable-native-access=ALL-UNNAMED"
+  jvmArgs += "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
+  if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+}
+
+task runBoardCapture(type: JavaExec) {
+  dependsOn classes
+  mainClass = 'io.github.snakes_and_ladders_roll_of_fate.lwjgl3.BoardMiniMapCaptureLauncher'
+  classpath = sourceSets.main.runtimeClasspath
+  workingDir = rootProject.file('assets').path
+  jvmArgs += "--enable-native-access=ALL-UNNAMED"
+  jvmArgs += "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
+  if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+}
+
+task runShepherdModalCapture(type: JavaExec) {
+  dependsOn classes
+  mainClass = 'io.github.snakes_and_ladders_roll_of_fate.lwjgl3.ShepherdModalCaptureLauncher'
+  classpath = sourceSets.main.runtimeClasspath
+  workingDir = rootProject.file('assets').path
+  jvmArgs += "--enable-native-access=ALL-UNNAMED"
+  jvmArgs += "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
+  if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+}
+
+task runReaperAwakenCapture(type: JavaExec) {
+  dependsOn classes
+  mainClass = 'io.github.snakes_and_ladders_roll_of_fate.lwjgl3.ReaperAwakenCaptureLauncher'
+  classpath = sourceSets.main.runtimeClasspath
+  workingDir = rootProject.file('assets').path
+  jvmArgs += "--enable-native-access=ALL-UNNAMED"
+  jvmArgs += "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
   if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
 }
 
