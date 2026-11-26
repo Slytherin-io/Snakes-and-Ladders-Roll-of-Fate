@@ -30,103 +30,55 @@ public class SnakeTile extends Tile {
         startCombat(player);
     }
 
+    private static final String[][] SPECIES_NAMES = {
+        {"Emerald Viper", "Obsidian Cobra", "Magma Wyrm"},                 // Venomous / Aggressive
+        {"Forest Python", "Crag Carapace Serpent", "Abyssal Basilisk"},     // Defensive / Regenerating
+        {"Moss Adder", "Cave Rattler", "Apex Celestial Serpent"}            // Stealthy / Evasive
+    };
+
+    private static final String[][] SPECIES_REWARDS = {
+        {"Emerald Scales", "Obsidian Scale", "Heart of Magma"},
+        {"Python Leather", "Crag Serpent Plate", "Basilisk Carapace"},
+        {"Adder Venom Sac", "Rattler Fang", "Celestial Serpent Crest"}
+    };
+
     /**
-     * Factory: builds an Act-themed, balanced, position-scaled serpent for combat and the BattleScreen.
-     * Act I (Tiles 1-30): Kind of easy - Moss Adder, Forest Python, Emerald Viper
-     * Act II (Tiles 31-70): Getting hard - Cave Rattler, Crag Carapace Serpent, Obsidian Cobra
-     * Act III (Tiles 71-100): Difficult - Magma Wyrm, Abyssal Basilisk, Apex Celestial Serpent
+     * Factory: builds Act-themed, tier-balanced serpents (matching upstream's capped stats
+     * to prevent late-game damage sponges while keeping Act I-III species variety).
+     * Act I (Tiles 1-30): Emerald Viper, Forest Python, Moss Adder
+     * Act II (Tiles 31-70): Obsidian Cobra, Crag Carapace Serpent, Cave Rattler
+     * Act III (Tiles 71-100): Magma Wyrm, Abyssal Basilisk, Apex Celestial Serpent
      */
     public Enemy createSnakeEnemy() {
         int pos = getPosition();
-        Enemy snake;
+        int tier = (pos <= 30) ? 1 : ((pos <= 70) ? 2 : 3);
+        int idx = tier - 1;
         int variant = random.nextInt(3);
 
-        if (pos <= 30) {
-            // Act I: The Verdant Trail (Tiles 1-30) - Kind of easy, introductory encounters
-            switch (variant) {
-                case 0:
-                    snake = new Enemy("Moss Adder");
-                    snake.setBehavior("Skittish Striker (Swift, Low HP)");
-                    snake.setAttack(6 + (pos / 15));
-                    snake.setHealth(20 + (pos / 3));
-                    snake.setDefense(1);
-                    snake.setReward("Adder Venom Sac");
-                    break;
-                case 1:
-                    snake = new Enemy("Forest Python");
-                    snake.setBehavior("Coiling Constrictor (High HP, Low ATK)");
-                    snake.setAttack(4 + (pos / 15));
-                    snake.setHealth(30 + (pos / 3));
-                    snake.setDefense(3);
-                    snake.setReward("Python Leather");
-                    break;
-                default:
-                    snake = new Enemy("Emerald Viper");
-                    snake.setBehavior("Balanced Ambush (Moderate ATK & HP)");
-                    snake.setAttack(5 + (pos / 15));
-                    snake.setHealth(24 + (pos / 3));
-                    snake.setDefense(2);
-                    snake.setReward("Emerald Scales");
-                    break;
-            }
-        } else if (pos <= 70) {
-            // Act II: The Jagged Crags & Sunken Caverns (Tiles 31-70) - Getting hard, tactical tests
-            int actOffset = pos - 30;
-            switch (variant) {
-                case 0:
-                    snake = new Enemy("Cave Rattler");
-                    snake.setBehavior("Furious Rattler (High ATK, Threatening Strikes)");
-                    snake.setAttack(13 + (actOffset / 10));
-                    snake.setHealth(44 + (actOffset / 2));
-                    snake.setDefense(2 + (actOffset / 20));
-                    snake.setReward("Rattler Fang");
-                    break;
-                case 1:
-                    snake = new Enemy("Crag Carapace Serpent");
-                    snake.setBehavior("Stone-Scaled (Heavy DEF, High HP)");
-                    snake.setAttack(8 + (actOffset / 12));
-                    snake.setHealth(58 + (actOffset / 2));
-                    snake.setDefense(6 + (actOffset / 15));
-                    snake.setReward("Crag Serpent Plate");
-                    break;
-                default:
-                    snake = new Enemy("Obsidian Cobra");
-                    snake.setBehavior("Venomous Stalker (Balanced, Piercing Fangs)");
-                    snake.setAttack(11 + (actOffset / 10));
-                    snake.setHealth(50 + (actOffset / 2));
-                    snake.setDefense(4 + (actOffset / 20));
-                    snake.setReward("Obsidian Scale");
-                    break;
-            }
-        } else {
-            // Act III: The Spire of Fate & Dragon's Summit (Tiles 71-100) - Difficult, apex trials
-            int actOffset = pos - 70;
-            switch (variant) {
-                case 0:
-                    snake = new Enemy("Magma Wyrm");
-                    snake.setBehavior("Infernal Rage (Devastating ATK, Fierce Strikes)");
-                    snake.setAttack(22 + (actOffset / 6));
-                    snake.setHealth(76 + actOffset);
-                    snake.setDefense(4 + (actOffset / 15));
-                    snake.setReward("Heart of Magma");
-                    break;
-                case 1:
-                    snake = new Enemy("Abyssal Basilisk");
-                    snake.setBehavior("Petrifying Gaze (Massive HP & Iron Armor)");
-                    snake.setAttack(14 + (actOffset / 8));
-                    snake.setHealth(92 + actOffset);
-                    snake.setDefense(9 + (actOffset / 10));
-                    snake.setReward("Basilisk Carapace");
-                    break;
-                default:
-                    snake = new Enemy("Apex Celestial Serpent");
-                    snake.setBehavior("Apex Predator (Supreme ATK & Resilience)");
-                    snake.setAttack(19 + (actOffset / 7));
-                    snake.setHealth(84 + actOffset);
-                    snake.setDefense(7 + (actOffset / 12));
-                    snake.setReward("Celestial Serpent Crest");
-                    break;
-            }
+        Enemy snake = new Enemy(SPECIES_NAMES[variant][idx]);
+        snake.setReward(SPECIES_REWARDS[variant][idx]);
+
+        switch (variant) {
+            case 0: // Venomous / Aggressive (Glass Cannon — Toxic Bite)
+                snake.setBehavior("Aggressive (Venomous)");
+                snake.setAttack(4 + (tier * 3));      // ATK: 7, 10, 13
+                snake.setHealth(15 + (tier * 10));    // HP:  25, 35, 45
+                snake.setDefense(tier);               // DEF: 1,  2,  3
+                break;
+
+            case 1: // Defensive / Regenerating Tank (High Bulk, Capped DEF)
+                snake.setBehavior("Defensive (Regenerating)");
+                snake.setAttack(2 + (tier * 2));      // ATK: 4,  6,  8
+                snake.setHealth(25 + (tier * 15));    // HP:  40, 55, 70
+                snake.setDefense(1 + tier);           // DEF: 2,  3,  4 (Capped to prevent immunity)
+                break;
+
+            default: // Stealthy / Evasive Striker (20% Dodge, Crit Strikes)
+                snake.setBehavior("Stealthy (Evasive)");
+                snake.setAttack(3 + (tier * 3));      // ATK: 6,  9,  12
+                snake.setHealth(20 + (tier * 12));    // HP:  32, 44, 56
+                snake.setDefense(tier);               // DEF: 1,  2,  3
+                break;
         }
         return snake;
     }

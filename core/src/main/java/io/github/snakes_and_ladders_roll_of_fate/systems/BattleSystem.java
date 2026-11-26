@@ -18,6 +18,7 @@ public class BattleSystem {
 
     public enum BattleState { PLAYER_TURN, ENEMY_TURN, BATTLE_END }
     public enum BattleOutcome { VICTORY, DEFEAT, ESCAPED, WEAKENED }
+    private enum SerpentArchetype { VENOMOUS, REGEN_TANK, AGILE_STRIKER, STANDARD }
 
     public interface BattleListener {
         void onDamageDealt(Entity attacker, Entity defender, int damage, boolean isCrit, boolean isMiss);
@@ -35,11 +36,14 @@ public class BattleSystem {
 
     private Player player;
     private Enemy enemy;
+    private int enemyMaxHp = 0;
     private final Dice combatDice = new Dice(20);
     private int lastRoll = 0;
 
     private int playerTempDef = 0;
     private boolean isPlayerGuarding = false;
+    private int playerPoisonTurns = 0;
+    private int playerPoisonDamage = 0;
     private String battleLog = "";
     private String battleState = "IDLE";
 
@@ -58,20 +62,20 @@ public class BattleSystem {
     public int getLastRoll()            { return lastRoll; }
     public boolean isLastRollCritical() { return lastRoll == 20; }
     public boolean isLastRollMiss()     { return lastRoll == 1; }
+    public boolean isPlayerGuarding()   { return isPlayerGuarding; }
 
     public void startBattle(Player player, Enemy enemy) {
         this.player = player;
         this.enemy = enemy;
+        this.enemyMaxHp = (enemy != null) ? Math.max(1, enemy.getHealth()) : 100;
         this.playerTempDef = 0;
         this.isPlayerGuarding = false;
+        this.playerPoisonTurns = 0;
+        this.playerPoisonDamage = 0;
         this.finalOutcome = null;
         this.currentState = BattleState.PLAYER_TURN;
         this.battleState = "IN_PROGRESS";
         this.battleLog = "A wild " + enemy.getEnemyType() + " blocks your path!";
-    }
-
-    public boolean isPlayerGuarding() {
-        return isPlayerGuarding;
     }
 
     public void startBattle(Entity attacker, Entity defender) {
@@ -98,9 +102,51 @@ public class BattleSystem {
         this.enemyAttackStarter = starter;
     }
 
+    private SerpentArchetype resolveSerpentArchetype(Enemy target) {
+        if (target == null || target.getEnemyType() == null) return SerpentArchetype.STANDARD;
+        String name = target.getEnemyType();
+        if (name.contains("Python") || name.contains("Carapace") || name.contains("Basilisk")) {
+            return SerpentArchetype.REGEN_TANK;
+        }
+        if (name.contains("Viper") || name.contains("Cobra") || name.contains("Wyrm")) {
+            return SerpentArchetype.VENOMOUS;
+        }
+        if (name.contains("Asp") || name.contains("Adder") || name.contains("Rattler") || name.contains("Celestial")) {
+            return SerpentArchetype.AGILE_STRIKER;
+        }
+        return SerpentArchetype.STANDARD;
+    }
+
+    private int applyGuardedMitigation(int raw) {
+        int reduced = raw / 2;
+        int damage = Math.max(0, reduced - Math.max(1, player.getDefense() / 2));
+        if (raw > 0 && damage >= raw) {
+            damage = Math.max(0, raw / 2);
+        }
+        return damage;
+    }
+
+    private int rollRiposteDamage(int riposteRoll) {
+        int baseRiposte = (player.getCharacterClass() == CharacterClass.TURTLE)
+            ? (player.getAttack() + 2)
+            : Math.max(2, player.getAttack() / 2);
+        return baseRiposte + ((riposteRoll - 1) / 5);
+    }
+
     // --- PLAYER ACTIONS (called by Scene2D buttons) ---
     public void onPlayerAttack() {
         if (currentState != BattleState.PLAYER_TURN) return;
+
+        // Agile/Stealthy serpents have a 20% evasion chance
+        if (resolveSerpentArchetype(enemy) == SerpentArchetype.AGILE_STRIKER && Math.random() < 0.20) {
+            if (battleListener != null) {
+                battleListener.onDamageDealt(player, enemy, 0, false, true);
+            }
+            battleLog = "The " + enemy.getEnemyType() + " evades your attack!";
+            triggerEnemyTurn();
+            return;
+        }
+
         int damage = calculateDamage(player, enemy);
         boolean isCrit = isLastRollCritical();
         boolean isMiss = isLastRollMiss();
@@ -139,7 +185,7 @@ public class BattleSystem {
         }
     }
 
-    /** Routes through your real Inventory/Player API; MOVE items are blocked mid-battle. */
+    /** Routes through Inventory/Player API; blocks curses, board-only items, and lethal trade-off costs. */
     public void onPlayerUseItem(int slotIndex) {
         if (currentState != BattleState.PLAYER_TURN) return;
 
@@ -155,7 +201,6 @@ public class BattleSystem {
             return;
         }
 
-        // Block curses and board-only utilities during combat
         if (item.isCurse()) {
             battleLog = "Cursed burdens cannot be used! Cleanse at a Sanctuary or barter it.";
             return;
@@ -172,12 +217,10 @@ public class BattleSystem {
             return;
         }
 
-        // Use the item via the Player class (handles durability, consumption, etc.)
         boolean success = player.useItem(slotIndex);
-
         if (success) {
             battleLog = "You used " + item.getName() + "! (" + item.getEffect() + ")";
-            triggerEnemyTurn(); // Using an item consumes the player's turn
+            triggerEnemyTurn();
         } else {
             battleLog = "You fumbled and cannot use " + item.getName() + "!";
         }
@@ -199,31 +242,47 @@ public class BattleSystem {
 
     public void executeEnemyAttack() {
         if (currentState != BattleState.ENEMY_TURN) return;
+
+        StringBuilder log = new StringBuilder();
+        SerpentArchetype archetype = resolveSerpentArchetype(enemy);
+
+        // Regenerative Tanks recover +5 HP at turn start (capped at their starting max HP)
+        if (archetype == SerpentArchetype.REGEN_TANK) {
+            int before = enemy.getHealth();
+            int after = Math.min(enemyMaxHp, before + 5);
+            enemy.setHealth(after);
+            if (after > before) {
+                log.append(enemy.getEnemyType()).append(" regenerates ").append(after - before).append(" HP! ");
+            }
+        }
+
         int raw = calculateDamage(enemy, player);
+        final int enemyRoll = lastRoll;
         boolean isCrit = isLastRollCritical();
         boolean isMiss = isLastRollMiss();
-        int damage;
 
+        if (!isPlayerGuarding && archetype == SerpentArchetype.AGILE_STRIKER && enemyRoll >= 18) {
+            if (!isCrit) {
+                raw *= 2;
+            }
+            isCrit = true;
+            log.append("CRITICAL STRIKE! ");
+        }
+
+        int damage;
         if (isPlayerGuarding) {
-            // 1. Critical Negation: convert natural 20 into a deflected normal blow
             if (isCrit) {
                 isCrit = false;
                 int baseDamage = Math.max(1, enemy.getAttack() - player.getDefense());
                 raw = baseDamage + ((combatDice.roll() - 1) / 4);
             }
-            // 2. Heavy Damage Mitigation: 50% damage reduction + defense buffer
-            int reduced = raw / 2;
-            damage = Math.max(0, reduced - Math.max(1, player.getDefense() / 2));
-            if (raw > 0 && damage >= raw) {
-                damage = Math.max(0, raw / 2);
-            }
+            damage = applyGuardedMitigation(raw);
         } else {
             damage = Math.max(0, raw - playerTempDef);
         }
         playerTempDef = 0;
 
         int newHealth = player.getHealth() - damage;
-
         if (battleListener != null) {
             battleListener.onDamageDealt(enemy, player, damage, isCrit, isMiss);
         }
@@ -231,25 +290,19 @@ public class BattleSystem {
         if (newHealth <= 0) {
             player.setHealth(0);
             isPlayerGuarding = false;
-            battleLog = enemy.getEnemyType() + " deals " + damage + " damage - you have fallen in battle...";
+            log.append(enemy.getEnemyType()).append(" deals ").append(damage).append(" damage - you have fallen in battle...");
+            battleLog = log.toString();
             endBattle(BattleOutcome.DEFEAT);
             return;
         }
 
         player.setHealth(newHealth);
 
-        // 3. Riposte Counter-Strike if player was guarding
+        // Riposte counter-strike if the player guarded and survived
         if (isPlayerGuarding) {
             isPlayerGuarding = false;
             int riposteRoll = combatDice.roll();
-            int baseRiposte;
-            if (player.getCharacterClass() == CharacterClass.TURTLE) {
-                // Turtle (Iron Guardian) Shell Spikes: Full Attack counter-blow
-                baseRiposte = player.getAttack() + 2;
-            } else {
-                baseRiposte = Math.max(2, player.getAttack() / 2);
-            }
-            int riposteDamage = baseRiposte + ((riposteRoll - 1) / 5);
+            int riposteDamage = rollRiposteDamage(riposteRoll);
             int newEnemyHp = Math.max(0, enemy.getHealth() - riposteDamage);
             enemy.setHealth(newEnemyHp);
 
@@ -262,14 +315,34 @@ public class BattleSystem {
                     + enemy.getEnemyType() + " collapses!";
                 endBattle(BattleOutcome.VICTORY);
                 return;
-            } else {
-                battleLog = "🛡️ Blocked! Took " + damage + " dmg and riposted for " + riposteDamage + " dmg!";
-                currentState = BattleState.PLAYER_TURN;
+            }
+            log.append("🛡️ Blocked! Took ").append(damage).append(" dmg and riposted for ").append(riposteDamage).append(" dmg! ");
+        } else {
+            log.append(enemy.getEnemyType()).append(" deals ").append(damage).append(" damage! ");
+        }
+
+        // Venomous Poison Strike (triggered on high roll when unblocked or on direct strike)
+        if (archetype == SerpentArchetype.VENOMOUS && enemyRoll >= 15 && damage > 0) {
+            playerPoisonTurns = 3;
+            playerPoisonDamage = 3;
+            log.append("Venomous bite! (Poisoned for 3 turns) ");
+        }
+
+        // Poison tick at end of enemy turn
+        if (playerPoisonTurns > 0) {
+            player.setHealth(player.getHealth() - playerPoisonDamage);
+            playerPoisonTurns--;
+            log.append("(Poison deals ").append(playerPoisonDamage).append(" damage!) ");
+            if (player.getHealth() <= 0) {
+                player.setHealth(0);
+                log.append("The venom was too much...");
+                battleLog = log.toString();
+                endBattle(BattleOutcome.DEFEAT);
                 return;
             }
         }
 
-        battleLog = enemy.getEnemyType() + " deals " + damage + " damage!";
+        battleLog = log.toString();
         currentState = BattleState.PLAYER_TURN;
     }
 
@@ -293,10 +366,7 @@ public class BattleSystem {
 
         while (player.getHealth() > 0 && enemy.getHealth() > 0) {
             System.out.println("\n[ " + player.getName() + " | HP: " + player.getHealth() + " ]  vs  [ " + enemy.getEnemyType() + " | HP: " + enemy.getHealth() + " ]");
-            System.out.println("1. Attack");
-            System.out.println("2. Defend");
-            System.out.println("3. Use Item");
-            System.out.println("4. Escape");
+            System.out.println("1. Attack  2. Defend  3. Use Item  4. Escape");
             System.out.print("Choose your action: ");
 
             int choice = 1;
@@ -309,14 +379,16 @@ public class BattleSystem {
                     if (player.getHealth() <= 0) return BattleOutcome.DEFEAT;
                     continue;
                 }
-            } else if (scanner == null || !scanner.hasNextLine()) {
-                choice = 1; // Default to Attack in automated testing
             }
 
             boolean playerTurnEnded = false;
-
             switch (choice) {
                 case 1: // Attack
+                    if (resolveSerpentArchetype(enemy) == SerpentArchetype.AGILE_STRIKER && Math.random() < 0.20) {
+                        System.out.println("The " + enemy.getEnemyType() + " evades your attack!");
+                        playerTurnEnded = true;
+                        break;
+                    }
                     int playerDamage = calculateDamage(player, enemy);
                     enemy.setHealth(Math.max(0, enemy.getHealth() - playerDamage));
                     System.out.println("You strike the " + enemy.getEnemyType() + " for " + playerDamage + " damage!");
@@ -325,8 +397,7 @@ public class BattleSystem {
 
                 case 2: // Defend
                     isPlayerGuarding = true;
-                    int defendBonus = 5;
-                    player.addTempDefense(defendBonus);
+                    player.addTempDefense(5);
                     System.out.println("You raise your guard! (Damage halved, crits negated, riposte readied!)");
                     playerTurnEnded = true;
                     break;
@@ -357,28 +428,22 @@ public class BattleSystem {
                     break;
             }
 
-            // Check if enemy died from player's action
             if (enemy.getHealth() <= 0) {
                 System.out.println("\n🏆 VICTORY! The " + enemy.getEnemyType() + " has been slain!");
                 endBattle(BattleOutcome.VICTORY);
                 return BattleOutcome.VICTORY;
             }
 
-            // Enemy Turn (if player didn't escape)
             if (playerTurnEnded) {
                 enemyConsoleTurn(player, enemy);
-
-                // Clear temporary defense buff after enemy attacks
                 player.clearTemporaryBuffs();
 
-                // Check if enemy died from player's riposte
                 if (enemy.getHealth() <= 0) {
                     System.out.println("\n🏆 VICTORY! The " + enemy.getEnemyType() + " was felled by your riposte!");
                     endBattle(BattleOutcome.VICTORY);
                     return BattleOutcome.VICTORY;
                 }
 
-                // Check battle end conditions
                 if (player.getHealth() <= 0) {
                     player.setHealth(0);
                     endBattle(BattleOutcome.DEFEAT);
@@ -394,29 +459,40 @@ public class BattleSystem {
 
     private void enemyConsoleTurn(Player player, Enemy enemy) {
         System.out.println("\n-> " + enemy.getEnemyType() + " attacks!");
-        int raw = calculateDamage(enemy, player);
-        boolean isCrit = isLastRollCritical();
-        int damage;
+        SerpentArchetype archetype = resolveSerpentArchetype(enemy);
 
+        if (archetype == SerpentArchetype.REGEN_TANK) {
+            int before = enemy.getHealth();
+            int after = Math.min(enemyMaxHp, before + 5);
+            enemy.setHealth(after);
+            if (after > before) {
+                System.out.println("  [REGEN] " + enemy.getEnemyType() + " regenerates " + (after - before) + " HP! (Current HP: " + after + ")");
+            }
+        }
+
+        int raw = calculateDamage(enemy, player);
+        final int enemyRoll = lastRoll;
+        boolean isCrit = isLastRollCritical();
+
+        if (!isPlayerGuarding && archetype == SerpentArchetype.AGILE_STRIKER && enemyRoll >= 18) {
+            if (!isCrit) raw *= 2;
+            System.out.println("  ⚔️ CRITICAL STRIKE!");
+        }
+
+        int damage;
         if (isPlayerGuarding) {
             if (isCrit) {
-                isCrit = false;
                 int baseDamage = Math.max(1, enemy.getAttack() - player.getDefense());
                 raw = baseDamage + ((combatDice.roll() - 1) / 4);
                 System.out.println("  [DEFLECTED] Guard negated the serpent's critical strike!");
             }
-            int reduced = raw / 2;
-            damage = Math.max(0, reduced - Math.max(1, player.getDefense() / 2));
-            if (raw > 0 && damage >= raw) {
-                damage = Math.max(0, raw / 2);
-            }
+            damage = applyGuardedMitigation(raw);
             System.out.println("  [GUARD] Shield absorbed " + (raw - damage) + " damage! (Damage taken: " + damage + ")");
         } else {
             damage = raw;
         }
 
         int newHealth = player.getHealth() - damage;
-
         if (newHealth <= 0) {
             player.setHealth(0);
             System.out.println("The " + enemy.getEnemyType() + " dealt " + damage + " damage. You have been defeated...");
@@ -427,22 +503,36 @@ public class BattleSystem {
         player.setHealth(newHealth);
         System.out.println("The " + enemy.getEnemyType() + " dealt " + damage + " damage. Your HP: " + player.getHealth());
 
-        // Console Riposte Execution
         if (isPlayerGuarding) {
             isPlayerGuarding = false;
-            int riposteRoll = combatDice.roll();
-            int baseRiposte = (player.getCharacterClass() == CharacterClass.TURTLE)
-                ? (player.getAttack() + 2) : Math.max(2, player.getAttack() / 2);
-            int riposteDamage = baseRiposte + ((riposteRoll - 1) / 5);
+            int riposteDamage = rollRiposteDamage(combatDice.roll());
             int newEnemyHp = Math.max(0, enemy.getHealth() - riposteDamage);
             enemy.setHealth(newEnemyHp);
             System.out.println("  ⚡ [RIPOSTE] You counter-attacked for " + riposteDamage + " damage! (" + enemy.getEnemyType() + " HP: " + newEnemyHp + ")");
+            if (newEnemyHp <= 0) {
+                return;
+            }
+        }
+
+        if (archetype == SerpentArchetype.VENOMOUS && enemyRoll >= 15 && damage > 0) {
+            playerPoisonTurns = 3;
+            playerPoisonDamage = 3;
+            System.out.println("  🧪 The " + enemy.getEnemyType() + "'s venom seeps in! (Poisoned for 3 turns)");
+        }
+
+        if (playerPoisonTurns > 0) {
+            player.setHealth(player.getHealth() - playerPoisonDamage);
+            playerPoisonTurns--;
+            System.out.println("  🤢 Poison deals " + playerPoisonDamage + " damage! (HP: " + player.getHealth() + ")");
+            if (player.getHealth() <= 0) {
+                player.setHealth(0);
+                System.out.println("The venom was too much... You have been defeated.");
+            }
         }
     }
 
     private boolean useItemMenu(Player player, Scanner scanner) {
         Inventory inventory = player.getInventory();
-
         if (inventory == null || inventory.isEmpty()) {
             System.out.println("Your inventory is empty!");
             return false;
@@ -455,9 +545,7 @@ public class BattleSystem {
         try {
             int itemChoice = Integer.parseInt(scanner.nextLine());
             if (itemChoice == 0) return false;
-
-            boolean used = player.useItem(itemChoice - 1);
-            return used;
+            return player.useItem(itemChoice - 1);
         } catch (Exception e) {
             System.out.println("Invalid selection.");
             return false;
