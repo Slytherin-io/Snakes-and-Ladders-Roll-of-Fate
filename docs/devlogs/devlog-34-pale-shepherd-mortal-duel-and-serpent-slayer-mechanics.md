@@ -47,14 +47,15 @@
 - Players can no longer rely on a rigid Round 7 timer; the reaper may awaken as early as Round 4 or bide its time until Round 7.
 
 ### 3. Snake Tile Slayer Mastery & Tail Slide Acrobatics (`SnakeTile.java`, `EventRepository.java`, `BoardScreen.java`)
-- **Acrobatics D20 Tail Slide**:
-  - Updated narrative choice in `EventRepository.java`: `"[Slide Down the Tail] Plunge down the serpent's tail (Acrobatics D20: 20=0 DMG | 10-19=10 DMG | <10=20 DMG)"`.
-  - Removed the old passive free EXP reward on slide down.
-  - In `BoardScreen.java` (`handleChoiceSelected`), sliding down rolls an Acrobatics D20 check:
-    - **Natural 20**: Flawless landing! Avoids all tumble damage (0 DMG).
-    - **10–19**: Controlled slide down scales; takes standard tumble damage (-10 HP).
-    - **1–9**: Rough crash landing on sharp spines; takes severe crash damage (-20 HP).
-    - Clamped cleanly with `Math.max(1, player.getHealth() - tumbleDmg)` to preserve agency while heavily punishing careless retreats.
+- **Acrobatics D20 Tail Slide & Outcome Simplification**:
+  - Simplified choice description in `EventRepository.java`: `"[Slide Down the Tail] Slide down the tail (Roll D20 to reduce fall damage)"`, eliminating cluttered mathematical shorthand.
+  - Streamlined outcome view in `BoardScreen.java` into clean, human-readable key-value pairs:
+    - **Natural 20**: `Fall Damage: None (Roll: 20)` in emerald green.
+    - **10–19**: `Fall Damage: -10 HP (Roll: X)` in crimson red.
+    - **1–9**: `Fall Damage: -20 HP (Roll: X)` in crimson red.
+    - Destination: `Slid down to Tile X.`
+  - Removed old passive free EXP on sliding down.
+  - Health deduction clamped with `Math.max(1, player.getHealth() - tumbleDmg)` to preserve agency while providing meaningful stakes.
 - **Slayer Stat Mastery & Act-Exclusive Trophies**:
   - In `SnakeTile.java` (`resolveOutcome`), slaying a serpent grants permanent progression:
     - Permanent +1 Attack (`player.setAttack(player.getAttack() + 1)`)

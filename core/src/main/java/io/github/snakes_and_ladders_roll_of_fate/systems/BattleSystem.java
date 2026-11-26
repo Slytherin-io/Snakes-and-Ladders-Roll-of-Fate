@@ -96,6 +96,7 @@ public class BattleSystem {
     public Player getPlayer() { return player; }
     public Enemy getEnemy() { return enemy; }
     public String getBattleLog() { return battleLog; }
+    public void setBattleLog(String battleLog) { this.battleLog = battleLog; }
     public String getBattleState() { return battleState; }
 
     public void setBattleListener(BattleListener listener) {
@@ -346,6 +347,7 @@ public class BattleSystem {
             }
         }
 
+        player.clearTemporaryBuffs();
         battleLog = log.toString();
         currentState = BattleState.PLAYER_TURN;
     }
@@ -355,6 +357,9 @@ public class BattleSystem {
     }
 
     private void endBattle(BattleOutcome outcome) {
+        if (player != null) {
+            player.clearTemporaryBuffs();
+        }
         this.finalOutcome = outcome;
         this.currentState = BattleState.BATTLE_END;
         this.battleState = "ENDED";

@@ -2027,20 +2027,20 @@ public class BoardScreen implements Screen {
                 String rollDesc;
                 if (tumbleRoll == 20) {
                     tumbleDmg = 0;
-                    rollDesc = "Acrobatics D20: [20 - NATURAL 20!] Flawless landing! Avoided all fall damage!";
+                    rollDesc = "Fall Damage: None (Roll: 20)";
                 } else if (tumbleRoll >= 10) {
                     tumbleDmg = 10;
-                    rollDesc = "Acrobatics D20: [" + tumbleRoll + "] Controlled slide. Suffered standard tumble damage (-10 HP).";
+                    rollDesc = "Fall Damage: -10 HP (Roll: " + tumbleRoll + ")";
                 } else {
                     tumbleDmg = 20;
-                    rollDesc = "Acrobatics D20: [" + tumbleRoll + " - ROUGH TUMBLE!] Slipped on venomous scales! Crash damage (-20 HP).";
+                    rollDesc = "Fall Damage: -20 HP (Roll: " + tumbleRoll + ")";
                 }
                 if (tumbleDmg > 0) {
                     player.setHealth(Math.max(1, player.getHealth() - tumbleDmg));
                 }
                 res.consequences.clear();
                 res.consequences.add(rollDesc);
-                res.consequences.add("Tumbled down to Tile " + ((SnakeTile) tile).getDestination() + ".");
+                res.consequences.add("Slid down to Tile " + ((SnakeTile) tile).getDestination() + ".");
                 specialSlideTarget = ((SnakeTile) tile).getDestination();
                 showOutcomeView(cleanTitle, res, true);
                 return;
@@ -2443,7 +2443,8 @@ public class BoardScreen implements Screen {
         if (msg.contains(": +") || msg.startsWith("Acquired Relic")
                 || msg.startsWith("Purified:") || msg.startsWith("Protection:")
                 || msg.startsWith("Blessing:") || msg.startsWith("Scouted:")
-                || msg.startsWith("Deflected:") || msg.startsWith("Replaced [")) {
+                || msg.startsWith("Deflected:") || msg.startsWith("Replaced [")
+                || msg.contains("Damage: None")) {
             return Color.valueOf("#1d5c3a");
         }
         if (msg.startsWith("Traded away:") || msg.startsWith("Expended:")) {

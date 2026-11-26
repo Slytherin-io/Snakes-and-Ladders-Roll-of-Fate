@@ -177,6 +177,7 @@ public class BattleScreen implements Screen {
     private BitmapFont titleFont, topBannerFont, hudHpFont, battleLogFont, playerTagFont, miniFont;
     private BitmapFont damageFont, critFont;
     private BitmapFont modalTitleFont, modalSubFont, modalRewardFont, modalNarrativeFont, modalStatusFont;
+    private BitmapFont introSpeakerFont, introBodyFont, introBtnFont;
 
     // Pause, Settings, & Leave Menu Fonts & UI References
     private BitmapFont topPauseFont;
@@ -198,6 +199,13 @@ public class BattleScreen implements Screen {
     // UI Elements
     private Label topBannerLabel, battleLogLabel, playerHpLabel, enemyHpLabel;
     private Table battleLogContainer;
+    private Table bottomBar;
+    private Table bossIntroTable;
+    private Label introDialogueLabel;
+    private Table introActionsRow;
+    private TextButton introAdvanceBtn;
+    private boolean isIntroDialogueActive = false;
+    private int introBeatIndex = 0;
     private TextButton btnAttack, btnDefend, btnItem, btnEscape, continueBtn;
     private Cell<TextButton> continueBtnCell;
     private Table itemPopup;
@@ -373,6 +381,9 @@ public class BattleScreen implements Screen {
         modalRewardFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.WHITE);
         modalNarrativeFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.WHITE);
         modalStatusFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 24, Color.WHITE);
+        introSpeakerFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.valueOf("#ffd54f"));
+        introBodyFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#fff8ea"));
+        introBtnFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 18, Color.WHITE);
 
         Color darkBrown = Color.valueOf("#5a2d0c");
         Color pillBrown = Color.valueOf("#854b25");
@@ -454,6 +465,8 @@ public class BattleScreen implements Screen {
 
         // Start Battle
         battleSystem.startBattle(player, enemy);
+        isIntroDialogueActive = isDawnWardenBattle();
+        introBeatIndex = 0;
 
         // Build UI
         buildTopBanner();
@@ -461,6 +474,7 @@ public class BattleScreen implements Screen {
         buildBattleLog();
         buildHealthPills();
         buildActionButtons();
+        buildDawnWardenIntroOverlay();
         buildItemPopup();
         buildContinueOverlay();
         buildPauseAndSettingsModals(darkBrown, pillBrown);
@@ -662,7 +676,7 @@ public class BattleScreen implements Screen {
             }
         });
 
-        Table bottomBar = new Table();
+        bottomBar = new Table();
         bottomBar.setFillParent(true);
         bottomBar.bottom().padBottom(30);
 
@@ -677,6 +691,179 @@ public class BattleScreen implements Screen {
             bottomBar.add(btnEscape).size(200, 100);
         }
         hudStage.addActor(bottomBar);
+    }
+
+    /**
+     * Builds the in-arena tragic intro confrontation for The Dawn Warden climax trial.
+     * Sits neatly in the bottom center space between the HP pills, below both fighters.
+     */
+    private void buildDawnWardenIntroOverlay() {
+        bossIntroTable = new Table();
+        bossIntroTable.setFillParent(true);
+        bossIntroTable.bottom().padBottom(22);
+        bossIntroTable.setVisible(false);
+
+        if (!isDawnWardenBattle()) {
+            hudStage.addActor(bossIntroTable);
+            return;
+        }
+
+        Table card = new Table();
+        card.setBackground(UIUtils.createRoundedDrawable(
+            960, 190, 18, Color.valueOf("#261105f4"), Color.valueOf("#c89259"), 3));
+        card.pad(14, 28, 16, 28);
+
+        // Header Row: Speaker Label + Skip
+        Table headerRow = new Table();
+        Label speakerLbl = new Label("THE DAWN WARDEN  |  GUARDIAN OF THE GATE",
+            new Label.LabelStyle(introSpeakerFont, Color.valueOf("#ffd54f")));
+        speakerLbl.setAlignment(Align.left);
+
+        TextButton.TextButtonStyle skipStyle = new TextButton.TextButtonStyle();
+        skipStyle.font = miniFont;
+        skipStyle.fontColor = Color.valueOf("#cfb896");
+        skipStyle.overFontColor = Color.WHITE;
+        TextButton skipBtn = new TextButton("SKIP INTRO", skipStyle);
+        skipBtn.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                finishDawnWardenIntro(0, 0, "The Dawn Warden descends before you to test your spirit!");
+            }
+        });
+
+        headerRow.add(speakerLbl).left().expandX();
+        headerRow.add(skipBtn).right();
+        card.add(headerRow).width(900).padBottom(6).row();
+
+        // Dialogue Body
+        introDialogueLabel = new Label("", new Label.LabelStyle(introBodyFont, Color.valueOf("#fff8ea")));
+        introDialogueLabel.setAlignment(Align.center);
+        introDialogueLabel.setWrap(true);
+        card.add(introDialogueLabel).width(900).minHeight(64).center().padBottom(10).row();
+
+        // Action Row (dynamically populated per beat)
+        introActionsRow = new Table();
+        card.add(introActionsRow).width(900).center();
+
+        TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
+        advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#854b25"), Color.valueOf("#c89259"), 2);
+        advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#a66032"), Color.valueOf("#ffd54f"), 2);
+        advStyle.font = introBtnFont;
+        advStyle.fontColor = Color.WHITE;
+        introAdvanceBtn = new TextButton("CONTINUE  (1/3)", advStyle);
+        UIUtils.addScaleHoverEffect(introAdvanceBtn);
+        introAdvanceBtn.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                introBeatIndex++;
+                refreshDawnWardenIntroBeat();
+            }
+        });
+
+        bossIntroTable.add(card).width(960).minHeight(186).center();
+        hudStage.addActor(bossIntroTable);
+        refreshDawnWardenIntroBeat();
+    }
+
+    private String getClassReflectiveLine() {
+        CharacterClass cls = (player != null) ? player.getCharacterClass() : null;
+        if (cls == null) {
+            return "No step upward can outrun a heart that has already grown still.";
+        }
+        switch (cls) {
+            case CAT:
+                return "Even nimble paws cannot outrun a heart that has already grown still.";
+            case TURTLE:
+                return "Even an Iron Guardian's shell could not lock that final hour out.";
+            case FOX:
+                return "No clever bargain can unwrite the mortal life you left behind.";
+            case RACCOON:
+                return "No salvaged relic can piece back a breath that already ended.";
+            default:
+                return "No step upward can outrun a heart that has already grown still.";
+        }
+    }
+
+    private void refreshDawnWardenIntroBeat() {
+        if (introDialogueLabel == null || introActionsRow == null) return;
+        introActionsRow.clear();
+
+        if (introBeatIndex == 0) {
+            introDialogueLabel.setText(
+                "So far you have climbed, little soul - past fang, abyss, and frost. " + getClassReflectiveLine());
+            introAdvanceBtn.setText("CONTINUE  (1/3)");
+            introActionsRow.add(introAdvanceBtn).size(260, 46).center();
+        } else if (introBeatIndex == 1) {
+            introDialogueLabel.setText(
+                "The Pale Shepherd does not hunt you out of cruelty - he waits for a spirit still clinging to yesterday. Why, then, do you still claw at the dawn?");
+            introAdvanceBtn.setText("ANSWER  (2/3)");
+            introActionsRow.add(introAdvanceBtn).size(260, 46).center();
+        } else {
+            introDialogueLabel.setText("Speak your resolve before the golden gates ignite:");
+
+            TextButton.TextButtonStyle atkChoiceStyle = new TextButton.TextButtonStyle();
+            atkChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#8c2a24"), Color.valueOf("#d46e66"), 2);
+            atkChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#a8342d"), Color.valueOf("#f08a82"), 2);
+            atkChoiceStyle.font = introBtnFont;
+            atkChoiceStyle.fontColor = Color.valueOf("#fff8ea");
+
+            TextButton.TextButtonStyle defChoiceStyle = new TextButton.TextButtonStyle();
+            defChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#2f5778"), Color.valueOf("#759ec2"), 2);
+            defChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#3b6b94"), Color.valueOf("#96bfe3"), 2);
+            defChoiceStyle.font = introBtnFont;
+            defChoiceStyle.fontColor = Color.valueOf("#fff8ea");
+
+            TextButton atkChoiceBtn = new TextButton("\"MY STORY ISN'T FINISHED YET!\"  (+2 ATK)", atkChoiceStyle);
+            atkChoiceBtn.getLabel().setWrap(true);
+            atkChoiceBtn.getLabel().setAlignment(Align.center);
+            UIUtils.addScaleHoverEffect(atkChoiceBtn);
+            atkChoiceBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    finishDawnWardenIntro(2, 0, "You answer with fierce resolve! (+2 ATK on Turn 1)");
+                }
+            });
+
+            TextButton defChoiceBtn = new TextButton("\"TEST MY SCARS, GUARDIAN!\"  (+3 DEF)", defChoiceStyle);
+            defChoiceBtn.getLabel().setWrap(true);
+            defChoiceBtn.getLabel().setAlignment(Align.center);
+            UIUtils.addScaleHoverEffect(defChoiceBtn);
+            defChoiceBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
+                    }
+                    finishDawnWardenIntro(0, 3, "You brace against the solar fire! (+3 DEF on Turn 1)");
+                }
+            });
+
+            introActionsRow.add(atkChoiceBtn).size(430, 50).padRight(18);
+            introActionsRow.add(defChoiceBtn).size(430, 50);
+        }
+    }
+
+    private void finishDawnWardenIntro(int tempAtkBonus, int tempDefBonus, String startLog) {
+        isIntroDialogueActive = false;
+        if (bossIntroTable != null) {
+            bossIntroTable.setVisible(false);
+        }
+        if (tempAtkBonus > 0) {
+            player.addTempAttack(tempAtkBonus);
+            spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "RESOLVE: +" + tempAtkBonus + " ATK", Color.valueOf("#ffd54f"), false);
+        }
+        if (tempDefBonus > 0) {
+            player.addTempDefense(tempDefBonus);
+            spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
+            spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "STEADFAST: +" + tempDefBonus + " DEF", Color.valueOf("#80d8ff"), false);
+        }
+        battleSystem.setBattleLog(startLog);
+        syncUi();
     }
 
     private void buildContinueOverlay() {
@@ -1080,8 +1267,18 @@ public class BattleScreen implements Screen {
     private void syncUi() {
         BattleState state = battleSystem.getCurrentState();
         boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f);
-        boolean playerTurn = (state == BattleState.PLAYER_TURN && !isAnimating);
+        boolean playerTurn = (!isIntroDialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
         boolean ended = (state == BattleState.BATTLE_END);
+
+        if (bossIntroTable != null) {
+            bossIntroTable.setVisible(isIntroDialogueActive && !ended);
+        }
+        if (bottomBar != null) {
+            bottomBar.setVisible(!isIntroDialogueActive && !ended);
+        }
+        if (battleLogContainer != null && !ended) {
+            battleLogContainer.setVisible(!isIntroDialogueActive);
+        }
 
         // Update Text
         battleLogLabel.setText(ended ? outcomeMessage : battleSystem.getBattleLog());
@@ -1928,6 +2125,9 @@ public class BattleScreen implements Screen {
         if (modalRewardFont != null) modalRewardFont.dispose();
         if (modalNarrativeFont != null) modalNarrativeFont.dispose();
         if (modalStatusFont != null) modalStatusFont.dispose();
+        if (introSpeakerFont != null) introSpeakerFont.dispose();
+        if (introBodyFont != null) introBodyFont.dispose();
+        if (introBtnFont != null) introBtnFont.dispose();
         if (topPauseFont != null) topPauseFont.dispose();
         if (pauseBadgeFont != null) pauseBadgeFont.dispose();
         if (pauseTitleFont != null) pauseTitleFont.dispose();
