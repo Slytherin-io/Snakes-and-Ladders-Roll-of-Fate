@@ -34,6 +34,12 @@ public class RollOfFateGame extends Game {
     private List<io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass> lastChosenClasses = new ArrayList<>();
     private AudioManager audioManager = new AudioManager();
 
+    // The Pale Shepherd (The Pursuer of the Ascending Trail)
+    private int paleShepherdTile = 0;
+    private int shepherdDormantTurns = 3;
+    private int totalRounds = 0;
+    private int shepherdPauseRounds = 0;
+
     @Override
     public void create() {
         assetManager = new AssetManager();
@@ -55,6 +61,9 @@ public class RollOfFateGame extends Game {
 
         players = new ArrayList<>();
         runTracker = new RunTracker();
+        paleShepherdTile = 0;
+        totalRounds = 0;
+        shepherdPauseRounds = 0;
         createPlayer();
 
         currentTurn = 0; // Player 1
@@ -79,6 +88,9 @@ public class RollOfFateGame extends Game {
         this.totalPlayers = chosenClasses.size();
         this.players = new ArrayList<>();
         this.runTracker = new RunTracker();
+        this.paleShepherdTile = 0;
+        this.totalRounds = 0;
+        this.shepherdPauseRounds = 0;
 
         for (int i = 0; i < chosenClasses.size(); i++) {
             Player player = new Player("Player " + (i + 1), chosenClasses.get(i));
@@ -235,4 +247,15 @@ public class RollOfFateGame extends Game {
             this.totalPlayers = Math.max(2, Math.min(4, playerCount));
         }
     }
+
+    // The Pale Shepherd Accessors
+    public int getPaleShepherdTile() { return paleShepherdTile; }
+    public void setPaleShepherdTile(int tile) { this.paleShepherdTile = Math.max(0, Math.min(99, tile)); }
+    public void advancePaleShepherd(int tiles) { this.paleShepherdTile = Math.max(0, Math.min(99, this.paleShepherdTile + tiles)); }
+    public int getTotalRounds() { return totalRounds; }
+    public void incrementTotalRounds() { this.totalRounds++; }
+    public int getShepherdDormantTurns() { return shepherdDormantTurns; }
+    public int getShepherdPauseRounds() { return shepherdPauseRounds; }
+    public void setShepherdPauseRounds(int rounds) { this.shepherdPauseRounds = rounds; }
+    public void decrementShepherdPauseRounds() { if (this.shepherdPauseRounds > 0) this.shepherdPauseRounds--; }
 }

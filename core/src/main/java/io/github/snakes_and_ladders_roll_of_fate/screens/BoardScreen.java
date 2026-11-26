@@ -15,6 +15,7 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Group;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
@@ -31,6 +32,8 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -85,6 +88,9 @@ public class BoardScreen implements Screen {
     private ExtendViewport worldViewport;
     private Stage hudStage;
     private Texture whitePixelTex;
+    private Texture vignetteTex;
+    private Texture softShadowTex;
+    private float reaperAwakenTimer = 0f;
 
     // Fonts (Large, crisp, readable hierarchy)
     private BitmapFont titleFont;
@@ -115,9 +121,13 @@ public class BoardScreen implements Screen {
     private BitmapFont eventBadgeFont;
     private BitmapFont eventTitleFont;
     private BitmapFont eventDescFont;
+    private BitmapFont choiceCardTitleFont;
     private BitmapFont choiceBtnFont;
+    private BitmapFont choiceActionBtnFont;
+    private BitmapFont choiceTagFont;
     private BitmapFont choiceOutcomeTitleFont;
     private BitmapFont choiceOutcomeBodyFont;
+    private BitmapFont choiceOutcomeValueFont;
     private BitmapFont choiceD20Font;
 
     // Parallax Slices for the 3 Acts (Far Canopy, Mid Silhouettes, Foreground Ground)
@@ -154,6 +164,8 @@ public class BoardScreen implements Screen {
     private Label eventBadgeLabel;
     private Table eventContentTable;
     private TextButton.TextButtonStyle eventChoiceBtnStyle;
+    private Button.ButtonStyle eventChoiceCardStyle;
+    private Button.ButtonStyle eventChoiceCardDisabledStyle;
     private TextButton.TextButtonStyle cancelEventChoiceBtnStyle;
     private TextButton.TextButtonStyle disabledEventChoiceBtnStyle;
     private TextButton.TextButtonStyle combatStrikeBtnStyle;
@@ -179,6 +191,15 @@ public class BoardScreen implements Screen {
     private static final float CHAR_INACTIVE_SIZE = 186f;
     private final Map<CharacterClass, Animation<TextureRegion>> walkAnimations = new HashMap<>();
     private float walkStateTime = 0f;
+
+    // The Pale Shepherd Pursuer Animation & Ambush State
+    private Animation<TextureRegion> shepherdIdleAnim;
+    private Animation<TextureRegion> shepherdWalkAnim;
+    private boolean isShepherdAmbushActive = false;
+
+    // Cinematic Camera Override for Events (e.g. Pale Shepherd Awakening)
+    private float cameraFocusOverrideTimer = 0f;
+    private int cameraFocusTile = -1;
 
     // Action Pause Timer (Ladders / Snakes)
     private float actionPauseTimer = 0f;
@@ -218,6 +239,14 @@ public class BoardScreen implements Screen {
     private Label hudPlayerStats;
     private Image hudPlayerAvatar;
     private Label miniMapProgressLabel;
+    private Table miniMapTable;
+    private Group miniMapTrackGroup;
+    private final Map<Player, Image> playerMiniMapMarkers = new HashMap<>();
+    private Image shepherdMiniMapMarker;
+    private float shepherdDisplayX = -1f;
+    private float shepherdDisplayY = -1f;
+    private boolean isShepherdGliding = false;
+    private Label hudInventorySubLabel;
     private Table inventoryPopup;
     private Table inventorySlotsTable;
     private Label inventoryTitleLabel;
@@ -278,6 +307,43 @@ public class BoardScreen implements Screen {
         whitePixelTex = new Texture(px);
         px.dispose();
 
+        // 256x256 Smooth Radial Vignette for eerie atmosphere and blackout cutscenes
+        Pixmap vig = new Pixmap(256, 256, Pixmap.Format.RGBA8888);
+        int half = 128;
+        for (int y = 0; y < 256; y++) {
+            for (int x = 0; x < 256; x++) {
+                float dx = (x - half) / (float) half;
+                float dy = (y - half) / (float) half;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                float a = 0f;
+                if (dist > 0.38f) {
+                    a = MathUtils.clamp((dist - 0.38f) / 0.62f, 0f, 1f);
+                    a = a * a * (3f - 2f * a); // smoothstep
+                }
+                vig.setColor(0.01f, 0.02f, 0.05f, a);
+                vig.drawPixel(x, y);
+            }
+        }
+        vignetteTex = new Texture(vig);
+        vig.dispose();
+
+        // 64x32 Feathered Soft Oval Shadow for floating entities
+        Pixmap shadowPx = new Pixmap(64, 32, Pixmap.Format.RGBA8888);
+        for (int sy = 0; sy < 32; sy++) {
+            for (int sx = 0; sx < 64; sx++) {
+                float nx = (sx - 31.5f) / 32f;
+                float ny = (sy - 15.5f) / 16f;
+                float d = (float) Math.sqrt(nx * nx + ny * ny);
+                if (d < 1.0f) {
+                    float a = (1.0f - d) * (1.0f - d);
+                    shadowPx.setColor(1f, 1f, 1f, a);
+                    shadowPx.drawPixel(sx, sy);
+                }
+            }
+        }
+        softShadowTex = new Texture(shadowPx);
+        shadowPx.dispose();
+
         // --- Load Fredoka Fonts (Crisp, legible Option 1 pairing across all UI layers) ---
         Color darkBrown = Color.valueOf("#5a2d0c");
         Color nameBrown = Color.valueOf("#361704");
@@ -312,13 +378,17 @@ public class BoardScreen implements Screen {
         pauseTipFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#54280e"));
 
         // Event & Choice System Fonts (Decoupled from Pause Menu)
-        eventBadgeFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
-        eventTitleFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 35, Color.valueOf("#361704"));
-        eventDescFont          = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#4a2c11"));
-        choiceBtnFont          = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 20, Color.valueOf("#fff8ea"));
-        choiceOutcomeTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 28, Color.valueOf("#361704"));
-        choiceOutcomeBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.valueOf("#361704"));
-        choiceD20Font          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 20, Color.WHITE);
+        eventBadgeFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 21, Color.WHITE);
+        eventTitleFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 32, Color.valueOf("#361704"));
+        eventDescFont          = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 20, Color.valueOf("#5a3616"));
+        choiceCardTitleFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 20, Color.valueOf("#fff8ea"));
+        choiceBtnFont          = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 17, Color.valueOf("#f2dcc2"));
+        choiceActionBtnFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 20, Color.valueOf("#fff8ea"));
+        choiceTagFont          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 13, Color.WHITE);
+        choiceOutcomeTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.valueOf("#361704"));
+        choiceOutcomeBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#5a3616"));
+        choiceOutcomeValueFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
+        choiceD20Font          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.WHITE);
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();
@@ -469,6 +539,15 @@ public class BoardScreen implements Screen {
             anim.setPlayMode(Animation.PlayMode.LOOP);
             walkAnimations.put(cls, anim);
         }
+
+        if (game.getAssetManager().isLoaded(Assets.CHAR_PALE_SHEPHERD)) {
+            Texture shepherdSheet = game.getAssetManager().get(Assets.CHAR_PALE_SHEPHERD);
+            TextureRegion[][] shepherdGrid = TextureRegion.split(shepherdSheet, 256, 256);
+            shepherdIdleAnim = new Animation<>(0.20f, shepherdGrid[0]);
+            shepherdIdleAnim.setPlayMode(Animation.PlayMode.LOOP);
+            shepherdWalkAnim = new Animation<>(0.14f, shepherdGrid[1]);
+            shepherdWalkAnim.setPlayMode(Animation.PlayMode.LOOP);
+        }
     }
 
     /**
@@ -554,35 +633,42 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Top-Left Linear 100-Tile Progress Mini-Map with Act color indicators.
+     * Top-Left Linear 100-Tile Progress Mini-Map with Act color indicators
+     * and real-time player position monitoring markers.
      */
     private void buildMiniMap() {
-        Table miniMapTable = new Table();
-        miniMapTable.setBackground(UIUtils.createRoundedDrawable(390, 70, 18, Color.valueOf("#4a2307dd")));
+        miniMapTable = new Table();
+        miniMapTable.setBackground(UIUtils.createRoundedDrawable(390, 84, 18, Color.valueOf("#4a2307dd")));
 
         miniMapProgressLabel = new Label("ACT I   -   TILE 1 / 100", new Label.LabelStyle(topActFont, Color.valueOf("#fdf5e2")));
         miniMapProgressLabel.setAlignment(Align.center);
 
-        // Visual 3-act progress bar track
-        Table barTrack = new Table();
-        Table act1Seg = new Table();
-        act1Seg.setBackground(UIUtils.createRoundedDrawable(102, 9, 4, Color.valueOf("#2e7d32")));
-        Table act2Seg = new Table();
-        act2Seg.setBackground(UIUtils.createRoundedDrawable(128, 9, 4, Color.valueOf("#1565c0")));
-        Table act3Seg = new Table();
-        act3Seg.setBackground(UIUtils.createRoundedDrawable(102, 9, 4, Color.valueOf("#c62828")));
+        // Visual 3-act progress bar track with player monitoring markers
+        miniMapTrackGroup = new Group();
+        miniMapTrackGroup.setSize(340, 36);
 
-        barTrack.add(act1Seg).size(102, 9).padRight(4);
-        barTrack.add(act2Seg).size(128, 9).padRight(4);
-        barTrack.add(act3Seg).size(102, 9);
+        // 3-Act Bar Track Segments
+        Image act1Seg = new Image(UIUtils.createRoundedDrawable(102, 8, 4, Color.valueOf("#2e7d32")));
+        act1Seg.setBounds(0, 4, 102, 8);
+        Image act2Seg = new Image(UIUtils.createRoundedDrawable(128, 8, 4, Color.valueOf("#1565c0")));
+        act2Seg.setBounds(106, 4, 128, 8);
+        Image act3Seg = new Image(UIUtils.createRoundedDrawable(102, 8, 4, Color.valueOf("#c62828")));
+        act3Seg.setBounds(238, 4, 102, 8);
 
-        miniMapTable.add(miniMapProgressLabel).padTop(8).padBottom(5).center().row();
-        miniMapTable.add(barTrack).padBottom(8).center();
+        miniMapTrackGroup.addActor(act1Seg);
+        miniMapTrackGroup.addActor(act2Seg);
+        miniMapTrackGroup.addActor(act3Seg);
+
+        // Populate player head markers
+        initPlayerMiniMapMarkers();
+
+        miniMapTable.add(miniMapProgressLabel).padTop(6).padBottom(2).center().row();
+        miniMapTable.add(miniMapTrackGroup).size(340, 36).padBottom(6).center();
 
         Table container = new Table();
         container.setFillParent(true);
         container.top().left().padTop(22).padLeft(35);
-        container.add(miniMapTable).size(390, 70);
+        container.add(miniMapTable).size(390, 84);
 
         hudStage.addActor(container);
     }
@@ -616,9 +702,9 @@ public class BoardScreen implements Screen {
 
         Table invTextTable = new Table();
         Label invLabel = new Label("INVENTORY", new Label.LabelStyle(hudNameFont, nameBrown));
-        Label invSubLabel = new Label("4 SLOTS", new Label.LabelStyle(miniFont, Color.valueOf("#6d3a17")));
+        hudInventorySubLabel = new Label("0 / 4 SLOTS", new Label.LabelStyle(miniFont, Color.valueOf("#6d3a17")));
         invTextTable.add(invLabel).left().padBottom(2).row();
-        invTextTable.add(invSubLabel).left();
+        invTextTable.add(hudInventorySubLabel).left();
 
         inventoryBtn.add(satchelIcon).size(56, 56).padLeft(18).padRight(14).center();
         inventoryBtn.add(invTextTable).center().padRight(18);
@@ -668,7 +754,7 @@ public class BoardScreen implements Screen {
         rollButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                if (turnState == TurnState.WAITING_FOR_ROLL) {
+                if (turnState == TurnState.WAITING_FOR_ROLL && cameraFocusOverrideTimer <= 0f) {
                     if (game.getAudioManager() != null) {
                         game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     }
@@ -869,6 +955,7 @@ public class BoardScreen implements Screen {
         int itemCount = player.getInventory().size();
         int capacity = player.getInventory().getCapacity(); // strictly 4
         inventoryCapacityLabel.setText(itemCount + " / " + capacity + " SLOTS");
+        updateInventoryButtonCount();
 
         if (inventoryTipLabel != null) {
             if (itemUsedThisTurn) {
@@ -1501,37 +1588,45 @@ public class BoardScreen implements Screen {
         eventChoiceBtnStyle = new TextButton.TextButtonStyle();
         eventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
         eventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
-        eventChoiceBtnStyle.font = choiceBtnFont;
+        eventChoiceBtnStyle.font = choiceActionBtnFont;
         eventChoiceBtnStyle.fontColor = Color.valueOf("#fff8ea");
+
+        eventChoiceCardStyle = new Button.ButtonStyle();
+        eventChoiceCardStyle.up = UIUtils.createRoundedDrawable(530, 68, 12, Color.valueOf("#7a3d16"), Color.valueOf("#54280e"), 2);
+        eventChoiceCardStyle.over = UIUtils.createRoundedDrawable(530, 68, 12, Color.valueOf("#9c572b"), Color.valueOf("#54280e"), 2);
+
+        eventChoiceCardDisabledStyle = new Button.ButtonStyle();
+        eventChoiceCardDisabledStyle.up = UIUtils.createRoundedDrawable(530, 68, 12, Color.valueOf("#554338bb"), Color.valueOf("#443329cc"), 2);
 
         cancelEventChoiceBtnStyle = new TextButton.TextButtonStyle();
         cancelEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(280, 48, 12, Color.valueOf("#8a2e24"), Color.valueOf("#541b15"), 2);
         cancelEventChoiceBtnStyle.over = UIUtils.createRoundedDrawable(280, 48, 12, Color.valueOf("#a63d32"), Color.valueOf("#541b15"), 2);
-        cancelEventChoiceBtnStyle.font = choiceBtnFont;
+        cancelEventChoiceBtnStyle.font = choiceActionBtnFont;
         cancelEventChoiceBtnStyle.fontColor = Color.valueOf("#fff8ea");
 
         disabledEventChoiceBtnStyle = new TextButton.TextButtonStyle();
         disabledEventChoiceBtnStyle.up = UIUtils.createRoundedDrawable(530, 48, 12, Color.valueOf("#554338aa"), Color.valueOf("#443329aa"), 2);
-        disabledEventChoiceBtnStyle.font = choiceBtnFont;
+        disabledEventChoiceBtnStyle.font = choiceActionBtnFont;
         disabledEventChoiceBtnStyle.fontColor = Color.valueOf("#a89688");
 
         combatStrikeBtnStyle = new TextButton.TextButtonStyle();
         combatStrikeBtnStyle.up = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#8a2424"), Color.valueOf("#5a1414"), 2);
         combatStrikeBtnStyle.over = UIUtils.createRoundedDrawable(380, 52, 16, Color.valueOf("#a63232"), Color.valueOf("#5a1414"), 2);
-        combatStrikeBtnStyle.font = choiceBtnFont;
+        combatStrikeBtnStyle.font = choiceActionBtnFont;
         combatStrikeBtnStyle.fontColor = Color.WHITE;
 
-        // Top Event Badge (Positioned to comfortably overlap the top of the enlarged scroll)
+        // Top Event Badge (Seated cleanly on the top edge of the scroll frame)
         eventBadgeLabel = new Label("EVENT", new Label.LabelStyle(eventBadgeFont, Color.WHITE));
         eventBadgeLabel.setAlignment(Align.center);
         eventBadgeLabel.setWrap(true);
         eventBadgeTable = new Table();
-        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, pillBrown));
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 54, 16, pillBrown, Color.valueOf("#2b1304"), 2));
         eventBadgeTable.add(eventBadgeLabel).width(440).pad(6, 16, 6, 16);
 
         // Content Table inside the parchment scroll
         eventContentTable = new Table();
         eventContentTable.center();
+        eventContentTable.padTop(16);
 
         Image eventScrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
         eventScrollBg.setScaling(Scaling.stretch);
@@ -1543,7 +1638,7 @@ public class BoardScreen implements Screen {
         eventModalTable = new Table();
         eventModalTable.setFillParent(true);
         eventModalTable.setVisible(false);
-        eventModalTable.add(eventBadgeTable).size(480, 60).padBottom(-26).center().row();
+        eventModalTable.add(eventBadgeTable).size(480, 54).padBottom(-48).center().row();
         eventModalTable.add(eventScrollStack).size(940, 690).center().row();
 
         hudStage.addActor(eventModalTable);
@@ -1604,30 +1699,44 @@ public class BoardScreen implements Screen {
                 badgePrefix = "HAZARDOUS TRAIL";
                 break;
         }
-        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, badgeBgColor));
-        eventBadgeLabel.setText(badgePrefix + "  -  TILE " + tile.getPosition());
+        setEventBadge(badgePrefix + "  -  TILE " + tile.getPosition(), badgeBgColor);
 
         // 2. Event Title & Atmospheric Narrative Lore
         Label titleLbl = new Label(event.getTitle(), new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         titleLbl.setWrap(true);
-        eventContentTable.add(titleLbl).width(580).padTop(10).padBottom(6).center().row();
+        eventContentTable.add(titleLbl).width(580).padTop(4).padBottom(4).center().row();
 
-        Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
+        Label descLbl = new Label(event.getDescription(), new Label.LabelStyle(eventDescFont, Color.valueOf("#5a3616")));
         descLbl.setAlignment(Align.center);
         descLbl.setWrap(true);
-        eventContentTable.add(descLbl).width(580).padBottom(16).center().row();
+        eventContentTable.add(descLbl).width(610).padBottom(12).center().row();
 
-        // 3. Dynamic Choices (Hybrid Model: Strategic/tactical actions visible with requirements; unaffordable merchant stock hidden)
+        // 3. Dynamic Choices (Hybrid Model: Structured 2-row cards with scannable risk/type tags)
         List<EventChoice> choices = event.getChoices();
+        int visibleChoices = 0;
+        for (int i = 0; i < choices.size(); i++) {
+            final EventChoice choice = choices.get(i);
+            boolean available = choice.isAvailable(player);
+            if (!available) {
+                if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.CONSUME_ANY_ITEM
+                        || choice.getRequirementType() == EventChoice.ChoiceRequirementType.HAS_CURSE
+                        || event.getCategory() == EventCategory.MERCHANT) {
+                    continue;
+                }
+            }
+            visibleChoices++;
+        }
+        float cardGap = (visibleChoices >= 4) ? 7f : 10f;
+
         for (int i = 0; i < choices.size(); i++) {
             final int choiceIndex = i;
             final EventChoice choice = choices.get(i);
             boolean available = choice.isAvailable(player);
 
             // In the Hybrid model:
-            // 1. Hide Barter choice if inventory is empty
-            // 2. Hide unaffordable optional merchant purchases (MIN_EXPERIENCE or MIN_HEALTH at merchant)
+            // 1. Hide Barter / Cleanse choice if condition isn't met
+            // 2. Hide unaffordable optional merchant purchases
             if (!available) {
                 if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.CONSUME_ANY_ITEM
                         || choice.getRequirementType() == EventChoice.ChoiceRequirementType.HAS_CURSE) {
@@ -1638,35 +1747,11 @@ public class BoardScreen implements Screen {
                 }
             }
 
-            String buttonText = choice.getText();
-            if (!available) {
-                String reqTag;
-                switch (choice.getRequirementType()) {
-                    case EQUIPMENT_DURABILITY:
-                        reqTag = " [Requires Shield]";
-                        break;
-                    case MIN_HEALTH:
-                        reqTag = " [Requires >" + choice.getRequirementValue() + " HP]";
-                        break;
-                    case MIN_EXPERIENCE:
-                        reqTag = " [Requires " + choice.getRequirementValue() + " EXP]";
-                        break;
-                    default:
-                        reqTag = " (Unavailable)";
-                        break;
-                }
-                buttonText = buttonText + reqTag;
-            }
-
-            TextButton choiceBtn = new TextButton(buttonText, available ? eventChoiceBtnStyle : disabledEventChoiceBtnStyle);
-            choiceBtn.getLabel().setWrap(true);
-            choiceBtn.getLabel().setAlignment(Align.center);
-            choiceBtn.pad(5, 16, 5, 16);
-            choiceBtn.getLabelCell().width(494);
+            Button choiceCard = buildChoiceCardButton(choice, available);
 
             if (available) {
-                UIUtils.addScaleHoverEffect(choiceBtn);
-                choiceBtn.addListener(new ChangeListener() {
+                UIUtils.addScaleHoverEffect(choiceCard);
+                choiceCard.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent evt, Actor actor) {
                         if (game.getAudioManager() != null) {
@@ -1677,12 +1762,153 @@ public class BoardScreen implements Screen {
                 });
             }
 
-            eventContentTable.add(choiceBtn).width(530).minHeight(46).padBottom(5).center().row();
+            eventContentTable.add(choiceCard).width(530).minHeight(54).padBottom(cardGap).center().row();
         }
 
         modalScrim.setVisible(true);
         eventModalTable.setVisible(true);
         turnState = TurnState.RESOLVING_TILE_EVENT;
+    }
+
+    private void setEventBadge(String text, Color bgColor) {
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 54, 16, bgColor, Color.valueOf("#2b1304"), 2));
+        eventBadgeLabel.setText(text);
+    }
+
+    private String extractActionTitle(String rawText) {
+        if (rawText == null || rawText.trim().isEmpty()) return "Event Choice";
+        String trimmed = rawText.trim();
+        if (trimmed.startsWith("[")) {
+            int close = trimmed.indexOf(']');
+            if (close > 1) {
+                return trimmed.substring(1, close).trim();
+            }
+        }
+        int colon = trimmed.indexOf(':');
+        if (colon > 0 && colon < 42) {
+            return trimmed.substring(0, colon).trim();
+        }
+        return trimmed;
+    }
+
+    private String extractActionSummary(String rawText) {
+        if (rawText == null) return "";
+        String trimmed = rawText.trim();
+        String rest = "";
+        if (trimmed.startsWith("[")) {
+            int close = trimmed.indexOf(']');
+            if (close >= 0 && close + 1 < trimmed.length()) {
+                rest = trimmed.substring(close + 1).trim();
+            }
+        } else {
+            int colon = trimmed.indexOf(':');
+            if (colon > 0 && colon < 42 && colon + 1 < trimmed.length()) {
+                rest = trimmed.substring(colon + 1).trim();
+            }
+        }
+        if (rest.isEmpty()) return "";
+
+        // Strip redundant "Gamble (D20):" prefix since the right badge displays D20 DC
+        if (rest.regionMatches(true, 0, "Gamble (D20):", 0, "Gamble (D20):".length())) {
+            rest = rest.substring("Gamble (D20):".length()).trim();
+        }
+        if (!rest.isEmpty()) {
+            rest = Character.toUpperCase(rest.charAt(0)) + rest.substring(1);
+        }
+        return rest;
+    }
+
+    private Button buildChoiceCardButton(EventChoice choice, boolean available) {
+        String actionTitle = extractActionTitle(choice.getText());
+        String summary = extractActionSummary(choice.getText());
+
+        String tagText;
+        Color tagColor;
+        Color tagBorderColor;
+        Color tagTextColor = Color.valueOf("#fff8ea");
+        if (!available) {
+            tagText = "LOCKED";
+            tagColor = Color.valueOf("#5c493e");
+            tagBorderColor = Color.valueOf("#8c7769");
+            tagTextColor = Color.valueOf("#cfc0b4");
+            String reqText;
+            switch (choice.getRequirementType()) {
+                case EQUIPMENT_DURABILITY:
+                    reqText = "Requires a 1-Use Shield/Relic in your satchel";
+                    break;
+                case MIN_HEALTH:
+                    reqText = "Requires more than " + choice.getRequirementValue() + " HP";
+                    break;
+                case MIN_EXPERIENCE:
+                    reqText = "Requires at least " + choice.getRequirementValue() + " EXP";
+                    break;
+                default:
+                    reqText = "Requirement not met";
+                    break;
+            }
+            summary = reqText;
+        } else if (choice.getDifficultyClass() > 0) {
+            tagText = "D20 (DC " + choice.getDifficultyClass() + ")";
+            tagColor = Color.valueOf("#8f5e16");
+            tagBorderColor = Color.valueOf("#d6a549");
+        } else if (choice.isTriggersCombat()) {
+            tagText = "COMBAT";
+            tagColor = Color.valueOf("#8c2a24");
+            tagBorderColor = Color.valueOf("#d46e66");
+        } else if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.CONSUME_ANY_ITEM) {
+            tagText = "BARTER";
+            tagColor = Color.valueOf("#855918");
+            tagBorderColor = Color.valueOf("#cfa259");
+        } else if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.HAS_CURSE) {
+            tagText = "PURIFY";
+            tagColor = Color.valueOf("#276654");
+            tagBorderColor = Color.valueOf("#6eb5a2");
+        } else if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY) {
+            tagText = "SHIELD";
+            tagColor = Color.valueOf("#2f5778");
+            tagBorderColor = Color.valueOf("#759ec2");
+        } else if (choice.getRequirementType() == EventChoice.ChoiceRequirementType.MIN_HEALTH
+                || choice.getRequirementType() == EventChoice.ChoiceRequirementType.MIN_EXPERIENCE
+                || summary.contains("Sacrifice") || summary.contains("damage") || summary.contains("-")) {
+            tagText = "TRADE-OFF";
+            tagColor = Color.valueOf("#914621");
+            tagBorderColor = Color.valueOf("#d68860");
+        } else {
+            tagText = "SAFE";
+            tagColor = Color.valueOf("#2f6338");
+            tagBorderColor = Color.valueOf("#7db072");
+        }
+
+        Button cardBtn = new Button(available ? eventChoiceCardStyle : eventChoiceCardDisabledStyle);
+        cardBtn.pad(8, 16, 8, 16);
+
+        Label titleLbl = new Label(actionTitle, new Label.LabelStyle(choiceCardTitleFont,
+            available ? Color.valueOf("#fff8ea") : Color.valueOf("#b8a89a")));
+        titleLbl.setAlignment(Align.left);
+        titleLbl.setWrap(true);
+
+        Table tagPill = new Table();
+        tagPill.setBackground(UIUtils.createRoundedDrawable(110, 24, 6, tagColor, tagBorderColor, 2));
+        Label tagLbl = new Label(tagText, new Label.LabelStyle(choiceTagFont, Color.WHITE));
+        tagLbl.setColor(tagTextColor);
+        tagLbl.setAlignment(Align.center);
+        tagPill.add(tagLbl).pad(2, 9, 2, 9);
+
+        if (summary.isEmpty()) {
+            cardBtn.add(titleLbl).width(368).expandX().left().padRight(10);
+            cardBtn.add(tagPill).right();
+        } else {
+            cardBtn.add(titleLbl).width(368).expandX().left().padRight(10);
+            cardBtn.add(tagPill).right().row();
+
+            Label summaryLbl = new Label(summary, new Label.LabelStyle(choiceBtnFont,
+                available ? Color.valueOf("#f2dcc2") : Color.valueOf("#9e8e80")));
+            summaryLbl.setAlignment(Align.left);
+            summaryLbl.setWrap(true);
+            cardBtn.add(summaryLbl).colspan(2).width(494).left().padTop(3);
+        }
+
+        return cardBtn;
     }
 
     /**
@@ -1713,16 +1939,17 @@ public class BoardScreen implements Screen {
             player.setPosition(posBefore);
         }
 
+        String cleanTitle = extractActionTitle(choice.getText());
         if (event.getCategory() == EventCategory.SNAKE) {
             if (choice.isSkipsSpecialMove() || choice.getRequirementType() == EventChoice.ChoiceRequirementType.EQUIPMENT_DURABILITY) {
                 // Tactical counter or shield deflection: avoid sliding down (and apply any vault forward)
                 specialSlideTarget = (moveDelta != 0) ? Math.max(1, Math.min(100, posBefore + moveDelta)) : -1;
-                showOutcomeView(choice.getText(), res, false);
+                showOutcomeView(cleanTitle, res, false);
                 return;
             } else {
                 // Tactical Plunge / Controlled Retreat: slide down to snake destination (keeping collected loot/EXP)
                 specialSlideTarget = ((SnakeTile) tile).getDestination();
-                showOutcomeView(choice.getText(), res, true);
+                showOutcomeView(cleanTitle, res, true);
                 return;
             }
         }
@@ -1739,7 +1966,7 @@ public class BoardScreen implements Screen {
             specialSlideTarget = -1;
         }
 
-        showOutcomeView(choice.getText(), res, false);
+        showOutcomeView(cleanTitle, res, false);
     }
 
     /**
@@ -1750,8 +1977,7 @@ public class BoardScreen implements Screen {
     private void showCombatView(final Player player, final SnakeTile tile) {
         eventContentTable.clear();
 
-        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#8a2424")));
-        eventBadgeLabel.setText("SERPENT BATTLE  -  TILE " + tile.getPosition());
+        setEventBadge("SERPENT BATTLE  -  TILE " + tile.getPosition(), Color.valueOf("#8a2424"));
 
         // Build the serpent from the SAME factory BattleScreen uses (balanced, 3 variants)
         final Enemy snake = tile.createSnakeEnemy();
@@ -1899,8 +2125,7 @@ public class BoardScreen implements Screen {
     private void showBarterItemSelector(final Player player, final EventChoice choice, final Tile tile) {
         eventContentTable.clear();
 
-        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#9c6818")));
-        eventBadgeLabel.setText("BARTER  -  SELECT AN ITEM");
+        setEventBadge("BARTER  -  SELECT AN ITEM", Color.valueOf("#9c6818"));
 
         Label titleLbl = new Label("Select Item to Trade", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
@@ -1963,8 +2188,7 @@ public class BoardScreen implements Screen {
     private void showItemSwapPrompt(final Player player, final Item newItem) {
         eventContentTable.clear();
 
-        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#a63232")));
-        eventBadgeLabel.setText("INVENTORY FULL (4/4)  -  ITEM SWAP");
+        setEventBadge("INVENTORY FULL (4/4)  -  ITEM SWAP", Color.valueOf("#a63232"));
 
         Label titleLbl = new Label("Inventory Full!", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
@@ -2022,18 +2246,18 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Outcome feedback screen revealing the true consequences and D20 check outcome AFTER selection.
+     * Outcome feedback screen revealing the clean action title, D20 check banner,
+     * and semantically color-coded consequences inside an auto-sized parchment inset card.
      */
     private void showOutcomeView(String choiceTitle, EventChoice.EventResult res, boolean isRetreat) {
         eventContentTable.clear();
 
-        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 60, 18, Color.valueOf("#7a4823")));
-        eventBadgeLabel.setText("EVENT RESOLUTION");
+        setEventBadge("EVENT RESOLUTION", Color.valueOf("#7a4823"));
 
         Label titleLbl = new Label(choiceTitle, new Label.LabelStyle(choiceOutcomeTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         titleLbl.setWrap(true);
-        eventContentTable.add(titleLbl).width(580).padTop(10).padBottom(12).center().row();
+        eventContentTable.add(titleLbl).width(550).padTop(6).padBottom(8).center().row();
 
         // D20 Skill Check Outcome Banner (if applicable)
         if (res.difficultyClass > 0) {
@@ -2043,32 +2267,61 @@ public class BoardScreen implements Screen {
                 res.d20Roll, res.difficultyClass, (res.checkSucceeded ? "SUCCESS!" : "FAILED!"));
 
             Table d20Badge = new Table();
-            d20Badge.setBackground(UIUtils.createRoundedDrawable(480, 44, 10, d20Color, d20Border, 2));
+            d20Badge.setBackground(UIUtils.createRoundedDrawable(490, 42, 10, d20Color, d20Border, 2));
             Label d20Lbl = new Label(d20Text, new Label.LabelStyle(choiceD20Font, Color.WHITE));
             d20Lbl.setAlignment(Align.center);
             d20Lbl.setWrap(true);
-            d20Badge.add(d20Lbl).width(460).center();
+            d20Badge.add(d20Lbl).width(470).center();
 
-            eventContentTable.add(d20Badge).size(480, 44).padBottom(12).center().row();
+            eventContentTable.add(d20Badge).size(490, 42).padBottom(12).center().row();
         }
 
-        // Consequences List Inset Box (Light Cream Container with Dark Mahogany Text)
+        // Consequences List Inset Box (Light Cream Container with Dark Mahogany Border & Color-Coded Rows)
         Table outcomeBox = new Table();
-        outcomeBox.setBackground(UIUtils.createRoundedDrawable(530, 145, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
-        outcomeBox.pad(10, 20, 10, 20);
+        outcomeBox.setBackground(UIUtils.createRoundedDrawable(530, 80, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 3));
+        outcomeBox.pad(14, 22, 14, 22);
 
         Table linesTable = new Table();
         linesTable.center();
 
-        for (String msg : res.consequences) {
-            Label lineLbl = new Label(msg, new Label.LabelStyle(choiceOutcomeBodyFont, Color.valueOf("#361704")));
-            lineLbl.setAlignment(Align.center);
-            lineLbl.setWrap(true);
-            linesTable.add(lineLbl).width(485).padBottom(8).center().row();
+        for (int i = 0; i < res.consequences.size(); i++) {
+            String msg = res.consequences.get(i);
+            Color valueColor = resolveOutcomeLineColor(msg);
+            int colonIdx = msg.indexOf(':');
+
+            if (colonIdx > 0 && colonIdx + 1 < msg.length() && !msg.startsWith("Unavailable")) {
+                String labelPart = msg.substring(0, colonIdx).trim();
+                String valuePart = msg.substring(colonIdx + 1).trim();
+
+                Table rowTbl = new Table();
+                Label keyLbl = new Label(labelPart, new Label.LabelStyle(choiceOutcomeBodyFont, Color.valueOf("#5a3616")));
+                keyLbl.setAlignment(Align.left);
+
+                Label valLbl = new Label(valuePart, new Label.LabelStyle(choiceOutcomeValueFont, Color.WHITE));
+                valLbl.setColor(valueColor);
+                valLbl.setAlignment(Align.right);
+                valLbl.setWrap(true);
+
+                rowTbl.add(keyLbl).left().expandX().padRight(12);
+                rowTbl.add(valLbl).width(305).right();
+                linesTable.add(rowTbl).width(484).padTop(4).padBottom(4).row();
+            } else {
+                Label lineLbl = new Label(msg, new Label.LabelStyle(choiceOutcomeValueFont, Color.WHITE));
+                lineLbl.setColor(valueColor);
+                lineLbl.setAlignment(Align.center);
+                lineLbl.setWrap(true);
+                linesTable.add(lineLbl).width(484).padTop(4).padBottom(4).center().row();
+            }
+
+            if (i < res.consequences.size() - 1) {
+                Table divider = new Table();
+                divider.setBackground(UIUtils.createRoundedDrawable(484, 1, 0, Color.valueOf("#854b2538")));
+                linesTable.add(divider).size(484, 1).padTop(3).padBottom(3).row();
+            }
         }
 
-        outcomeBox.add(linesTable).width(485).center();
-        eventContentTable.add(outcomeBox).size(530, 145).padBottom(16).center().row();
+        outcomeBox.add(linesTable).width(484).center();
+        eventContentTable.add(outcomeBox).width(530).minHeight(86).padBottom(16).center().row();
 
         // Action Button: CONTINUE
         TextButton continueBtn = new TextButton("CONTINUE", eventChoiceBtnStyle);
@@ -2083,7 +2336,27 @@ public class BoardScreen implements Screen {
                 closeEventModal();
             }
         });
-        eventContentTable.add(continueBtn).size(280, 52).center().row();
+        eventContentTable.add(continueBtn).size(280, 50).center().row();
+    }
+
+    private Color resolveOutcomeLineColor(String msg) {
+        if (msg == null) return Color.valueOf("#361704");
+        if (msg.contains(": -") || msg.contains(" -") || msg.startsWith("Cursed")
+                || msg.startsWith("Hex:") || msg.contains("Satchel full")
+                || msg.contains("lashed out") || msg.startsWith("Left [")
+                || msg.startsWith("Unavailable")) {
+            return Color.valueOf("#a81d1d");
+        }
+        if (msg.contains(": +") || msg.startsWith("Acquired Relic")
+                || msg.startsWith("Purified:") || msg.startsWith("Protection:")
+                || msg.startsWith("Blessing:") || msg.startsWith("Scouted:")
+                || msg.startsWith("Deflected:") || msg.startsWith("Replaced [")) {
+            return Color.valueOf("#1d5c3a");
+        }
+        if (msg.startsWith("Traded away:") || msg.startsWith("Expended:")) {
+            return Color.valueOf("#8a5410");
+        }
+        return Color.valueOf("#361704");
     }
 
     /**
@@ -2115,16 +2388,20 @@ public class BoardScreen implements Screen {
             return;
         }
 
+        if (isShepherdAmbushActive) {
+            isShepherdAmbushActive = false;
+            turnState = TurnState.WAITING_FOR_ROLL;
+            topBannerLabel.setText(player.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
+            return;
+        }
+
         if (specialSlideTarget != -1) {
             boolean isLadder = (specialSlideTarget > player.getPosition());
             startSpecialMove(player.getPosition(), specialSlideTarget, isLadder);
             specialSlideTarget = -1;
         } else {
             if (player != null && player.getPosition() >= 100) {
-                if (game.getRunTracker() != null) {
-                    game.getRunTracker().recordThroneClaimed(player);
-                }
-                game.setScreen(new GameSummaryScreen(game, true, player));
+                triggerDawnWardenSummitTrial(player);
                 return;
             } else if (isItemMovement) {
                 isItemMovement = false;
@@ -2277,6 +2554,7 @@ public class BoardScreen implements Screen {
 
         renderParallaxBackground(camTilePos);
         renderGroundedSteppingStones();
+        renderPaleShepherd(delta);
         renderPlayers();
 
         batch.end();
@@ -2285,6 +2563,9 @@ public class BoardScreen implements Screen {
         hudStage.getViewport().apply();
         hudStage.act(delta);
         hudStage.draw();
+
+        // 5. Render Eerie Reaper Appearance "Bulb Going Out" Screen Burnout Effect
+        renderBulbBurnoutEffect(delta);
     }
 
     /**
@@ -2293,6 +2574,19 @@ public class BoardScreen implements Screen {
     private void updateTurnLogic(float delta) {
         Player player = game.getCurrentPlayer();
         if (player == null) return;
+
+        if (reaperAwakenTimer > 0f) {
+            reaperAwakenTimer = Math.max(0f, reaperAwakenTimer - delta);
+        }
+
+        if (cameraFocusOverrideTimer > 0f) {
+            cameraFocusOverrideTimer -= delta;
+            if (cameraFocusOverrideTimer <= 0f) {
+                cameraFocusOverrideTimer = 0f;
+                cameraFocusTile = -1;
+                topBannerLabel.setText(player.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
+            }
+        }
 
         switch (turnState) {
             case ROLLING_DICE:
@@ -2429,7 +2723,7 @@ public class BoardScreen implements Screen {
 
                                 if (isLadderMove) {
                                     if (specialMoveDestTile >= 100) {
-                                        topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " REACHED THE THRONE OF FATE!");
+                                        topBannerLabel.setText("SUMMIT REACHED! THE DAWN WARDEN AWAKENS TO TEST YOUR SPIRIT!");
                                     } else if (specialMoveDestTile == 30) {
                                         int cleansed = player.cleanseCurses();
                                         String cleanseNote = cleansed > 0 ? " (" + cleansed + " CURSE(S) PURIFIED!)" : "";
@@ -2469,6 +2763,11 @@ public class BoardScreen implements Screen {
                                 isSpecialMoving = false;
                                 specialMovePhase = SpecialMovePhase.NONE;
 
+                                if (!isLadderMove && game.getPaleShepherdTile() > 0 && player.getPosition() <= game.getPaleShepherdTile()) {
+                                    triggerPaleShepherdEncounter(player);
+                                    return;
+                                }
+
                                 if (isItemMovement) {
                                     isItemMovement = false;
                                     turnState = TurnState.WAITING_FOR_ROLL;
@@ -2488,10 +2787,7 @@ public class BoardScreen implements Screen {
                     actionPauseTimer -= delta;
                     if (actionPauseTimer <= 0f) {
                         if (player.getPosition() >= 100) {
-                            if (game.getRunTracker() != null) {
-                                game.getRunTracker().recordThroneClaimed(player);
-                            }
-                            game.setScreen(new GameSummaryScreen(game, true, player));
+                            triggerDawnWardenSummitTrial(player);
                             return;
                         } else if (isItemMovement) {
                             isItemMovement = false;
@@ -2518,10 +2814,7 @@ public class BoardScreen implements Screen {
                         }
                     }
                     if (player.getPosition() >= 100) {
-                        if (game.getRunTracker() != null) {
-                            game.getRunTracker().recordThroneClaimed(player);
-                        }
-                        game.setScreen(new GameSummaryScreen(game, true, player));
+                        triggerDawnWardenSummitTrial(player);
                         return;
                     }
                     player.clearTemporaryBuffs();
@@ -2534,6 +2827,16 @@ public class BoardScreen implements Screen {
                         diceIcon.setRotation(0f);
                         diceIcon.setScale(1f);
                     }
+
+                    // The Pale Shepherd Pursuer Round Progression
+                    if (game.getCurrentTurn() == 0 || game.getPlayers().size() == 1) {
+                        game.incrementTotalRounds();
+                        handlePaleShepherdRoundProgression();
+                        if (isEventModalActive) {
+                            return;
+                        }
+                    }
+
                     Player nextPlayer = game.getCurrentPlayer();
                     if (nextPlayer != null && nextPlayer.hasPendingDiceChoice()) {
                         diceLabel.setText("PICK 1-6");
@@ -2555,8 +2858,429 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Handles event, snake, or ladder trigger when landing on a tile.
+     * Renders The Pale Shepherd pursuer hovering with eerie crimson mist behind the players.
      */
+    private void renderPaleShepherd(float delta) {
+        int shepherdTile = game.getPaleShepherdTile();
+        if (shepherdTile <= 0) return;
+
+        float targetCenterX = getTileCenterX(shepherdTile);
+        float targetGroundY = getCharacterDrawY(shepherdTile);
+
+        if (shepherdDisplayX < 0) {
+            shepherdDisplayX = targetCenterX;
+            shepherdDisplayY = targetGroundY;
+        }
+
+        float dist = Math.abs(targetCenterX - shepherdDisplayX);
+        if (dist > 1.5f) {
+            shepherdDisplayX += (targetCenterX - shepherdDisplayX) * Math.min(1f, delta * 4.5f);
+            shepherdDisplayY += (targetGroundY - shepherdDisplayY) * Math.min(1f, delta * 4.5f);
+            isShepherdGliding = true;
+        } else {
+            shepherdDisplayX = targetCenterX;
+            shepherdDisplayY = targetGroundY;
+            isShepherdGliding = false;
+        }
+
+        float tileCenterX = shepherdDisplayX;
+        float groundY = shepherdDisplayY;
+        float size = CHAR_DISPLAY_SIZE;
+
+        // Smooth floating hover oscillation: gentle, steady sine wave when idle, steady height when gliding
+        float hoverOffset = isShepherdGliding ? 4f : ((float) Math.sin(stateTime * 2.2f) * 8f);
+        float drawY = groundY + 16f + hoverOffset;
+        float drawX = tileCenterX - (size / 2f);
+
+        // Ground shadow & crimson mist pool beneath the hovering reaper
+        float shadowScale = MathUtils.clamp(1.0f - (hoverOffset / 32f), 0.70f, 1.25f);
+        float pulse = 0.5f + 0.5f * MathUtils.sinDeg(stateTime * 180f);
+
+        if (softShadowTex != null) {
+            // Soft feathered elliptical ground shadow on the mountain stone
+            batch.setColor(0.08f, 0.02f, 0.04f, 0.65f * shadowScale);
+            batch.draw(softShadowTex, tileCenterX - 50f * shadowScale, groundY - 2f, 100f * shadowScale, 26f * shadowScale);
+
+            // Ambient soft crimson spectral mist pool under the reaper
+            batch.setColor(0.70f, 0.06f, 0.12f, (0.24f + 0.10f * pulse));
+            batch.draw(softShadowTex, tileCenterX - 65f * shadowScale, groundY - 6f, 130f * shadowScale, 34f * shadowScale);
+        }
+
+        // Render animated reaper sprite: Glide if gliding between tiles, Idle hover if stationary!
+        TextureRegion frame;
+        if (isShepherdGliding && shepherdWalkAnim != null) {
+            frame = shepherdWalkAnim.getKeyFrame(stateTime, true);
+        } else if (shepherdIdleAnim != null) {
+            frame = shepherdIdleAnim.getKeyFrame(stateTime, true);
+        } else {
+            frame = null;
+        }
+
+        if (frame != null) {
+            batch.setColor(Color.WHITE);
+            batch.draw(frame, drawX, drawY, size, size);
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    /**
+     * Triggers the eerie cutscene where The Pale Shepherd awakens on Tile 1.
+     * Features a sudden bulb burnout flicker / blackout effect and chilling eerie SFX.
+     */
+    public void triggerPaleShepherdAwakening() {
+        game.setPaleShepherdTile(1);
+        shepherdDisplayX = getTileCenterX(1);
+        shepherdDisplayY = getCharacterDrawY(1);
+        cameraFocusTile = 1;
+        cameraFocusOverrideTimer = 3.2f;
+        reaperAwakenTimer = 3.2f;
+        topBannerLabel.setText("A CHILLING SHADOW RISES... THE PALE SHEPHERD AWAKENS ON TILE 1!");
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playSound(AudioManager.SoundEffect.REAPER_APPEAR);
+        }
+        updateMiniMapProgress();
+    }
+
+    /**
+     * Renders a gentle, photosensitive-safe lightbulb waver and atmospheric dusk dimming
+     * when The Pale Shepherd awakens. Strictly avoids high-contrast white flashes or violent strobes.
+     */
+    private void renderBulbBurnoutEffect(float delta) {
+        if (reaperAwakenTimer <= 0f) return;
+
+        float totalDuration = 3.2f;
+        float elapsed = totalDuration - reaperAwakenTimer;
+        float overlayAlpha = 0f;
+        Color overlayColor = Color.valueOf("#060813"); // Deep cold dusk shadow (no white flashes)
+        float vignetteAlpha = 0f;
+
+        // Stage 1: Slight, gentle bulb waver (0.0s to 0.6s) - subtle dimming dip without harsh strobing
+        if (elapsed < 0.60f) {
+            if (elapsed < 0.18f) {
+                float t = elapsed / 0.18f;
+                overlayAlpha = MathUtils.lerp(0f, 0.28f, Interpolation.smooth.apply(t));
+                vignetteAlpha = MathUtils.lerp(0f, 0.20f, t);
+            } else if (elapsed < 0.32f) {
+                float t = (elapsed - 0.18f) / 0.14f;
+                overlayAlpha = MathUtils.lerp(0.28f, 0.12f, Interpolation.smooth.apply(t));
+                vignetteAlpha = 0.18f;
+            } else {
+                float t = (elapsed - 0.32f) / 0.28f;
+                overlayAlpha = MathUtils.lerp(0.12f, 0.38f, Interpolation.smooth.apply(t));
+                vignetteAlpha = MathUtils.lerp(0.18f, 0.50f, t);
+            }
+        }
+        // Stage 2: Atmospheric cold shadow hold (0.6s to 1.8s) - soft dusk mood, world stays visible
+        else if (elapsed < 1.80f) {
+            float t = (elapsed - 0.60f) / 1.20f;
+            overlayAlpha = MathUtils.lerp(0.38f, 0.30f, Interpolation.smooth.apply(t));
+            vignetteAlpha = MathUtils.lerp(0.50f, 0.40f, t);
+        }
+        // Stage 3: Smooth dissipation back to normal daylight (1.8s to 3.2s)
+        else {
+            float t = MathUtils.clamp((elapsed - 1.80f) / 1.40f, 0f, 1f);
+            overlayAlpha = MathUtils.lerp(0.30f, 0f, Interpolation.smooth.apply(t));
+            vignetteAlpha = MathUtils.lerp(0.40f, 0f, Interpolation.smooth.apply(t));
+        }
+
+        // Render full-screen overlay in HUD coordinate space (dynamically spans entire responsive viewport)
+        hudStage.getViewport().apply();
+        batch.setProjectionMatrix(hudStage.getCamera().combined);
+        batch.begin();
+
+        float hudW = Math.max(hudStage.getViewport().getWorldWidth(), hudStage.getCamera().viewportWidth) + 20f;
+        float hudH = Math.max(hudStage.getViewport().getWorldHeight(), hudStage.getCamera().viewportHeight) + 20f;
+        float hudX = hudStage.getCamera().position.x - (hudW / 2f);
+        float hudY = hudStage.getCamera().position.y - (hudH / 2f);
+
+        if (overlayAlpha > 0.005f) {
+            batch.setColor(overlayColor.r, overlayColor.g, overlayColor.b, overlayAlpha);
+            batch.draw(whitePixelTex, hudX, hudY, hudW, hudH);
+        }
+
+        if (vignetteAlpha > 0.005f && vignetteTex != null) {
+            batch.setColor(0.02f, 0.01f, 0.05f, vignetteAlpha);
+            batch.draw(vignetteTex, hudX, hudY, hudW, hudH);
+        }
+
+        batch.setColor(Color.WHITE);
+        batch.end();
+    }
+
+    private int getTrailingPlayerPosition() {
+        int minPos = 100;
+        List<Player> players = game.getPlayers();
+        if (players == null || players.isEmpty()) {
+            Player cur = game.getCurrentPlayer();
+            return (cur != null) ? cur.getPosition() : 1;
+        }
+        for (Player p : players) {
+            if (p.getHealth() > 0 && p.getPosition() < minPos) {
+                minPos = p.getPosition();
+            }
+        }
+        return minPos;
+    }
+
+    /**
+     * Advances The Pale Shepherd at the end of each round and checks for catch-up encounters.
+     */
+    private void handlePaleShepherdRoundProgression() {
+        int rounds = game.getTotalRounds();
+        int dormant = game.getShepherdDormantTurns();
+
+        if (rounds < dormant) {
+            return;
+        } else if (rounds == dormant) {
+            triggerPaleShepherdAwakening();
+            return;
+        }
+
+        if (game.getShepherdPauseRounds() > 0) {
+            game.decrementShepherdPauseRounds();
+            topBannerLabel.setText("THE PALE SHEPHERD PAUSES IN CONTEMPLATION (" + game.getShepherdPauseRounds() + " ROUND(S) REMAINING)!");
+            return;
+        }
+
+        int curTile = game.getPaleShepherdTile();
+        int trailingPos = getTrailingPlayerPosition();
+        int gap = trailingPos - curTile;
+
+        // Dynamic, menacing pursuer pacing so the reaper matches the fast pace of the party:
+        int speed;
+        if (gap >= 18) {
+            speed = (curTile >= 30) ? 5 : 4;
+        } else if (gap >= 8) {
+            speed = (curTile >= 30) ? 4 : 3;
+        } else if (gap >= 4) {
+            speed = 2;
+        } else {
+            speed = 1;
+        }
+
+        // Multiplayer compensation: party advances multiple turns per round
+        if (game.getPlayers().size() > 1 && gap >= 10) {
+            speed = Math.min(6, speed + 1);
+        }
+
+        game.advancePaleShepherd(speed);
+        updateMiniMapProgress();
+
+        Player current = game.getCurrentPlayer();
+        if (current != null && current.getHealth() > 0 && game.getPaleShepherdTile() >= current.getPosition()) {
+            triggerPaleShepherdEncounter(current);
+        } else {
+            topBannerLabel.setText("THE PALE SHEPHERD ADVANCES TO TILE " + game.getPaleShepherdTile() + " (+" + speed + " TILES)!");
+        }
+    }
+
+    /**
+     * Builds a two-row choice card button for The Pale Shepherd encounter, matching normal event styling.
+     */
+    private Button buildShepherdChoiceCard(String actionTitle, String tagText, Color tagColor,
+                                           Color tagBorderColor, String summary, boolean available) {
+        Button cardBtn = new Button(available ? eventChoiceCardStyle : eventChoiceCardDisabledStyle);
+        cardBtn.pad(5, 14, 5, 14);
+
+        Label titleLbl = new Label(actionTitle, new Label.LabelStyle(choiceCardTitleFont,
+            available ? Color.valueOf("#fff8ea") : Color.valueOf("#b8a89a")));
+        titleLbl.setAlignment(Align.left);
+        titleLbl.setWrap(true);
+
+        Table tagPill = new Table();
+        tagPill.setBackground(UIUtils.createRoundedDrawable(110, 24, 6, tagColor, tagBorderColor, 2));
+        Label tagLbl = new Label(tagText, new Label.LabelStyle(choiceTagFont, Color.WHITE));
+        tagLbl.setColor(available ? Color.valueOf("#fff8ea") : Color.valueOf("#cfc0b4"));
+        tagLbl.setAlignment(Align.center);
+        tagPill.add(tagLbl).pad(2, 8, 2, 8);
+
+        cardBtn.add(titleLbl).width(368).expandX().left().padRight(8);
+        cardBtn.add(tagPill).right().row();
+
+        Label summaryLbl = new Label(summary, new Label.LabelStyle(choiceBtnFont,
+            available ? Color.valueOf("#f2dcc2") : Color.valueOf("#9e8e80")));
+        summaryLbl.setAlignment(Align.left);
+        summaryLbl.setWrap(true);
+        cardBtn.add(summaryLbl).colspan(2).width(494).left().padTop(2);
+
+        return cardBtn;
+    }
+
+    /**
+     * Triggers the dramatic encounter modal when The Pale Shepherd catches a player.
+     */
+    private void triggerPaleShepherdEncounter(final Player player) {
+        if (player == null || player.getHealth() <= 0) return;
+        isShepherdAmbushActive = true;
+        isEventModalActive = true;
+        modalScrim.setVisible(true);
+        eventModalTable.setVisible(true);
+        turnState = TurnState.RESOLVING_TILE_EVENT;
+
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playSound(AudioManager.SoundEffect.REAPER_APPEAR, 0.85f);
+        }
+
+        if (inventoryPopup != null) inventoryPopup.setVisible(false);
+        if (dicePickerPopup != null) dicePickerPopup.setVisible(false);
+
+        eventBadgeTable.setBackground(UIUtils.createRoundedDrawable(480, 54, 16, Color.valueOf("#4a0e17"), Color.valueOf("#2b1304"), 2));
+        eventBadgeLabel.setText("THE PALE SHEPHERD'S EMBRACE  -  TILE " + game.getPaleShepherdTile());
+
+        eventContentTable.clear();
+
+        Label titleLbl = new Label("THE PALE SHEPHERD DESCENDS", new Label.LabelStyle(eventTitleFont, Color.valueOf("#4a0e17")));
+        titleLbl.setAlignment(Align.center);
+        titleLbl.setWrap(true);
+        eventContentTable.add(titleLbl).width(580).padTop(2).padBottom(4).center().row();
+
+        String loreMsg = "The Pale Shepherd hovers before you with his golden scythe. "
+            + "His glowing eyes offer peaceful release, yet your spirit yearns for the summit.";
+        Label narrativeLbl = new Label(loreMsg, new Label.LabelStyle(eventDescFont, Color.valueOf("#361704")));
+        narrativeLbl.setAlignment(Align.center);
+        narrativeLbl.setWrap(true);
+        eventContentTable.add(narrativeLbl).width(600).padBottom(10).center().row();
+
+        // Choice 1: Struggle for Life
+        boolean canStruggle = (player.getHealth() > 20);
+        String struggleTitle = "Struggle for Life";
+        String struggleTag = canStruggle ? "SACRIFICE" : "LOCKED";
+        Color struggleTagBg = canStruggle ? Color.valueOf("#914621") : Color.valueOf("#5c493e");
+        Color struggleTagBorder = canStruggle ? Color.valueOf("#d68860") : Color.valueOf("#8c7769");
+        String struggleSummary = canStruggle
+            ? "Endure the mortal chill. (Cost: 20 HP)"
+            : "Requires more than 20 HP to withstand.";
+        Button struggleCard = buildShepherdChoiceCard(struggleTitle, struggleTag, struggleTagBg, struggleTagBorder, struggleSummary, canStruggle);
+        if (canStruggle) {
+            UIUtils.addScaleHoverEffect(struggleCard);
+            struggleCard.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent evt, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    player.setHealth(player.getHealth() - 20);
+                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 3));
+                    player.setPosition(Math.min(99, player.getPosition() + 3));
+                    updateHudDisplay();
+                    updateMiniMapProgress();
+                    EventChoice.EventResult res = new EventChoice.EventResult();
+                    res.consequences.add("You grit your teeth and push through the cold mist! (-20 HP)");
+                    res.consequences.add("Surged +3 tiles ahead! The Pale Shepherd steps back respectfully.");
+                    showOutcomeView("Will to Live Prevails!", res, false);
+                }
+            });
+        }
+        eventContentTable.add(struggleCard).width(530).minHeight(48).padBottom(5f).center().row();
+
+        // Choice 2: Soothe with Memory
+        boolean hasItem = (player.getInventory().size() > 0);
+        String sootheTitle = "Soothe with Memory";
+        String sootheTag = hasItem ? "OFFERING" : "LOCKED";
+        Color sootheTagBg = hasItem ? Color.valueOf("#855918") : Color.valueOf("#5c493e");
+        Color sootheTagBorder = hasItem ? Color.valueOf("#cfa259") : Color.valueOf("#8c7769");
+        String sootheSummary = hasItem
+            ? "Present a relic to calm the restless spirit."
+            : "Your satchel holds no relics to offer.";
+        Button sootheCard = buildShepherdChoiceCard(sootheTitle, sootheTag, sootheTagBg, sootheTagBorder, sootheSummary, hasItem);
+        if (hasItem) {
+            UIUtils.addScaleHoverEffect(sootheCard);
+            sootheCard.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent evt, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    Item offered = player.getInventory().getItem(0);
+                    player.getInventory().removeItem(0);
+                    game.setShepherdPauseRounds(2);
+                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 2));
+                    updateHudDisplay();
+                    refreshInventoryUI();
+                    EventChoice.EventResult res = new EventChoice.EventResult();
+                    res.consequences.add("You offered [" + offered.getName() + "] to the crimson reaper.");
+                    res.consequences.add("The spirit lowers its golden scythe in silent understanding. Pursuit halted for 2 rounds!");
+                    showOutcomeView("Memory Cherished!", res, false);
+                }
+            });
+        }
+        eventContentTable.add(sootheCard).width(530).minHeight(48).padBottom(5f).center().row();
+
+        // Choice 3: Trial of Will (Roll D20)
+        String trialTitle = "Trial of Will";
+        String trialTag = "D20 (DC 10)";
+        Color trialTagBg = Color.valueOf("#8f5e16");
+        Color trialTagBorder = Color.valueOf("#d6a549");
+        String trialSummary = "Confront the reaper with inner resolve.";
+        Button trialCard = buildShepherdChoiceCard(trialTitle, trialTag, trialTagBg, trialTagBorder, trialSummary, true);
+        UIUtils.addScaleHoverEffect(trialCard);
+        trialCard.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                int roll = MathUtils.random(1, 20);
+                EventChoice.EventResult res = new EventChoice.EventResult();
+                res.difficultyClass = 10;
+                res.d20Roll = roll;
+                res.checkSucceeded = (roll >= 10);
+                if (roll >= 10) {
+                    game.setPaleShepherdTile(Math.max(1, game.getPaleShepherdTile() - 4));
+                    res.consequences.add("D20 Roll: " + roll + " (SUCCESS!)");
+                    res.consequences.add("Your soul burns with fierce resolve! The Shepherd recedes 4 tiles.");
+                    showOutcomeView("Indomitable Spirit!", res, false);
+                } else {
+                    player.setHealth(player.getHealth() - 15);
+                    player.setPosition(Math.min(99, player.getPosition() + 1));
+                    updateHudDisplay();
+                    updateMiniMapProgress();
+                    res.consequences.add("D20 Roll: " + roll + " (FAILED!)");
+                    res.consequences.add("The cold chill numbs your limbs (-15 HP), but you scramble forward 1 tile.");
+                    showOutcomeView("Shaken Resolve!", res, false);
+                }
+            }
+        });
+        eventContentTable.add(trialCard).width(530).minHeight(48).padBottom(5f).center().row();
+
+        // Choice 4: Yield to the Scythe
+        String restTitle = "Yield to the Scythe";
+        String restTag = "SURRENDER";
+        Color restTagBg = Color.valueOf("#8c2a24");
+        Color restTagBorder = Color.valueOf("#d46e66");
+        String restSummary = "Accept peaceful rest upon the mountain.";
+        Button restCard = buildShepherdChoiceCard(restTitle, restTag, restTagBg, restTagBorder, restSummary, true);
+        UIUtils.addScaleHoverEffect(restCard);
+        restCard.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent evt, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                modalScrim.setVisible(false);
+                eventModalTable.setVisible(false);
+                isEventModalActive = false;
+                isShepherdAmbushActive = false;
+                if (game.getRunTracker() != null) {
+                    game.getRunTracker().recordPlayerFallen(player);
+                }
+                game.setScreen(new GameSummaryScreen(game, false, player));
+            }
+        });
+        eventContentTable.add(restCard).width(530).minHeight(48).padBottom(4f).center().row();
+    }
+
+    /**
+     * Triggers the climatic Summit Trial against The Dawn Warden atop Tile 100.
+     */
+    private void triggerDawnWardenSummitTrial(Player player) {
+        Enemy dawnWarden = new Enemy("The Dawn Warden");
+        dawnWarden.setHealth(120);
+        dawnWarden.setAttack(14);
+        dawnWarden.setDefense(6);
+        dawnWarden.setBehavior("Celestial Guardian");
+        dawnWarden.setReward("Dawn's Blessing (Rebirth)");
+
+        topBannerLabel.setText("SUMMIT REACHED! THE DAWN WARDEN AWAKENS!");
+        game.setScreen(new BattleScreen(game, player, dawnWarden));
+    }
+
     /**
      * Handles event, snake, or ladder trigger when landing on a tile.
      */
@@ -2575,10 +3299,7 @@ public class BoardScreen implements Screen {
         }
 
         if (tileIndex >= 100) {
-            topBannerLabel.setText("VICTORY! " + player.getName().toUpperCase() + " REACHED THE THRONE OF FATE!");
-            if (game.getRunTracker() != null) {
-                game.getRunTracker().recordThroneClaimed(player);
-            }
+            topBannerLabel.setText("SUMMIT REACHED! THE DAWN WARDEN AWAKENS TO TEST YOUR SPIRIT!");
             turnState = TurnState.TILE_ACTION_PAUSE;
             actionPauseTimer = 1.0f;
             return;
@@ -2721,7 +3442,10 @@ public class BoardScreen implements Screen {
         float targetY;
         float baselineY = worldCamera.viewportHeight / 2f;
 
-        if (isSpecialMoving) {
+        if (cameraFocusOverrideTimer > 0f && cameraFocusTile > 0) {
+            targetX = getTileCenterX(cameraFocusTile);
+            targetY = baselineY + (getTileBottomY(cameraFocusTile) - 220f);
+        } else if (isSpecialMoving) {
             targetX = specialMoveCurrentX;
             if (specialMovePhase == SpecialMovePhase.WINDUP) {
                 targetY = baselineY + (getTileBottomY(specialMoveStartTile) - 220f);
@@ -3400,9 +4124,29 @@ public class BoardScreen implements Screen {
         hudPlayerAvatar.setAlign(Align.center);
 
         updateMiniMapProgress();
+        updateInventoryButtonCount();
 
         if (inventoryPopup != null && inventoryPopup.isVisible()) {
             refreshInventoryUI();
+        }
+    }
+
+    private void updateInventoryButtonCount() {
+        if (hudInventorySubLabel == null) return;
+        Player player = game.getCurrentPlayer();
+        if (player == null || player.getInventory() == null) {
+            hudInventorySubLabel.setText("0 / 4 SLOTS");
+            hudInventorySubLabel.setColor(Color.valueOf("#6d3a17"));
+            return;
+        }
+        int itemCount = player.getInventory().size();
+        int capacity = player.getInventory().getCapacity();
+        if (itemCount >= capacity) {
+            hudInventorySubLabel.setText(itemCount + " / " + capacity + " SLOTS (FULL)");
+            hudInventorySubLabel.setColor(Color.valueOf("#b85d19"));
+        } else {
+            hudInventorySubLabel.setText(itemCount + " / " + capacity + " SLOTS");
+            hudInventorySubLabel.setColor(Color.valueOf("#6d3a17"));
         }
     }
 
@@ -3420,6 +4164,193 @@ public class BoardScreen implements Screen {
 
         String actStr = (currentAct == 1) ? "ACT I" : ((currentAct == 2) ? "ACT II" : "ACT III");
         miniMapProgressLabel.setText(actStr + "   -   TILE " + pos + " / 100");
+
+        updatePlayerMiniMapMarkers(true);
+    }
+
+    private float getMiniMapTileX(int tile, float markerWidth) {
+        int t = MathUtils.clamp(tile, 1, 100);
+        float centerX;
+        if (t <= 30) {
+            float frac = (t - 1) / 29f;
+            centerX = frac * 102f;
+        } else if (t <= 70) {
+            float frac = (t - 30) / 40f;
+            centerX = 106f + frac * 128f;
+        } else {
+            float frac = (t - 70) / 30f;
+            centerX = 238f + frac * 102f;
+        }
+        return MathUtils.clamp(centerX - markerWidth / 2f, 0f, 340f - markerWidth);
+    }
+
+    private void initPlayerMiniMapMarkers() {
+        if (miniMapTrackGroup == null) return;
+        playerMiniMapMarkers.clear();
+
+        if (shepherdMiniMapMarker == null && game.getAssetManager().isLoaded(Assets.CHAR_PALE_SHEPHERD_HEAD)) {
+            Texture shepherdHeadTex = game.getAssetManager().get(Assets.CHAR_PALE_SHEPHERD_HEAD);
+            float aspect = (float) shepherdHeadTex.getWidth() / (float) shepherdHeadTex.getHeight();
+            float markerH = 22f;
+            float markerW = markerH * aspect;
+            shepherdMiniMapMarker = new Image(shepherdHeadTex);
+            shepherdMiniMapMarker.setSize(markerW, markerH);
+            shepherdMiniMapMarker.setScaling(Scaling.fit);
+            miniMapTrackGroup.addActor(shepherdMiniMapMarker);
+        }
+        if (shepherdMiniMapMarker != null) {
+            shepherdMiniMapMarker.setVisible(game.getPaleShepherdTile() > 0);
+        }
+
+        List<Player> party = game.getPlayers();
+        if (party == null || party.isEmpty()) {
+            if (game.getCurrentPlayer() != null) {
+                party = Collections.singletonList(game.getCurrentPlayer());
+            } else {
+                return;
+            }
+        }
+
+        for (Player p : party) {
+            CharacterClass cls = p.getCharacterClass() != null ? p.getCharacterClass() : CharacterClass.CAT;
+            Texture headTex = game.getAssetManager().get(Assets.getCharacterHeadTexture(cls));
+            float aspect = (float) headTex.getWidth() / (float) headTex.getHeight();
+            float markerH = 22f;
+            float markerW = markerH * aspect;
+            Image marker = new Image(headTex);
+            marker.setSize(markerW, markerH);
+            marker.setScaling(Scaling.fit);
+            miniMapTrackGroup.addActor(marker);
+            playerMiniMapMarkers.put(p, marker);
+        }
+
+        updatePlayerMiniMapMarkers(false);
+    }
+
+    private void updatePlayerMiniMapMarkers(boolean animate) {
+        if (miniMapTrackGroup == null) return;
+
+        List<Player> party = game.getPlayers();
+        if (party == null || party.isEmpty()) return;
+
+        for (Player p : party) {
+            if (!playerMiniMapMarkers.containsKey(p)) {
+                CharacterClass cls = p.getCharacterClass() != null ? p.getCharacterClass() : CharacterClass.CAT;
+                Texture headTex = game.getAssetManager().get(Assets.getCharacterHeadTexture(cls));
+                float aspect = (float) headTex.getWidth() / (float) headTex.getHeight();
+                float markerH = 22f;
+                float markerW = markerH * aspect;
+                Image marker = new Image(headTex);
+                marker.setSize(markerW, markerH);
+                marker.setScaling(Scaling.fit);
+                miniMapTrackGroup.addActor(marker);
+                playerMiniMapMarkers.put(p, marker);
+            }
+        }
+
+        Player activePlayer = game.getCurrentPlayer();
+
+        Map<Player, Float> rawXMap = new HashMap<>();
+        for (Player p : party) {
+            Image marker = playerMiniMapMarkers.get(p);
+            float mW = (marker != null) ? marker.getWidth() : 22f;
+            rawXMap.put(p, getMiniMapTileX(p.getPosition(), mW));
+        }
+
+        List<List<Player>> clusters = new ArrayList<>();
+        List<Player> unclustered = new ArrayList<>(party);
+
+        while (!unclustered.isEmpty()) {
+            Player ref = unclustered.remove(0);
+            List<Player> cluster = new ArrayList<>();
+            cluster.add(ref);
+            float refX = rawXMap.get(ref);
+
+            for (int i = unclustered.size() - 1; i >= 0; i--) {
+                Player other = unclustered.get(i);
+                if (Math.abs(rawXMap.get(other) - refX) <= 14f) {
+                    cluster.add(other);
+                    unclustered.remove(i);
+                }
+            }
+            clusters.add(cluster);
+        }
+
+        float baseY = 9f;
+
+        for (List<Player> cluster : clusters) {
+            int size = cluster.size();
+            for (int i = 0; i < size; i++) {
+                Player p = cluster.get(i);
+                Image marker = playerMiniMapMarkers.get(p);
+                if (marker == null) continue;
+
+                float offsetX = 0f;
+                float offsetY = 0f;
+
+                if (size == 2) {
+                    offsetX = (i == 0) ? -5f : 5f;
+                    offsetY = (i == 0) ? -2f : 5f;
+                } else if (size == 3) {
+                    offsetX = (i == 0) ? -7f : ((i == 1) ? 0f : 7f);
+                    offsetY = (i == 0) ? -2f : ((i == 1) ? 5f : -2f);
+                } else if (size >= 4) {
+                    offsetX = (i == 0) ? -9f : ((i == 1) ? -3f : ((i == 2) ? 3f : 9f));
+                    offsetY = (i % 2 == 0) ? -2f : 6f;
+                }
+
+                float targetX = MathUtils.clamp(rawXMap.get(p) + offsetX, 0f, 340f - marker.getWidth());
+                float targetY = baseY + offsetY;
+
+                marker.clearActions();
+                if (animate) {
+                    marker.addAction(Actions.moveTo(targetX, targetY, 0.35f, Interpolation.smooth));
+                } else {
+                    marker.setPosition(targetX, targetY);
+                }
+
+                if (p == activePlayer) {
+                    marker.setColor(Color.WHITE);
+                } else {
+                    marker.setColor(0.85f, 0.85f, 0.85f, 0.90f);
+                }
+            }
+        }
+
+        // Update Pale Shepherd pursuer position on the mini-map track
+        int shepherdTile = game.getPaleShepherdTile();
+        if (shepherdMiniMapMarker == null && game.getAssetManager().isLoaded(Assets.CHAR_PALE_SHEPHERD_HEAD)) {
+            Texture shepherdHeadTex = game.getAssetManager().get(Assets.CHAR_PALE_SHEPHERD_HEAD);
+            float aspect = (float) shepherdHeadTex.getWidth() / (float) shepherdHeadTex.getHeight();
+            float markerH = 22f;
+            float markerW = markerH * aspect;
+            shepherdMiniMapMarker = new Image(shepherdHeadTex);
+            shepherdMiniMapMarker.setSize(markerW, markerH);
+            shepherdMiniMapMarker.setScaling(Scaling.fit);
+            miniMapTrackGroup.addActor(shepherdMiniMapMarker);
+        }
+
+        if (shepherdMiniMapMarker != null) {
+            if (shepherdTile > 0) {
+                shepherdMiniMapMarker.setVisible(true);
+                float sW = shepherdMiniMapMarker.getWidth();
+                float targetX = getMiniMapTileX(shepherdTile, sW);
+                float targetY = baseY + 4f;
+                shepherdMiniMapMarker.clearActions();
+                if (animate) {
+                    shepherdMiniMapMarker.addAction(Actions.moveTo(targetX, targetY, 0.35f, Interpolation.smooth));
+                } else {
+                    shepherdMiniMapMarker.setPosition(targetX, targetY);
+                }
+                shepherdMiniMapMarker.toFront();
+            } else {
+                shepherdMiniMapMarker.setVisible(false);
+            }
+        }
+
+        if (activePlayer != null && playerMiniMapMarkers.containsKey(activePlayer)) {
+            playerMiniMapMarkers.get(activePlayer).toFront();
+        }
     }
 
     /**
@@ -3511,6 +4442,8 @@ public class BoardScreen implements Screen {
         if (batch != null) batch.dispose();
         if (hudStage != null) hudStage.dispose();
         if (whitePixelTex != null) whitePixelTex.dispose();
+        if (vignetteTex != null) vignetteTex.dispose();
+        if (softShadowTex != null) softShadowTex.dispose();
 
         if (titleFont != null) titleFont.dispose();
         if (topBannerFont != null) topBannerFont.dispose();
@@ -3538,9 +4471,13 @@ public class BoardScreen implements Screen {
         if (eventBadgeFont != null) eventBadgeFont.dispose();
         if (eventTitleFont != null) eventTitleFont.dispose();
         if (eventDescFont != null) eventDescFont.dispose();
+        if (choiceCardTitleFont != null) choiceCardTitleFont.dispose();
         if (choiceBtnFont != null) choiceBtnFont.dispose();
+        if (choiceActionBtnFont != null) choiceActionBtnFont.dispose();
+        if (choiceTagFont != null) choiceTagFont.dispose();
         if (choiceOutcomeTitleFont != null) choiceOutcomeTitleFont.dispose();
         if (choiceOutcomeBodyFont != null) choiceOutcomeBodyFont.dispose();
+        if (choiceOutcomeValueFont != null) choiceOutcomeValueFont.dispose();
         if (choiceD20Font != null) choiceD20Font.dispose();
     }
 }
