@@ -75,7 +75,11 @@ public class BattleSystem {
         this.finalOutcome = null;
         this.currentState = BattleState.PLAYER_TURN;
         this.battleState = "IN_PROGRESS";
-        this.battleLog = "A wild " + enemy.getEnemyType() + " blocks your path!";
+        if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().startsWith("The ")) {
+            this.battleLog = enemy.getEnemyType() + " descends before you to test your spirit!";
+        } else {
+            this.battleLog = "A wild " + (enemy != null ? enemy.getEnemyType() : "serpent") + " blocks your path!";
+        }
     }
 
     public void startBattle(Entity attacker, Entity defender) {

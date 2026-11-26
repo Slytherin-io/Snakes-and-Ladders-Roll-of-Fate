@@ -131,7 +131,8 @@ public class EventEffect {
 
             case MOVE:
                 player.move(resolvedValue);
-                String mvMsg = String.format("Stride: %s%d tiles", (resolvedValue >= 0 ? "+" : ""), resolvedValue);
+                String moveUnit = (Math.abs(resolvedValue) == 1) ? "Tile" : "Tiles";
+                String mvMsg = String.format("Position: %s%d %s", (resolvedValue >= 0 ? "+" : ""), resolvedValue, moveUnit);
                 System.out.println("  [Move] " + mvMsg + " (Position: Tile " + player.getPosition() + ")");
                 if (logMessages != null) logMessages.add(mvMsg);
                 break;
@@ -139,7 +140,8 @@ public class EventEffect {
             case SCOUT:
                 int tilesAhead = Math.max(1, resolvedValue);
                 int uncovered = (scoutHandler != null) ? scoutHandler.scoutTiles(player, tilesAhead) : 0;
-                String scoutMsg = String.format("Foresight: Scouted %d tiles ahead (%d uncharted uncovered)", tilesAhead, uncovered);
+                String scoutUnit = (tilesAhead == 1) ? "tile" : "tiles";
+                String scoutMsg = String.format("Scouted: %d %s ahead (%d uncovered)", tilesAhead, scoutUnit, uncovered);
                 System.out.println("  [SCOUT] " + scoutMsg);
                 if (logMessages != null) logMessages.add(scoutMsg);
                 break;

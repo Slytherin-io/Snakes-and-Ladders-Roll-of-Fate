@@ -14,7 +14,7 @@ import java.util.List;
 public class EventRepository {
 
     // =========================================================================
-    // 1. WANDERING MERCHANT DILEMMAS (Asymmetric Trade Gambits)
+    // 1. WANDERING MERCHANT DILEMMAS (Physical Barter & Supplies)
     // =========================================================================
     public static Event createProceduralMerchantEvent(int tilePosition) {
         String[] story = EventStoryGenerator.generateMerchantStory(tilePosition);
@@ -24,104 +24,74 @@ public class EventRepository {
         List<EventChoice> merchantDeck = new ArrayList<>();
 
         if (act == 1) {
-            merchantDeck.add(EventChoice.createBloodCostChoice(
-                "Blood Rite: Cut your palm upon the merchant's ritual dagger",
-                10,
-                Item.createEquipment("Bronze Dagger", EventEffectType.ATTACK, 3, 2, 3, "+3 ATK (1 Turn Buff)")
-            ));
-            merchantDeck.add(EventChoice.createExpCostChoice(
-                "Knowledge Tribute: Recite ancient martial lore from memory",
-                20,
-                Item.createEquipment("Wooden Buckler", EventEffectType.DEFENSE, 3, 2, 4, "+3 DEF (1 Turn Buff)")
-            ));
             merchantDeck.add(EventChoice.createBarterChoice(
-                "Alchemical Barter: Trade gear for tonic and field notes",
+                "[Barter Supplies] Trade 1 item from your bag for a Healing Potion (+25 HP & Lore)",
                 Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP")
             ).withEffect(EventEffectType.EXPERIENCE, 20));
             merchantDeck.add(EventChoice.createExpCostChoice(
-                "Cartographer's Scroll: Trade trail lore to chart the valley ahead",
+                "[Buy Trail Map] Spend 15 EXP to reveal 12 uncharted tiles ahead",
                 15,
                 null
             ).withEffect(EventEffectType.SCOUT, 12).withEffect(EventEffectType.HEALTH, 10));
-            merchantDeck.add(EventChoice.createBloodCostChoice(
-                "Smuggler's Passage: Endure a bruising climb through hidden brush",
-                12,
-                null
-            ).withEffect(EventEffectType.MOVE, 3));
-            merchantDeck.add(new EventChoice("Shrewd Haggle: Match wits with the sly peddler", 11)
+            merchantDeck.add(new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 10 HP", 11)
                 .onSuccess(EventEffectType.ITEM)
                 .onSuccess(EventEffectType.EXPERIENCE, 15)
                 .onFailure(EventEffectType.HEALTH, -10));
-        } else if (act == 2) {
             merchantDeck.add(EventChoice.createBloodCostChoice(
-                "Blood Rite: Swear a blood oath upon the tempered iron blade",
-                18,
-                Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 5, 2, 4, "+5 ATK (1 Turn Buff)")
+                "[Buy Sharp Dagger] Pay 10 HP blood price for a Bronze Dagger (+3 ATK)",
+                10,
+                Item.createEquipment("Bronze Dagger", EventEffectType.ATTACK, 3, 2, 3, "+3 ATK (1 Turn Buff)")
             ));
-            merchantDeck.add(EventChoice.createExpCostChoice(
-                "Knowledge Tribute: Impart strategic battlefield wisdom",
-                35,
-                Item.createEquipment("Reinforced Shield", EventEffectType.DEFENSE, 5, 2, 5, "+5 DEF (1 Turn Buff)")
-            ));
+        } else if (act == 2) {
             merchantDeck.add(EventChoice.createBarterChoice(
-                "Alchemical Barter: Relinquish gear for elixir and combat lore",
+                "[Barter Supplies] Trade 1 item from your bag for a Greater Elixir (+50 HP & Lore)",
                 Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP")
             ).withEffect(EventEffectType.EXPERIENCE, 35));
             merchantDeck.add(EventChoice.createExpCostChoice(
-                "Cartographer's Lens: Pay lore to reveal deep cavern hazards",
+                "[Buy Cavern Map] Spend 25 EXP to reveal 16 uncharted tiles ahead",
                 25,
                 null
             ).withEffect(EventEffectType.SCOUT, 16).withEffect(EventEffectType.HEALTH, 15));
-            merchantDeck.add(EventChoice.createBloodCostChoice(
-                "Smuggler's Tunnel: Squeeze through jagged stone shortcuts",
-                18,
-                null
-            ).withEffect(EventEffectType.MOVE, 4));
-            merchantDeck.add(new EventChoice("Shrewd Haggle: Pressure the stubborn cavern trader", 12)
+            merchantDeck.add(new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 16 HP", 12)
                 .onSuccess(EventEffectType.ITEM)
                 .onSuccess(EventEffectType.EXPERIENCE, 25)
                 .onFailure(EventEffectType.HEALTH, -16));
-        } else {
             merchantDeck.add(EventChoice.createBloodCostChoice(
-                "Blood Rite: Offer deep life essence for the mythical dragon blade",
-                28,
-                Item.createEquipment("Dragon-Slayer Blade", EventEffectType.ATTACK, 7, 3, 5, "+7 ATK (1 Turn Buff)")
+                "[Buy Tempered Sword] Pay 18 HP blood price for an Iron Sword (+5 ATK)",
+                18,
+                Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 5, 2, 4, "+5 ATK (1 Turn Buff)")
             ));
-            merchantDeck.add(EventChoice.createExpCostChoice(
-                "Knowledge Tribute: Surrender memories of past triumphs for an aegis",
-                50,
-                Item.createEquipment("Aegis of the Summit", EventEffectType.DEFENSE, 7, 3, 5, "+7 DEF (1 Turn Buff)")
-            ));
+        } else {
             merchantDeck.add(EventChoice.createBarterChoice(
-                "Alchemical Barter: Trade a relic for ambrosia and enlightenment",
+                "[Barter Supplies] Trade 1 item from your bag for Celestial Ambrosia (+80 HP & Lore)",
                 Item.createConsumable("Celestial Ambrosia", EventEffectType.HEALTH, 80, "Restores 80 HP")
             ).withEffect(EventEffectType.EXPERIENCE, 55));
             merchantDeck.add(EventChoice.createExpCostChoice(
-                "Oracle's Astrolabe: Trade battle wisdom to map the summit approach",
+                "[Buy Summit Map] Spend 35 EXP to reveal 20 uncharted tiles ahead",
                 35,
                 null
             ).withEffect(EventEffectType.SCOUT, 20).withEffect(EventEffectType.HEALTH, 25));
-            merchantDeck.add(EventChoice.createBloodCostChoice(
-                "Grappling Ascent: Pay life force for a swift cliffline shortcut",
-                25,
-                null
-            ).withEffect(EventEffectType.MOVE, 5));
-            merchantDeck.add(new EventChoice("Shrewd Haggle: Match wits against the celestial merchant", 13)
+            merchantDeck.add(new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 24 HP", 13)
                 .onSuccess(EventEffectType.ITEM)
                 .onSuccess(EventEffectType.EXPERIENCE, 40)
                 .onFailure(EventEffectType.HEALTH, -24));
+            merchantDeck.add(EventChoice.createBloodCostChoice(
+                "[Buy Dragon Blade] Pay 28 HP blood price for a Dragon-Slayer Blade (+7 ATK)",
+                28,
+                Item.createEquipment("Dragon-Slayer Blade", EventEffectType.ATTACK, 7, 3, 5, "+7 ATK (1 Turn Buff)")
+            ));
         }
 
         Collections.shuffle(merchantDeck);
         merchant.addChoice(merchantDeck.get(0));
         merchant.addChoice(merchantDeck.get(1));
         merchant.addChoice(merchantDeck.get(2));
-        merchant.addChoice(new EventChoice("Decline and preserve your resources"));
+        merchant.addChoice(new EventChoice("[Politely Decline] Save your supplies and continue your climb"));
         return merchant;
     }
 
     // =========================================================================
-    // 2. ANCIENT SHRINE DILEMMAS (The Law of Equivalent Exchange)
+    // 2. ANCIENT SHRINE DILEMMAS (Physical Relics & Blessings)
     // =========================================================================
     public static Event createProceduralShrineEvent(int tilePosition) {
         String[] story = EventStoryGenerator.generateShrineStory(tilePosition);
@@ -131,75 +101,43 @@ public class EventRepository {
         List<EventChoice> choiceDeck = new ArrayList<>();
 
         if (act == 1) {
-            choiceDeck.add(new EventChoice("Altar of Wrath: Embrace martial fury at the cost of max vitality")
-                .withEffect(EventEffectType.ATTACK, 2)
-                .withEffect(EventEffectType.MAX_HEALTH, -12));
-            choiceDeck.add(new EventChoice("Stone Vow: Harden your shell while sacrificing offensive edge")
-                .withEffect(EventEffectType.DEFENSE, 2)
-                .withEffect(EventEffectType.ATTACK, -1));
-            choiceDeck.add(new EventChoice("Font of Rebirth: Restore deep vitality at the price of battle focus")
-                .withEffect(EventEffectType.HEALTH, 40)
-                .withEffect(EventEffectType.EXPERIENCE, -20));
-            choiceDeck.add(new EventChoice("Oracle's Brazier: Burn life incense to pierce the fog ahead")
+            choiceDeck.add(new EventChoice("[Drink Spring Water] Drink clear sacred water to restore 35 HP")
+                .withEffect(EventEffectType.HEALTH, 35)
+                .withEffect(EventEffectType.EXPERIENCE, 10));
+            choiceDeck.add(new EventChoice("[Touch Blazing Runestone] Sacrifice 10 HP to permanently gain +2 Attack")
                 .withEffect(EventEffectType.HEALTH, -10)
-                .withEffect(EventEffectType.SCOUT, 12)
-                .withEffect(EventEffectType.EXPERIENCE, 20));
-            choiceDeck.add(new EventChoice("Blood Reliquary: Spill blood into the basin to unseal a relic")
-                .withEffect(EventEffectType.HEALTH, -14)
-                .withEffect(EventEffectType.ITEM)
-                .withEffect(EventEffectType.EXPERIENCE, 20));
-            choiceDeck.add(new EventChoice("Test of the Old Gods: Reach blindly into the runic hollow", 11)
+                .withEffect(EventEffectType.ATTACK, 2)
+                .withEffect(EventEffectType.EXPERIENCE, 15));
+            choiceDeck.add(new EventChoice("[Search Runic Hollow] Gamble (D20): High roll grants rare loot & power; fail triggers trap!", 11)
                 .onSuccess(EventEffectType.ITEM)
                 .onSuccess(EventEffectType.ATTACK, 1)
-                .onFailure(EventEffectType.HEALTH, -15)
+                .onFailure(EventEffectType.HEALTH, -14)
                 .onFailure(EventEffectType.MOVE, -1));
         } else if (act == 2) {
-            choiceDeck.add(new EventChoice("Altar of Wrath: Forge fierce might by sacrificing max vitality")
-                .withEffect(EventEffectType.ATTACK, 3)
-                .withEffect(EventEffectType.MAX_HEALTH, -18));
-            choiceDeck.add(new EventChoice("Iron Bulwark Vow: Temper your guard at the expense of ferocity")
-                .withEffect(EventEffectType.DEFENSE, 3)
-                .withEffect(EventEffectType.ATTACK, -1));
-            choiceDeck.add(new EventChoice("Font of Rebirth: Wash away wounds by relinquishing hard-won lore")
-                .withEffect(EventEffectType.HEALTH, 60)
-                .withEffect(EventEffectType.EXPERIENCE, -35));
-            choiceDeck.add(new EventChoice("Oracle's Brazier: Offer vitality to chart deep cavern perils")
+            choiceDeck.add(new EventChoice("[Drink Spring Water] Drink clear sacred water to restore 55 HP")
+                .withEffect(EventEffectType.HEALTH, 55)
+                .withEffect(EventEffectType.EXPERIENCE, 20));
+            choiceDeck.add(new EventChoice("[Touch Blazing Runestone] Sacrifice 16 HP to permanently gain +3 Attack")
                 .withEffect(EventEffectType.HEALTH, -16)
-                .withEffect(EventEffectType.SCOUT, 16)
-                .withEffect(EventEffectType.EXPERIENCE, 35));
-            choiceDeck.add(new EventChoice("Sacrificial Groove: Bleed upon the basalt altar for ancient gear")
-                .withEffect(EventEffectType.HEALTH, -20)
-                .withEffect(EventEffectType.ITEM)
-                .withEffect(EventEffectType.EXPERIENCE, 30));
-            choiceDeck.add(new EventChoice("Commune with Cavern Spirits: Channel volatile mystic energy", 12)
+                .withEffect(EventEffectType.ATTACK, 3)
+                .withEffect(EventEffectType.EXPERIENCE, 25));
+            choiceDeck.add(new EventChoice("[Search Runic Hollow] Gamble (D20): High roll grants rare loot & power; fail triggers trap!", 12)
+                .onSuccess(EventEffectType.ITEM)
                 .onSuccess(EventEffectType.ATTACK, 2)
-                .onSuccess(EventEffectType.DEFENSE, 2)
-                .onSuccess(EventEffectType.HEALTH, 20)
-                .onFailure(EventEffectType.HEALTH, -22)
+                .onFailure(EventEffectType.HEALTH, -20)
                 .onFailure(EventEffectType.MOVE, -2));
         } else {
-            choiceDeck.add(new EventChoice("Altar of Solar Wrath: Claim peak lethality by rending max vitality")
-                .withEffect(EventEffectType.ATTACK, 5)
-                .withEffect(EventEffectType.MAX_HEALTH, -24));
-            choiceDeck.add(new EventChoice("Cosmic Aegis Vow: Solidify armor while forfeiting sharp reflexes")
-                .withEffect(EventEffectType.DEFENSE, 4)
-                .withEffect(EventEffectType.ATTACK, -2));
-            choiceDeck.add(new EventChoice("Font of Ascension: Mend mortal flesh by sacrificing past mastery")
-                .withEffect(EventEffectType.HEALTH, 85)
-                .withEffect(EventEffectType.EXPERIENCE, -50));
-            choiceDeck.add(new EventChoice("Celestial Astrolabe: Bleed vitality to unveil the entire peak")
+            choiceDeck.add(new EventChoice("[Drink Spring Water] Drink celestial nectar to restore 75 HP")
+                .withEffect(EventEffectType.HEALTH, 75)
+                .withEffect(EventEffectType.EXPERIENCE, 30));
+            choiceDeck.add(new EventChoice("[Touch Blazing Runestone] Sacrifice 22 HP to permanently gain +4 Attack")
                 .withEffect(EventEffectType.HEALTH, -22)
-                .withEffect(EventEffectType.SCOUT, 20)
-                .withEffect(EventEffectType.EXPERIENCE, 50));
-            choiceDeck.add(new EventChoice("Apex Reliquary: Pay heavy vitality to claim a summit treasure")
-                .withEffect(EventEffectType.HEALTH, -28)
-                .withEffect(EventEffectType.ITEM)
-                .withEffect(EventEffectType.EXPERIENCE, 45));
-            choiceDeck.add(new EventChoice("Speak the Forbidden Incantation: Wager fate at the summit altar", 13)
+                .withEffect(EventEffectType.ATTACK, 4)
+                .withEffect(EventEffectType.EXPERIENCE, 35));
+            choiceDeck.add(new EventChoice("[Search Runic Hollow] Gamble (D20): High roll grants rare loot & power; fail triggers trap!", 13)
                 .onSuccess(EventEffectType.ITEM)
                 .onSuccess(EventEffectType.ATTACK, 3)
-                .onSuccess(EventEffectType.DEFENSE, 2)
-                .onFailure(EventEffectType.HEALTH, -30)
+                .onFailure(EventEffectType.HEALTH, -28)
                 .onFailure(EventEffectType.MOVE, -2));
         }
 
@@ -212,34 +150,34 @@ public class EventRepository {
     }
 
     // =========================================================================
-    // 3. SERPENT AMBUSH DILEMMAS (Combat vs Tactical Counter vs Tactical Plunge)
+    // 3. SERPENT AMBUSH DILEMMAS (Combat vs Tactical Bypass vs Tail Slide)
     // =========================================================================
     public static Event createProceduralSnakeEvent(int tilePosition) {
         String[] story = EventStoryGenerator.generateSnakeStory(tilePosition);
         int act = EventStoryGenerator.getAct(tilePosition);
         Event snake = new Event(story[0], story[1], EventCategory.SNAKE, 1, 100);
 
-        // Option 1: Combat Engagement (Risk HP/Slide for EXP & Tiered Combat Loot)
-        snake.addChoice(new EventChoice("Stand & Slay: Draw weapon and engage the serpent in battle")
+        // Option 1: Combat Engagement (Defeat serpent to hold tile, earn battle drop & EXP)
+        snake.addChoice(new EventChoice("[Draw Weapon & Fight!] Slay serpent in battle to hold ground and claim battle loot!")
             .triggersCombat());
 
-        // Option 2: Dynamic Tactical Counter (Avoids sliding down; trades durability, EXP, or HP/Item)
+        // Option 2: Tactical Bypass (Avoid sliding down; trades shield, EXP, or a glancing blow)
         List<EventChoice> counterPool = new ArrayList<>();
         counterPool.add(EventChoice.createEquipmentAssistedChoice(
-            "Brace & Deflect: Raise your equipment to ward off the serpent's fangs",
+            "[Brace Behind Shield] Raise your shield to deflect the fangs and hold ground safely",
             ItemType.EQUIPMENT
         ).skipsSpecialMove());
 
-        int bribeExp = (act == 1) ? 18 : ((act == 2) ? 30 : 45);
+        int bribeExp = (act == 1) ? 15 : ((act == 2) ? 25 : 40);
         counterPool.add(EventChoice.createExpCostChoice(
-            "Charm & Vault: Expend cunning battle focus to leap past the coils",
+            "[Distract with Travel Lore] Spend cunning travel lore (" + bribeExp + " EXP) to slip past without falling",
             bribeExp,
             null
-        ).withEffect(EventEffectType.MOVE, 3).skipsSpecialMove());
+        ).withEffect(EventEffectType.MOVE, 1).skipsSpecialMove());
 
-        int dashHpCost = (act == 1) ? 12 : ((act == 2) ? 18 : 26);
+        int dashHpCost = (act == 1) ? 10 : ((act == 2) ? 16 : 24);
         counterPool.add(EventChoice.createBloodCostChoice(
-            "Daredevil Sprint: Take a glancing tail lash to vault past the ambush",
+            "[Dodge Past Coils] Take a glancing tail lash (-" + dashHpCost + " HP) to hold ground and rush +2 tiles",
             dashHpCost,
             null
         ).withEffect(EventEffectType.MOVE, 2).skipsSpecialMove());
@@ -247,50 +185,39 @@ public class EventRepository {
         Collections.shuffle(counterPool);
         snake.addChoice(counterPool.get(0));
 
-        // Option 3: Dynamic Tactical Plunge (Trade board distance for guaranteed resources or recovery!)
-        List<EventChoice> plungePool = new ArrayList<>();
-        int plungeExp = (act == 1) ? 20 : ((act == 2) ? 35 : 50);
-        int plungeHeal = (act == 1) ? 15 : ((act == 2) ? 22 : 32);
-
-        plungePool.add(new EventChoice("Tactical Plunge: Slide down the coils while snatching dropped relics")
-            .withEffect(EventEffectType.ITEM)
+        // Option 3: Strategic Tail Slide (Avoids lethal battle, slides safely down the tail)
+        int plungeExp = (act == 1) ? 15 : ((act == 2) ? 25 : 35);
+        snake.addChoice(new EventChoice("[Slide Down the Tail] Drop safely down the serpent's tail (Avoids combat, drops back)")
             .withEffect(EventEffectType.EXPERIENCE, plungeExp));
-
-        plungePool.add(new EventChoice("Controlled Retreat: Slide safely to recover vitality and scout ahead")
-            .withEffect(EventEffectType.HEALTH, plungeHeal)
-            .withEffect(EventEffectType.SCOUT, 8));
-
-        Collections.shuffle(plungePool);
-        snake.addChoice(plungePool.get(0));
 
         return snake;
     }
 
     // =========================================================================
-    // 4. CELESTIAL LADDER DILEMMAS (Safe Ascent vs Overextend Vault vs Scavenge)
+    // 4. CELESTIAL LADDER DILEMMAS (Safe Climb vs Apex Leap vs Scavenge)
     // =========================================================================
     public static Event createProceduralLadderEvent(int tilePosition) {
         String[] story = EventStoryGenerator.generateLadderStory(tilePosition);
         int act = EventStoryGenerator.getAct(tilePosition);
         Event ladder = new Event(story[0], story[1], EventCategory.LADDER, 1, 100);
 
-        // Choice 1: Standard Safe Ascent
+        // Choice 1: Standard Safe Climb
         int safeExp = (act == 1) ? 12 : ((act == 2) ? 18 : 25);
-        ladder.addChoice(new EventChoice("Methodical Ascent: Climb steadily to the upper landing")
+        ladder.addChoice(new EventChoice("[Climb Steadily] Climb safely to the upper landing (+EXP)")
             .withEffect(EventEffectType.EXPERIENCE, safeExp));
 
-        // Choice 2: Risky Vault (Chance to soar +3/+4 tiles past ladder top, or fall & lose HP)
+        // Choice 2: Risky Apex Leap (Chance to jump past ladder top, or fall and take damage)
         int vaultDc = (act == 1) ? 11 : ((act == 2) ? 12 : 13);
         int vaultBonus = (act == 1) ? 3 : 4;
-        int vaultFailHp = (act == 1) ? -12 : ((act == 2) ? -18 : -25);
-        ladder.addChoice(new EventChoice("Vault the Apex: Risk a reckless leap beyond the highest rung", vaultDc)
+        int vaultFailHp = (act == 1) ? -10 : ((act == 2) ? -16 : -22);
+        ladder.addChoice(new EventChoice("[Leap for the Apex!] Gamble (D20): Soar +" + vaultBonus + " tiles past top, or slip and fall!", vaultDc)
             .onSuccess(EventEffectType.MOVE, vaultBonus)
             .onSuccess(EventEffectType.EXPERIENCE, safeExp)
             .onFailure(EventEffectType.HEALTH, vaultFailHp));
 
-        // Choice 3: Harvest Base Relics (Forgo elevation completely for major loot & EXP)
-        int scavengeExp = (act == 1) ? 35 : ((act == 2) ? 55 : 80);
-        ladder.addChoice(new EventChoice("Scavenge the Rungs: Forgo climbing to pry relics from the base")
+        // Choice 3: Scavenge Base Relics (Stay at base instead of climbing, pry relics)
+        int scavengeExp = (act == 1) ? 30 : ((act == 2) ? 45 : 65);
+        ladder.addChoice(new EventChoice("[Scavenge the Base] Don't climb: Stay on this tile and pry loose relics from the rungs")
             .withEffect(EventEffectType.ITEM)
             .withEffect(EventEffectType.EXPERIENCE, scavengeExp)
             .skipsSpecialMove());
@@ -299,7 +226,7 @@ public class EventRepository {
     }
 
     // =========================================================================
-    // 5. CROSSROADS DILEMMAS (Strategic Route Fork Commitments)
+    // 5. CROSSROADS DILEMMAS (Physical Route Choices)
     // =========================================================================
     public static Event createProceduralCrossroadsEvent(int tilePosition) {
         String[] story = EventStoryGenerator.generateCrossroadsStory(tilePosition);
@@ -308,26 +235,19 @@ public class EventRepository {
 
         List<EventChoice> forkDeck = new ArrayList<>();
 
-        int ridgeDmg = (act == 1) ? -12 : ((act == 2) ? -18 : -26);
+        int ridgeDmg = (act == 1) ? -10 : ((act == 2) ? -16 : -24);
         int ridgeMove = (act == 3) ? 5 : 4;
-        forkDeck.add(new EventChoice("The Jagged Ridge: Scramble across harsh crags for rapid ground")
+        forkDeck.add(new EventChoice("[Scramble Up Cliffway] Rush ahead +" + ridgeMove + " tiles (Fast route, takes " + Math.abs(ridgeDmg) + " scraping damage)")
             .withEffect(EventEffectType.MOVE, ridgeMove)
             .withEffect(EventEffectType.HEALTH, ridgeDmg));
 
-        int valleyHeal = (act == 1) ? 20 : ((act == 2) ? 35 : 50);
-        forkDeck.add(new EventChoice("The Pilgrim's Valley: Rest along the gentle brook and chart ahead")
+        int valleyHeal = (act == 1) ? 25 : ((act == 2) ? 40 : 60);
+        forkDeck.add(new EventChoice("[Rest by the Brook] Relax by gentle water: Restore " + valleyHeal + " HP and scout 10 tiles ahead")
             .withEffect(EventEffectType.HEALTH, valleyHeal)
             .withEffect(EventEffectType.SCOUT, 10));
 
-        int switchbackExp = (act == 1) ? 15 : ((act == 2) ? 25 : 40);
-        forkDeck.add(EventChoice.createExpCostChoice(
-            "The Smuggler's Switchback: Trade travel wisdom for shortcuts and stash",
-            switchbackExp,
-            null
-        ).withEffect(EventEffectType.MOVE, 2).withEffect(EventEffectType.ITEM));
-
         int detourDc = (act == 1) ? 10 : ((act == 2) ? 11 : 12);
-        forkDeck.add(new EventChoice("Uncharted Wind-Bridge: Gamble across frayed timber spans", detourDc)
+        forkDeck.add(new EventChoice("[Cross Swaying Bridge] Gamble (D20): Rush +5 tiles across frayed ropes, or slip back!", detourDc)
             .onSuccess(EventEffectType.MOVE, 5)
             .onSuccess(EventEffectType.EXPERIENCE, 25)
             .onFailure(EventEffectType.MOVE, -2)
@@ -342,7 +262,7 @@ public class EventRepository {
     }
 
     // =========================================================================
-    // 6. TREASURE CACHE DILEMMAS (Rigged Chests & Risky Lockpicking)
+    // 6. TREASURE CACHE DILEMMAS (Clear Chest Interactions)
     // =========================================================================
     public static Event createProceduralTreasureEvent(int tilePosition) {
         String[] story = EventStoryGenerator.generateTreasureStory(tilePosition);
@@ -351,28 +271,23 @@ public class EventRepository {
 
         List<EventChoice> chestDeck = new ArrayList<>();
 
-        int needleDmg = (act == 1) ? -10 : ((act == 2) ? -16 : -24);
-        chestDeck.add(new EventChoice("Pry the Lock: Force open the rigged clasp despite the needle trap")
-            .withEffect(EventEffectType.ITEM)
-            .withEffect(EventEffectType.EXPERIENCE, 15)
-            .withEffect(EventEffectType.HEALTH, needleDmg));
-
-        int disarmDc = (act == 1) ? 10 : ((act == 2) ? 11 : 13);
-        int disarmExp = (act == 1) ? 30 : ((act == 2) ? 45 : 65);
-        chestDeck.add(new EventChoice("Steady Disarm: Carefully unhook the brass tension wire", disarmDc)
+        int needleDmg = (act == 1) ? -10 : ((act == 2) ? -15 : -22);
+        int disarmDc = (act == 1) ? 10 : ((act == 2) ? 11 : 12);
+        int disarmExp = (act == 1) ? 25 : ((act == 2) ? 40 : 60);
+        chestDeck.add(new EventChoice("[Carefully Pick Lock] Gamble (D20): Disarm trap for pristine relic; fail pricks poison needle!", disarmDc)
             .onSuccess(EventEffectType.ITEM)
             .onSuccess(EventEffectType.EXPERIENCE, disarmExp)
             .onFailure(EventEffectType.HEALTH, needleDmg));
 
-        int safeExp = (act == 1) ? 25 : ((act == 2) ? 40 : 60);
-        chestDeck.add(new EventChoice("Salvage & Survey: Leave the inner lock alone and scout the area")
+        chestDeck.add(new EventChoice("[Force Chest Open] Guaranteed relic & EXP, but trap blast deals " + Math.abs(needleDmg) + " damage")
+            .withEffect(EventEffectType.ITEM)
+            .withEffect(EventEffectType.EXPERIENCE, 15)
+            .withEffect(EventEffectType.HEALTH, needleDmg));
+
+        int safeExp = (act == 1) ? 20 : ((act == 2) ? 35 : 50);
+        chestDeck.add(new EventChoice("[Survey Campsite] Leave chest alone: Safely scout 10 tiles ahead and gain EXP")
             .withEffect(EventEffectType.EXPERIENCE, safeExp)
             .withEffect(EventEffectType.SCOUT, 10));
-
-        chestDeck.add(EventChoice.createBarterChoice(
-            "Counterweight Swap: Place an item on the trigger plate to lift the relic",
-            null
-        ).withEffect(EventEffectType.ITEM).withEffect(EventEffectType.EXPERIENCE, 25));
 
         Collections.shuffle(chestDeck);
         treasure.addChoice(chestDeck.get(0));

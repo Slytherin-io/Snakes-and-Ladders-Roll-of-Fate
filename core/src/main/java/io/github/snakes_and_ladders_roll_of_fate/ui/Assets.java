@@ -50,6 +50,18 @@ public class Assets {
     public static final AssetDescriptor<Texture> CHAR_RACCOON =
         new AssetDescriptor<>("img/char_raccoon.png", Texture.class);
 
+    // Character Head Icons (for Mini-Map Progress Tracking & HUD Monitoring)
+    public static final AssetDescriptor<Texture> CHAR_CAT_HEAD =
+        new AssetDescriptor<>("img/char_cat_head.png", Texture.class);
+    public static final AssetDescriptor<Texture> CHAR_TURTLE_HEAD =
+        new AssetDescriptor<>("img/char_turtle_head.png", Texture.class);
+    public static final AssetDescriptor<Texture> CHAR_FOX_HEAD =
+        new AssetDescriptor<>("img/char_fox_head.png", Texture.class);
+    public static final AssetDescriptor<Texture> CHAR_RACCOON_HEAD =
+        new AssetDescriptor<>("img/char_raccoon_head.png", Texture.class);
+    public static final AssetDescriptor<Texture> CHAR_PALE_SHEPHERD_HEAD =
+        new AssetDescriptor<>("img/char_pale_shepherd_head.png", Texture.class);
+
     // Animated character walk spritesheets (224x224 per frame, 75% enlarged, grounded at common baseline)
     public static final AssetDescriptor<Texture> CHAR_CAT_WALK =
         new AssetDescriptor<>("img/char_cat_walk.png", Texture.class);
@@ -67,6 +79,14 @@ public class Assets {
     // Enemy combat spritesheet (224x32, 7 frames of 32x32)
     public static final AssetDescriptor<Texture> ENEMY_SNAKE =
         new AssetDescriptor<>("img/enemy_snake.png", Texture.class);
+
+    // Boss combat spritesheet (1376x768, 2 rows of 4 frames @ 344x384)
+    public static final AssetDescriptor<Texture> BOSS_DAWN_WARDEN =
+        new AssetDescriptor<>("img/boss_dawn_warden.png", Texture.class);
+
+    // Pale Shepherd pursuer spritesheet (1376x768, 2 rows of 4 frames @ 344x384)
+    public static final AssetDescriptor<Texture> CHAR_PALE_SHEPHERD =
+        new AssetDescriptor<>("img/char_pale_shepherd.png", Texture.class);
 
     // =========================================================================
     // In-Game Board: Parallax Act Backgrounds
@@ -191,6 +211,20 @@ public class Assets {
     }
 
     /**
+     * Helper to retrieve the head icon descriptor for any CharacterClass enum.
+     */
+    public static AssetDescriptor<Texture> getCharacterHeadTexture(io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass characterClass) {
+        if (characterClass == null) return CHAR_CAT_HEAD;
+        switch (characterClass) {
+            case CAT: return CHAR_CAT_HEAD;
+            case TURTLE: return CHAR_TURTLE_HEAD;
+            case FOX: return CHAR_FOX_HEAD;
+            case RACCOON: return CHAR_RACCOON_HEAD;
+            default: return CHAR_CAT_HEAD;
+        }
+    }
+
+    /**
      * Helper to retrieve the animated walking spritesheet descriptor for any CharacterClass enum.
      */
     public static AssetDescriptor<Texture> getCharacterWalkSheet(io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass characterClass) {
@@ -310,12 +344,19 @@ public class Assets {
         manager.load(CHAR_TURTLE);
         manager.load(CHAR_FOX);
         manager.load(CHAR_RACCOON);
+        manager.load(CHAR_CAT_HEAD);
+        manager.load(CHAR_TURTLE_HEAD);
+        manager.load(CHAR_FOX_HEAD);
+        manager.load(CHAR_RACCOON_HEAD);
         manager.load(CHAR_CAT_WALK);
         manager.load(CHAR_TURTLE_WALK);
         manager.load(CHAR_FOX_WALK);
         manager.load(CHAR_RACCOON_WALK);
         manager.load(LOADING_SNAKE);
         manager.load(ENEMY_SNAKE);
+        manager.load(BOSS_DAWN_WARDEN);
+        manager.load(CHAR_PALE_SHEPHERD);
+        manager.load(CHAR_PALE_SHEPHERD_HEAD);
         manager.load(ACT1_BG);
         manager.load(ACT2_BG);
         manager.load(ACT3_BG);

@@ -66,7 +66,8 @@ public class AudioManager {
         MONSTER_HIT("audio/sfx/sfx_hit_monster.ogg"),
         PLAYER_HURT("audio/sfx/sfx_hit_player.ogg"),
         SANCTUARY_HEAL("audio/sfx/sfx_sanctuary.ogg"),
-        LEVEL_UP("audio/sfx/sfx_level_up.ogg");
+        LEVEL_UP("audio/sfx/sfx_level_up.ogg"),
+        REAPER_APPEAR("audio/sfx/sfx_reaper_appear.ogg");
 
         private final String filePath;
         SoundEffect(String filePath) {
