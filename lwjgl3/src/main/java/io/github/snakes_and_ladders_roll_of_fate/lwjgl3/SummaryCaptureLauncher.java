@@ -20,7 +20,8 @@ import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 
 /**
  * Headless/Windowed automated visual capture tool for GameSummaryScreen.
- * Generates screenshots of both Multiplayer Victory, Multiplayer Defeat, and Single Player Victory.
+ * Generates screenshots of both Multiplayer Victory (Default Outcome & Toggled Summary),
+ * Multiplayer Defeat, and Single Player Victory (Default Outcome & Toggled Summary).
  */
 public class SummaryCaptureLauncher {
 
@@ -37,6 +38,7 @@ public class SummaryCaptureLauncher {
     private static class CaptureGame extends RollOfFateGame {
         private int frameCount = 0;
         private int capturePhase = 0;
+        private GameSummaryScreen currentSummaryScreen;
 
         @Override
         public void create() {
@@ -44,7 +46,6 @@ public class SummaryCaptureLauncher {
             Assets.loadAll(am);
             am.finishLoading();
 
-            // Set reflection or getter
             try {
                 java.lang.reflect.Field field = RollOfFateGame.class.getDeclaredField("assetManager");
                 field.setAccessible(true);
@@ -117,7 +118,8 @@ public class SummaryCaptureLauncher {
                 e.printStackTrace();
             }
 
-            setScreen(new GameSummaryScreen(this, true, p1));
+            currentSummaryScreen = new GameSummaryScreen(this, true, p1);
+            setScreen(currentSummaryScreen);
         }
 
         @Override
@@ -128,16 +130,49 @@ public class SummaryCaptureLauncher {
             // Wait 5 frames for rendering to stabilize
             if (capturePhase == 0 && frameCount >= 5) {
                 capturePhase = 1;
+                saveScreenshot("screenshots/victory_multiplayer_outcome.png");
+
+                // Toggle to summary view
+                if (currentSummaryScreen != null) {
+                    currentSummaryScreen.toggleView();
+                }
+                frameCount = 0;
+            } else if (capturePhase == 1 && frameCount >= 5) {
+                capturePhase = 2;
                 saveScreenshot("screenshots/victory_multiplayer_summary.png");
+
+                // Switch to 2-Player Victory (Player 2 Turtle won, Player 1 Cat is sole companion)
+                List<Player> twoParty = new ArrayList<>();
+                Player tp1 = new Player("Player 1", CharacterClass.CAT);
+                tp1.levelUp(); tp1.levelUp(); // Level 3
+                Player tp2 = new Player("Player 2", CharacterClass.TURTLE);
+                tp2.levelUp(); tp2.levelUp(); tp2.levelUp(); // Level 4
+                tp2.setPosition(100);
+                twoParty.add(tp1);
+                twoParty.add(tp2);
+                try {
+                    java.lang.reflect.Field pField = RollOfFateGame.class.getDeclaredField("players");
+                    pField.setAccessible(true);
+                    pField.set(this, twoParty);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                currentSummaryScreen = new GameSummaryScreen(this, true, tp2);
+                setScreen(currentSummaryScreen);
+                frameCount = 0;
+            } else if (capturePhase == 2 && frameCount >= 5) {
+                capturePhase = 3;
+                saveScreenshot("screenshots/victory_2player_outcome.png");
 
                 // Switch to Defeat screen
                 Player heroDefeated = getPlayers().get(0);
                 heroDefeated.setHealth(0);
-                setScreen(new GameSummaryScreen(this, false, heroDefeated));
+                currentSummaryScreen = new GameSummaryScreen(this, false, heroDefeated);
+                setScreen(currentSummaryScreen);
                 frameCount = 0;
-            } else if (capturePhase == 1 && frameCount >= 5) {
-                capturePhase = 2;
-                saveScreenshot("screenshots/defeat_multiplayer_summary.png");
+            } else if (capturePhase == 3 && frameCount >= 5) {
+                capturePhase = 4;
+                saveScreenshot("screenshots/defeat_multiplayer_outcome.png");
 
                 // Switch to Single Player Victory
                 Player soloPlayer = getPlayers().get(0);
@@ -152,10 +187,20 @@ public class SummaryCaptureLauncher {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                setScreen(new GameSummaryScreen(this, true, soloList.get(0)));
+                currentSummaryScreen = new GameSummaryScreen(this, true, soloList.get(0));
+                setScreen(currentSummaryScreen);
                 frameCount = 0;
-            } else if (capturePhase == 2 && frameCount >= 5) {
-                capturePhase = 3;
+            } else if (capturePhase == 4 && frameCount >= 5) {
+                capturePhase = 5;
+                saveScreenshot("screenshots/victory_singleplayer_outcome.png");
+
+                // Toggle to Single Player Summary Ledger
+                if (currentSummaryScreen != null) {
+                    currentSummaryScreen.toggleView();
+                }
+                frameCount = 0;
+            } else if (capturePhase == 5 && frameCount >= 5) {
+                capturePhase = 6;
                 saveScreenshot("screenshots/victory_singleplayer_summary.png");
                 Gdx.app.exit();
             }

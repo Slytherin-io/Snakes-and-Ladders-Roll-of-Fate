@@ -8,7 +8,7 @@ import java.util.Random;
 public class EventManager {
     public static final double BASE_AMBIENT_CHANCE = 0.28;
     public static final int COOLDOWN_TURNS = 1;
-    public static final double LADDER_EVENT_CHANCE = 0.55;
+    public static final double LADDER_EVENT_CHANCE = 0.20;
 
     private List<Event> events;
     private Event activeEvent;
