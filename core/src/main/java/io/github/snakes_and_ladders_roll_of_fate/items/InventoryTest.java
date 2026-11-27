@@ -79,11 +79,23 @@ public class InventoryTest {
             throw new AssertionError("Base defense should remain 10, was: " + player.getBaseDefense());
         }
 
-        // End of Turn: Buff expires
-        System.out.println("\n[Test 7] Ending Turn and Clearing Buffs...");
+        // End of Turn on Board: Combat Boons persist across moves until battle
+        System.out.println("\n[Test 7] Ending Board Turn: Verifying Persistent Combat Boons...");
         player.clearTemporaryBuffs();
+        if (player.getDefense() != 13) {
+            throw new AssertionError("Equipment combat boon should persist across board turns (DEF should be 13), was: " + player.getDefense());
+        }
+        // Entering combat activates boons into battle bonuses
+        player.setInBattle(true);
+        player.activateBattleBoons();
+        if (player.getDefense() != 13) {
+            throw new AssertionError("Defense in battle should remain 13, was: " + player.getDefense());
+        }
+        // Concluding battle consumes and clears the bonus
+        player.setInBattle(false);
+        player.clearBattleBonuses();
         if (player.getDefense() != 10) {
-            throw new AssertionError("Defense should return to base 10 after buff expires, was: " + player.getDefense());
+            throw new AssertionError("Defense should return to base 10 after battle ends, was: " + player.getDefense());
         }
 
         // Single-use equipment check: Wooden Shield expended and removed from inventory
@@ -339,9 +351,9 @@ public class InventoryTest {
         if (turtlePlayer.getAttack() != 4) throw new AssertionError("Turtle ATK should be 4, was: " + turtlePlayer.getAttack());
         if (turtlePlayer.getDefense() != 7) throw new AssertionError("Turtle DEF should be 7, was: " + turtlePlayer.getDefense());
         if (!"Turtle".equals(turtlePlayer.getEntityClass())) throw new AssertionError("Entity class should be Turtle");
-        if (turtlePlayer.getInventory().getItems().size() != 1) throw new AssertionError("Turtle should start with 1 item");
-        if (!"Turtle Shell Buckler".equals(turtlePlayer.getInventory().getItems().get(0).getName())) {
-            throw new AssertionError("Turtle should start with Turtle Shell Buckler");
+        if (turtlePlayer.getInventory().getItems().size() != 0) throw new AssertionError("Turtle should start with empty satchel (0/4 slots)");
+        if (turtlePlayer.getClassSkill() == null || !"Slow & Steady".equals(turtlePlayer.getClassSkill().getSkillName())) {
+            throw new AssertionError("Turtle should have Slow & Steady class skill");
         }
 
         // Test Cat Archetype (Agile)
@@ -349,8 +361,9 @@ public class InventoryTest {
         if (catPlayer.getHealth() != 90) throw new AssertionError("Cat HP should be 90, was: " + catPlayer.getHealth());
         if (catPlayer.getAttack() != 6) throw new AssertionError("Cat ATK should be 6, was: " + catPlayer.getAttack());
         if (catPlayer.getDefense() != 4) throw new AssertionError("Cat DEF should be 4, was: " + catPlayer.getDefense());
-        if (!"Cat's Agility Charm".equals(catPlayer.getInventory().getItems().get(0).getName())) {
-            throw new AssertionError("Cat should start with Cat's Agility Charm");
+        if (catPlayer.getInventory().getItems().size() != 0) throw new AssertionError("Cat should start with empty satchel");
+        if (catPlayer.getClassSkill() == null || !"Lucky Paw".equals(catPlayer.getClassSkill().getSkillName())) {
+            throw new AssertionError("Cat should have Lucky Paw class skill");
         }
 
         // Test Fox Archetype (Trickster)
@@ -358,8 +371,9 @@ public class InventoryTest {
         if (foxPlayer.getHealth() != 95) throw new AssertionError("Fox HP should be 95, was: " + foxPlayer.getHealth());
         if (foxPlayer.getAttack() != 7) throw new AssertionError("Fox ATK should be 7, was: " + foxPlayer.getAttack());
         if (foxPlayer.getDefense() != 3) throw new AssertionError("Fox DEF should be 3, was: " + foxPlayer.getDefense());
-        if (!"Fox's Hunting Fang".equals(foxPlayer.getInventory().getItems().get(0).getName())) {
-            throw new AssertionError("Fox should start with Fox's Hunting Fang");
+        if (foxPlayer.getInventory().getItems().size() != 0) throw new AssertionError("Fox should start with empty satchel");
+        if (foxPlayer.getClassSkill() == null || !"Serpent Whisperer".equals(foxPlayer.getClassSkill().getSkillName())) {
+            throw new AssertionError("Fox should have Serpent Whisperer class skill");
         }
 
         // Test Raccoon Archetype (Scavenger)
@@ -367,18 +381,24 @@ public class InventoryTest {
         if (raccoonPlayer.getHealth() != 100) throw new AssertionError("Raccoon HP should be 100, was: " + raccoonPlayer.getHealth());
         if (raccoonPlayer.getAttack() != 5) throw new AssertionError("Raccoon ATK should be 5, was: " + raccoonPlayer.getAttack());
         if (raccoonPlayer.getDefense() != 4) throw new AssertionError("Raccoon DEF should be 4, was: " + raccoonPlayer.getDefense());
-        if (!"Scavenger's First Aid Kit".equals(raccoonPlayer.getInventory().getItems().get(0).getName())) {
-            throw new AssertionError("Raccoon should start with Scavenger's First Aid Kit");
+        if (raccoonPlayer.getInventory().getItems().size() != 0) throw new AssertionError("Raccoon should start with empty satchel");
+        if (raccoonPlayer.getClassSkill() == null || !"Scrap Salvage".equals(raccoonPlayer.getClassSkill().getSkillName())) {
+            throw new AssertionError("Raccoon should have Scrap Salvage class skill");
         }
 
-        // Test using Turtle's starting equipment in combat stance
+        // Test adding and using equipment in combat stance
+        turtlePlayer.getInventory().addItem(Item.createEquipment("Turtle Shell Buckler", io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DEFENSE, 3, 3, 3, "+3 DEF"));
         turtlePlayer.useItem(0); // Uses Turtle Shell Buckler (+3 DEF)
         if (turtlePlayer.getDefense() != 10) { // Base 7 + Buff 3
             throw new AssertionError("Turtle DEF with active buff should be 10, was: " + turtlePlayer.getDefense());
         }
         turtlePlayer.clearTemporaryBuffs();
+        if (turtlePlayer.getDefense() != 10) {
+            throw new AssertionError("Turtle DEF should persist across empty board moves (DEF should be 10), was: " + turtlePlayer.getDefense());
+        }
+        turtlePlayer.clearAllBuffs();
         if (turtlePlayer.getDefense() != 7) {
-            throw new AssertionError("Turtle DEF after turn should reset to base 7, was: " + turtlePlayer.getDefense());
+            throw new AssertionError("Turtle DEF after clearAllBuffs should reset to base 7, was: " + turtlePlayer.getDefense());
         }
 
         // Test 14: Ensure health never exceeds maxHealth from item effects, events, or level up
@@ -618,6 +638,10 @@ public class InventoryTest {
             throw new AssertionError("Double-edged draught should cost 15 HP (remaining 65), was: " + utilHero.getHealth());
         }
         utilHero.clearTemporaryBuffs();
+        if (utilHero.getAttack() != 20) {
+            throw new AssertionError("Berserker draught should persist until combat, was: " + utilHero.getAttack());
+        }
+        utilHero.clearAllBuffs();
 
         // 4. Passive Curses: cannot be consumed, penalize stats/rolls, can be cleansed or bartered
         Item rollCurse = Item.createCurse("Cursed Obsidian Slab", EventEffectType.MOVE, -1, "Passive: -1 Roll");
@@ -658,6 +682,63 @@ public class InventoryTest {
             throw new AssertionError("Purifying curses must remove all curses and restore stats!");
         }
         System.out.println("  [CONFIRMED] Single-use enforcement, board utilities, double-edged items, and curses verified!");
+
+        // 23. Equal-Level Barter Trade Verification & In-Battle Persistent Buffs
+        System.out.println("\n[Test 23] Testing Equal-Level Barter & In-Battle Persistent Buffs...");
+        Player barterHero = new Player("BarterHero", CharacterClass.CAT);
+        barterHero.getInventory().clear();
+
+        // 1. Barter Tier 1 item for Elixir
+        Item t1Item = Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 20, "Restores 20 HP");
+        t1Item.setTier(1);
+        barterHero.addItem(t1Item);
+
+        EventChoice elixirBarter = EventChoice.createEqualBarterChoice("Barter Elixir", io.github.snakes_and_ladders_roll_of_fate.items.BarterCategory.ELIXIR);
+        elixirBarter.execute(barterHero);
+        if (barterHero.getInventory().size() != 1 || barterHero.getInventory().getItem(0).getTier() != 1) {
+            throw new AssertionError("Bartering Tier 1 item should yield Tier 1 item, was: " + barterHero.getInventory().getItem(0).getTierName());
+        }
+
+        // 2. Barter Tier 2 item for Armament
+        barterHero.getInventory().clear();
+        Item t2Item = Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 5, 1, 1, "+5 ATK");
+        t2Item.setTier(2);
+        barterHero.addItem(t2Item);
+
+        EventChoice armBarter = EventChoice.createEqualBarterChoice("Barter Armament", io.github.snakes_and_ladders_roll_of_fate.items.BarterCategory.ARMAMENT);
+        armBarter.execute(barterHero);
+        Item receivedArm = barterHero.getInventory().getItem(0);
+        if (receivedArm.getTier() != 2 || receivedArm.getEffectType() != EventEffectType.ATTACK) {
+            throw new AssertionError("Bartering Tier 2 item should yield Tier 2 armament, got: " + receivedArm.getName());
+        }
+
+        // 3. Barter Curse for Modest Cleansing Reward + 20 EXP
+        barterHero.getInventory().clear();
+        barterHero.addItem(Item.createCurse("Test Hex", EventEffectType.ATTACK, -2, "Passive: -2 ATK"));
+        int expBeforeBarter = barterHero.getTotalExperience();
+        elixirBarter.execute(barterHero);
+        if (barterHero.hasCurse()) {
+            throw new AssertionError("Bartering a curse must purge the curse from satchel!");
+        }
+        if (barterHero.getTotalExperience() < expBeforeBarter + 20) {
+            throw new AssertionError("Bartering a curse should reward at least +20 Lore EXP!");
+        }
+
+        // 4. In-Battle Attack Buff Retention across Enemy Turn
+        Player combatant = new Player("Duelist", CharacterClass.CAT);
+        combatant.getInventory().clear();
+        combatant.addItem(Item.createEquipment("Battle Blade", EventEffectType.ATTACK, 6, 1, 1, "+6 ATK"));
+        Enemy duelEnemy = new Enemy("Test Serpent");
+        duelEnemy.setHealth(100);
+
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem testBattleSys = new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        testBattleSys.startBattle(combatant, duelEnemy);
+        testBattleSys.onPlayerUseItem(0); // Uses Battle Blade in combat
+        // When enemy completes attack, battle bonus should NOT be wiped!
+        if (combatant.getBattleAttackBonus() != 6 || combatant.getAttack() <= combatant.getBaseAttack()) {
+            throw new AssertionError("Player battle attack bonus must NOT be wiped after enemy turn! Got: " + combatant.getBattleAttackBonus());
+        }
+        System.out.println("  [CONFIRMED] Equal-level barter and in-battle buff persistence verified!");
 
         System.out.println("\n=== ALL INVENTORY & EVENT INTEGRATION TESTS PASSED PERFECTLY! ===");
     }

@@ -18,6 +18,7 @@ public class Item {
     private EventEffectType secondaryEffectType;
     private int secondaryEffectValue;
     private String effect;
+    private int tier = 1;
 
     // Full constructor (all items strictly single-use: durability = 1)
     public Item(String name, ItemType itemType, int durability, EventEffectType effectType, int effectValue, String effect) {
@@ -104,14 +105,26 @@ public class Item {
                 System.out.printf("  [HP] %s%d (Current: %d/%d)%n", (value >= 0 ? "+" : ""), value, player.getHealth(), player.getMaxHealth());
                 break;
             case ATTACK:
-                player.addTempAttack(value);
-                System.out.printf("  [BUFF: BATTLE FOCUS] %s%d Attack for this turn (Total ATK: %d [Base %d + Buff %d])%n",
-                    (value >= 0 ? "+" : ""), value, player.getAttack(), player.getBaseAttack(), player.getTempAttack());
+                if (player.isInBattle()) {
+                    player.addBattleAttack(value);
+                    System.out.printf("  [BUFF: BATTLE STRIKE] %s%d Attack for this battle (Total ATK: %d [Base %d + Buff %d])%n",
+                        (value >= 0 ? "+" : ""), value, player.getAttack(), player.getBaseAttack(), player.getTempAttack());
+                } else {
+                    player.primeBattleAttack(value);
+                    System.out.printf("  [BUFF: COMBAT BOON] %s%d Attack primed for next battle! (Total ATK: %d [Base %d + Buff %d])%n",
+                        (value >= 0 ? "+" : ""), value, player.getAttack(), player.getBaseAttack(), player.getTempAttack());
+                }
                 break;
             case DEFENSE:
-                player.addTempDefense(value);
-                System.out.printf("  [BUFF: ACTIVE GUARD] %s%d Defense for this turn (Total DEF: %d [Base %d + Buff %d])%n",
-                    (value >= 0 ? "+" : ""), value, player.getDefense(), player.getBaseDefense(), player.getTempDefense());
+                if (player.isInBattle()) {
+                    player.addBattleDefense(value);
+                    System.out.printf("  [BUFF: BATTLE GUARD] %s%d Defense for this battle (Total DEF: %d [Base %d + Buff %d])%n",
+                        (value >= 0 ? "+" : ""), value, player.getDefense(), player.getBaseDefense(), player.getTempDefense());
+                } else {
+                    player.primeBattleDefense(value);
+                    System.out.printf("  [BUFF: ACTIVE WARD] %s%d Defense primed for next battle & hazard ward! (Total DEF: %d [Base %d + Buff %d])%n",
+                        (value >= 0 ? "+" : ""), value, player.getDefense(), player.getBaseDefense(), player.getTempDefense());
+                }
                 break;
             case EXPERIENCE:
                 player.gainExperience(value);
@@ -174,4 +187,58 @@ public class Item {
     public EventEffectType getSecondaryEffectType() { return secondaryEffectType; }
     public int getSecondaryEffectValue() { return secondaryEffectValue; }
     public String getEffect() { return effect; }
+
+    public int getTier() {
+        if (itemType == ItemType.CURSE) return 0;
+        if (tier > 1) return tier;
+        return calculateInferredTier();
+    }
+
+    public void setTier(int tier) {
+        this.tier = tier;
+    }
+
+    public String getTierName() {
+        int t = getTier();
+        switch (t) {
+            case 0: return "Curse";
+            case 1: return "Tier I";
+            case 2: return "Tier II";
+            case 3: return "Tier III";
+            default: return "Tier " + t;
+        }
+    }
+
+    private int calculateInferredTier() {
+        if (tier > 1) return tier;
+        if (effectType == EventEffectType.HEALTH) {
+            if (effectValue >= 70) return 3;
+            if (effectValue >= 40) return 2;
+            return 1;
+        }
+        if (effectType == EventEffectType.ATTACK || effectType == EventEffectType.DEFENSE) {
+            if (effectValue >= 7) return 3;
+            if (effectValue >= 4) return 2;
+            return 1;
+        }
+        if (effectType == EventEffectType.MOVE) {
+            if (effectValue >= 5) return 3;
+            if (effectValue >= 3) return 2;
+            return 1;
+        }
+        if (effectType == EventEffectType.SCOUT) {
+            if (effectValue >= 16) return 3;
+            if (effectValue >= 10) return 2;
+            return 1;
+        }
+        if (effectType == EventEffectType.EXPERIENCE) {
+            if (effectValue >= 70) return 3;
+            if (effectValue >= 40) return 2;
+            return 1;
+        }
+        if (effectType == EventEffectType.DICE_EXACT) return 3;
+        if (effectType == EventEffectType.SNAKE_WARD) return 2;
+        if (effectType == EventEffectType.DICE_CLAMP) return 1;
+        return 1;
+    }
 }

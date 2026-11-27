@@ -51,6 +51,7 @@ public class BattleSystem {
     private boolean justEnteredPhase2 = false;
     private String battleLog = "";
     private String battleState = "IDLE";
+    private int combatRound = 1;
 
     public BattleSystem() {
         this.battleState = "IDLE";
@@ -70,6 +71,7 @@ public class BattleSystem {
     public boolean isPlayerGuarding()     { return isPlayerGuarding; }
     public int getBossPhase()             { return bossPhase; }
     public int getPhase2MaxHp()           { return phase2MaxHp; }
+    public int getCombatRound()           { return combatRound; }
 
     public boolean consumeJustEnteredPhase2() {
         boolean triggered = justEnteredPhase2;
@@ -80,6 +82,10 @@ public class BattleSystem {
     public void startBattle(Player player, Enemy enemy) {
         this.player = player;
         this.enemy = enemy;
+        if (player != null) {
+            player.setInBattle(true);
+            player.activateBattleBoons();
+        }
         this.enemyMaxHp = (enemy != null) ? Math.max(1, enemy.getHealth()) : 100;
         this.playerTempDef = 0;
         this.isPlayerGuarding = false;
@@ -88,12 +94,15 @@ public class BattleSystem {
         this.playerDotLabel = "Poison";
         this.isDawnWarden = (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Dawn Warden"));
         this.bossPhase = 1;
+        this.combatRound = 1;
         this.phase2MaxHp = Math.max(150, this.enemyMaxHp + 30);
         this.justEnteredPhase2 = false;
         this.finalOutcome = null;
         this.currentState = BattleState.PLAYER_TURN;
         this.battleState = "IN_PROGRESS";
-        if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().startsWith("The ")) {
+        if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Pale Shepherd")) {
+            this.battleLog = "The Pale Shepherd raises his crook in quiet contemplation.";
+        } else if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().startsWith("The ")) {
             this.battleLog = enemy.getEnemyType() + " descends before you to test your spirit!";
         } else {
             this.battleLog = "A wild " + (enemy != null ? enemy.getEnemyType() : "serpent") + " blocks your path!";
@@ -217,6 +226,11 @@ public class BattleSystem {
 
     public void onPlayerEscape() {
         if (currentState != BattleState.PLAYER_TURN) return;
+        if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Pale Shepherd")) {
+            battleLog = "You break through the obsidian mist and scramble for your life!";
+            endBattle(BattleOutcome.ESCAPED);
+            return;
+        }
         int roll = combatDice.roll();
         if (roll >= 10) {
             battleLog = "Escape roll " + roll + " - you slip away!";
@@ -275,6 +289,10 @@ public class BattleSystem {
 
     private void triggerEnemyTurn(float delaySeconds) {
         currentState = BattleState.ENEMY_TURN;
+        if (com.badlogic.gdx.Gdx.app == null) {
+            executeEnemyAttack();
+            return;
+        }
         Timer.schedule(new Timer.Task() {
             @Override public void run() {
                 if (enemyAttackStarter != null) {
@@ -404,6 +422,7 @@ public class BattleSystem {
         }
 
         player.clearTemporaryBuffs();
+        combatRound++;
         battleLog = log.toString();
         currentState = BattleState.PLAYER_TURN;
     }
@@ -414,6 +433,8 @@ public class BattleSystem {
 
     private void endBattle(BattleOutcome outcome) {
         if (player != null) {
+            player.setInBattle(false);
+            player.clearBattleBonuses();
             player.clearTemporaryBuffs();
         }
         this.finalOutcome = outcome;

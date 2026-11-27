@@ -31,6 +31,10 @@ public class Inventory {
         return items.remove(item);
     }
 
+    public void clear() {
+        items.clear();
+    }
+
     public Item removeItem(int index) {
         if (index >= 0 && index < items.size()) {
             return items.remove(index);

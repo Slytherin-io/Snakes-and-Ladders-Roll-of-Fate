@@ -110,28 +110,95 @@ public class BoardMiniMapCaptureLauncher {
             super.render();
             frameCount++;
 
-            if (capturePhase == 0 && frameCount >= 10) {
-                capturePhase = 1;
-                // Capture initial state: Skill is INACTIVE (4 TURNS)
-                saveScreenshot("screenshots/board_hud_skill_full.png", null);
-                // Bottom bar crop: [20, 915, 1880, 160]
-                saveScreenshot("screenshots/board_hud_bottom_inactive.png", new int[]{20, 915, 1880, 160});
+            if (frameCount < 5) return; // Allow frames to render
 
-                // Phase 2: Set cooldown to 0 to test READY state
-                mockParty.get(0).setSkillCooldown(0);
-                try {
-                    java.lang.reflect.Method m = BoardScreen.class.getDeclaredMethod("updateHudDisplay");
-                    m.setAccessible(true);
-                    m.invoke(boardScreen);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                frameCount = 0;
-            } else if (capturePhase == 1 && frameCount >= 10) {
-                capturePhase = 2;
-                // Capture READY state: Skill is active (READY (USE))
-                saveScreenshot("screenshots/board_hud_bottom_ready.png", new int[]{20, 915, 1880, 160});
-                Gdx.app.exit();
+            switch (capturePhase) {
+                case 0:
+                    // Cat (P1) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_cat_inactive.png", new int[]{290, 930, 200, 130});
+                    // Make Ready
+                    mockParty.get(0).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 1;
+                    frameCount = 0;
+                    break;
+                case 1:
+                    // Cat (P1) Ready
+                    saveScreenshot("screenshots/board_hud_skill_cat_ready.png", new int[]{290, 930, 200, 130});
+                    // Switch to Fox (P2)
+                    setTurn(1);
+                    capturePhase = 2;
+                    frameCount = 0;
+                    break;
+                case 2:
+                    // Fox (P2) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_fox_inactive.png", new int[]{290, 930, 200, 130});
+                    mockParty.get(1).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 3;
+                    frameCount = 0;
+                    break;
+                case 3:
+                    // Fox (P2) Ready
+                    saveScreenshot("screenshots/board_hud_skill_fox_ready.png", new int[]{290, 930, 200, 130});
+                    // Switch to Turtle (P3)
+                    setTurn(2);
+                    capturePhase = 4;
+                    frameCount = 0;
+                    break;
+                case 4:
+                    // Turtle (P3) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_turtle_inactive.png", new int[]{290, 930, 200, 130});
+                    mockParty.get(2).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 5;
+                    frameCount = 0;
+                    break;
+                case 5:
+                    // Turtle (P3) Ready
+                    saveScreenshot("screenshots/board_hud_skill_turtle_ready.png", new int[]{290, 930, 200, 130});
+                    // Switch to Raccoon (P4)
+                    setTurn(3);
+                    capturePhase = 6;
+                    frameCount = 0;
+                    break;
+                case 6:
+                    // Raccoon (P4) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_raccoon_inactive.png", new int[]{290, 930, 200, 130});
+                    mockParty.get(3).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 7;
+                    frameCount = 0;
+                    break;
+                case 7:
+                    // Raccoon (P4) Ready
+                    saveScreenshot("screenshots/board_hud_skill_raccoon_ready.png", new int[]{290, 930, 200, 130});
+                    // Final full captures
+                    saveScreenshot("screenshots/board_hud_bottom_ready.png", new int[]{20, 915, 1880, 160});
+                    saveScreenshot("screenshots/board_hud_skill_full.png", null);
+                    Gdx.app.exit();
+                    break;
+            }
+        }
+
+        private void setTurn(int turn) {
+            try {
+                java.lang.reflect.Field tField = RollOfFateGame.class.getDeclaredField("currentTurn");
+                tField.setAccessible(true);
+                tField.set(this, turn);
+                updateDisplay();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void updateDisplay() {
+            try {
+                java.lang.reflect.Method m = BoardScreen.class.getDeclaredMethod("updateHudDisplay");
+                m.setAccessible(true);
+                m.invoke(boardScreen);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
 

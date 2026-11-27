@@ -15,6 +15,12 @@ public class Player extends Entity {
     private int totalExperience;
     private int tempAttack = 0;
     private int tempDefense = 0;
+    private int primedBattleAttack = 0;  // Primed from equipment used on board, persists across moves until battle
+    private int primedBattleDefense = 0; // Primed from equipment used on board, persists across moves until battle
+    private int battleAttackBonus = 0;   // Active bonus during combat
+    private int battleDefenseBonus = 0;  // Active bonus during combat
+    private int hazardShieldDefense = 0; // Absorbs hazard/trap damage on the board
+    private boolean inBattle = false;
     private int turnsSinceLastEvent = 99; // Starts ready for encounter
     private CharacterClass characterClass;
     private int maxHealthBonus = 0;
@@ -22,6 +28,9 @@ public class Player extends Entity {
     // Polymorphic Class Skill (Starts inactive on full cooldown)
     private ClassSkill classSkill;
     private int skillCooldown = 4;
+    private boolean luckyPawActive = false;
+    private boolean hazardImmune = false;
+    private boolean serpentWhispererActive = false;
 
     // Active Board Utility Modifiers (Single-Use Item Effects)
     private boolean pendingDiceChoice = false;
@@ -135,8 +144,64 @@ public class Player extends Entity {
         this.tempDefense += amount;
     }
 
-    public int getTempAttack() { return tempAttack; }
-    public int getTempDefense() { return tempDefense; }
+    public void primeBattleAttack(int amount) {
+        this.primedBattleAttack += amount;
+    }
+
+    public void primeBattleDefense(int amount) {
+        this.primedBattleDefense += amount;
+        this.hazardShieldDefense += amount;
+    }
+
+    public void addBattleAttack(int amount) {
+        this.battleAttackBonus += amount;
+    }
+
+    public void addBattleDefense(int amount) {
+        this.battleDefenseBonus += amount;
+    }
+
+    public int getPrimedBattleAttack() { return primedBattleAttack; }
+    public int getPrimedBattleDefense() { return primedBattleDefense; }
+    public int getBattleAttackBonus() { return battleAttackBonus; }
+    public int getBattleDefenseBonus() { return battleDefenseBonus; }
+    public int getHazardShieldDefense() { return hazardShieldDefense; }
+
+    public int absorbHazardDamage(int incomingDamage) {
+        if (incomingDamage <= 0) return 0;
+        if (hazardShieldDefense <= 0) return incomingDamage;
+        int absorbed = Math.min(hazardShieldDefense, incomingDamage);
+        hazardShieldDefense -= absorbed;
+        return incomingDamage - absorbed;
+    }
+
+    public boolean isInBattle() { return inBattle; }
+    public void setInBattle(boolean inBattle) { this.inBattle = inBattle; }
+
+    public void activateBattleBoons() {
+        this.battleAttackBonus += this.primedBattleAttack;
+        this.battleDefenseBonus += this.primedBattleDefense;
+        this.primedBattleAttack = 0;
+        this.primedBattleDefense = 0;
+    }
+
+    public void clearBattleBonuses() {
+        this.battleAttackBonus = 0;
+        this.battleDefenseBonus = 0;
+    }
+
+    public void clearAllBuffs() {
+        this.tempAttack = 0;
+        this.tempDefense = 0;
+        this.primedBattleAttack = 0;
+        this.primedBattleDefense = 0;
+        this.battleAttackBonus = 0;
+        this.battleDefenseBonus = 0;
+        this.hazardShieldDefense = 0;
+    }
+
+    public int getTempAttack() { return tempAttack + primedBattleAttack + battleAttackBonus; }
+    public int getTempDefense() { return tempDefense + primedBattleDefense + battleDefenseBonus; }
 
     public int getBaseAttack() { return super.getAttack(); }
     public int getBaseDefense() { return super.getDefense(); }
@@ -197,20 +262,20 @@ public class Player extends Entity {
 
     @Override
     public int getAttack() {
-        return Math.max(1, super.getAttack() + tempAttack + getCurseAttackPenalty());
+        return Math.max(1, super.getAttack() + tempAttack + primedBattleAttack + battleAttackBonus + getCurseAttackPenalty());
     }
 
     @Override
     public int getDefense() {
-        return Math.max(0, super.getDefense() + tempDefense + getCurseDefensePenalty());
+        return Math.max(0, super.getDefense() + tempDefense + primedBattleDefense + battleDefenseBonus + getCurseDefensePenalty());
     }
 
     public boolean hasActiveBuffs() {
-        return tempAttack > 0 || tempDefense > 0;
+        return tempAttack > 0 || tempDefense > 0 || primedBattleAttack > 0 || primedBattleDefense > 0 || battleAttackBonus > 0 || battleDefenseBonus > 0;
     }
 
     public void clearTemporaryBuffs() {
-        if (hasActiveBuffs()) {
+        if (tempAttack > 0 || tempDefense > 0) {
             System.out.printf("  [BUFF EXPIRED] Turn bonuses worn off. Attack: %d, Defense: %d%n",
                 getBaseAttack(), getBaseDefense());
             this.tempAttack = 0;
@@ -308,6 +373,19 @@ public class Player extends Entity {
             skillCooldown--;
         }
     }
+
+    public boolean isLuckyPawActive() { return luckyPawActive; }
+    public void setLuckyPawActive(boolean luckyPawActive) { this.luckyPawActive = luckyPawActive; }
+
+    // Backward compatibility helper
+    public boolean isNineLivesActive() { return luckyPawActive; }
+    public void setNineLivesActive(boolean val) { this.luckyPawActive = val; }
+
+    public boolean isHazardImmune() { return hazardImmune; }
+    public void setHazardImmune(boolean hazardImmune) { this.hazardImmune = hazardImmune; }
+
+    public boolean isSerpentWhispererActive() { return serpentWhispererActive; }
+    public void setSerpentWhispererActive(boolean serpentWhispererActive) { this.serpentWhispererActive = serpentWhispererActive; }
 
     /**
      * Polymorphically executes the active ClassSkill and resets cooldown.

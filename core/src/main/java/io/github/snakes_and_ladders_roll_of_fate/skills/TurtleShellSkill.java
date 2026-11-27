@@ -1,22 +1,41 @@
 package io.github.snakes_and_ladders_roll_of_fate.skills;
 
+import com.badlogic.gdx.assets.AssetDescriptor;
+import com.badlogic.gdx.graphics.Texture;
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 
 /**
- * Turtle (Iron Guardian) Board Skill: Shell Barrier.
- * Polymorphic implementation: Erects an impenetrable shell barrier against hazards and snakes.
+ * Turtle (Iron Guardian) Board Skill: Slow & Steady.
+ * Polymorphic implementation: Cleanses all active curses and executes a disciplined 4-tile
+ * march with complete hazard and serpent ambush immunity.
  */
 public class TurtleShellSkill implements ClassSkill {
 
     @Override
     public String getSkillName() {
-        return "Shell Barrier";
+        return "Slow & Steady";
+    }
+
+    @Override
+    public String getActionTitle() {
+        return "SAFE MARCH";
+    }
+
+    @Override
+    public String getActionSubtext() {
+        return "+4 SAFE TILES";
+    }
+
+    @Override
+    public AssetDescriptor<Texture> getIconAsset() {
+        return Assets.ITEM_SHIELD_IRON;
     }
 
     @Override
     public String getDescription() {
-        return "Hunker down in iron armor: Protects against the next hazard or serpent slide.";
+        return "The tortoise fable: Cleanses curses and marches exactly 4 safe tiles with total hazard immunity.";
     }
 
     @Override
@@ -26,16 +45,17 @@ public class TurtleShellSkill implements ClassSkill {
 
     @Override
     public boolean canUse(Player player) {
-        return player != null && player.getHealth() > 0;
+        return player != null && player.getHealth() > 0 && player.getPosition() < 100;
     }
 
     @Override
     public SkillResult execute(Player player, RollOfFateGame game) {
         if (!canUse(player)) {
-            return new SkillResult(false, "Cannot erect shell barrier while incapacitated.");
+            return new SkillResult(false, "Cannot march while incapacitated or at summit.");
         }
-        player.setHasSnakeWard(true);
-        player.addTempDefense(3);
-        return new SkillResult(true, "Turtle erected an impenetrable Shell Barrier! Next serpent/hazard is warded.");
+        int cleansed = player.cleanseCurses();
+        player.setHazardImmune(true);
+        String msg = "Turtle activated Slow & Steady! Cleansed " + cleansed + " curses and marching 4 safe tiles!";
+        return new SkillResult(true, msg, 4, true);
     }
 }

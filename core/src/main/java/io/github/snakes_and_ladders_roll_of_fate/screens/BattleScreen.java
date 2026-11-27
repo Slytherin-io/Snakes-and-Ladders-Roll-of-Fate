@@ -238,6 +238,7 @@ public class BattleScreen implements Screen {
     private TextButton introAdvanceBtn;
     private boolean isIntroDialogueActive = false;
     private int introBeatIndex = 0;
+    private boolean scrambleAnnounced = false;
     private TextButton btnAttack, btnDefend, btnItem, btnEscape, continueBtn;
     private Cell<TextButton> continueBtnCell;
     private Table itemPopup;
@@ -448,7 +449,7 @@ public class BattleScreen implements Screen {
         if (game.getAudioManager() != null) {
             game.getAudioManager().playMusic(
                 isBossBattle() ? AudioManager.MusicTrack.BOSS : AudioManager.MusicTrack.BATTLE);
-            if (isDawnWardenBattle()) {
+            if (isDawnWardenBattle() || isPaleShepherdBattle()) {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.BOSS_APPEAR);
             }
         }
@@ -540,6 +541,13 @@ public class BattleScreen implements Screen {
         if (isPaleShepherdBattle()) {
             Texture shepherdSheet = game.getAssetManager().get(Assets.CHAR_PALE_SHEPHERD);
             TextureRegion[][] shepherdGrid = TextureRegion.split(shepherdSheet, 256, 256);
+            for (int r = 0; r < shepherdGrid.length; r++) {
+                for (TextureRegion frame : shepherdGrid[r]) {
+                    if (!frame.isFlipX()) {
+                        frame.flip(true, false);
+                    }
+                }
+            }
             enemyIdleAnim = new Animation<>(0.20f, shepherdGrid[0]);
             enemyIdleAnim.setPlayMode(Animation.PlayMode.LOOP);
             enemyAttackAnim = new Animation<>(0.16f, shepherdGrid[1]);
@@ -567,6 +575,7 @@ public class BattleScreen implements Screen {
         battleSystem.startBattle(player, enemy);
         isIntroDialogueActive = isDawnWardenBattle();
         introBeatIndex = 0;
+        scrambleAnnounced = false;
         bossEntranceActive = isDawnWardenBattle();
         bossEntranceTimer = 0f;
         bossLanded = !isDawnWardenBattle();
@@ -580,7 +589,7 @@ public class BattleScreen implements Screen {
         buildBattleLog();
         buildHealthPills();
         buildActionButtons();
-        buildDawnWardenIntroOverlay();
+        buildBossIntroOverlay();
         buildItemPopup();
         buildContinueOverlay();
         buildPauseAndSettingsModals(darkBrown, pillBrown);
@@ -630,8 +639,8 @@ public class BattleScreen implements Screen {
         Color bannerBgColor;
         if (isPaleShepherdBattle()) {
             act = (player.getPosition() <= 30) ? 1 : ((player.getPosition() <= 70) ? 2 : 3);
-            bannerText = "MORTAL CLASH: THE PALE SHEPHERD!";
-            bannerBgColor = Color.valueOf("#540d18");
+            bannerText = "THE PALE SHEPHERD";
+            bannerBgColor = Color.valueOf("#3b263b");
         } else if (isDawnWardenBattle()) {
             act = 3;
             bannerText = "SUMMIT TRIAL: THE DAWN WARDEN!";
@@ -693,7 +702,8 @@ public class BattleScreen implements Screen {
     }
 
     private void buildBattleLog() {
-        battleLogLabel = new Label("The battle begins!", new Label.LabelStyle(battleLogFont, Color.valueOf("#fffdfa")));
+        String initialLog = isPaleShepherdBattle() ? "The Pale Shepherd raises his crook in quiet contemplation." : "The battle begins!";
+        battleLogLabel = new Label(initialLog, new Label.LabelStyle(battleLogFont, Color.valueOf("#fffdfa")));
         battleLogLabel.setAlignment(Align.center);
         battleLogLabel.setWrap(true);
         Table logBox = new Table();
@@ -783,6 +793,13 @@ public class BattleScreen implements Screen {
         });
         btnEscape.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
+                if (isDawnWardenBattle()) return;
+                if (isPaleShepherdBattle() && battleSystem.getCombatRound() < 3) {
+                    int remaining = 3 - battleSystem.getCombatRound();
+                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "SURVIVE " + remaining + " MORE ROUND" + (remaining > 1 ? "S!" : "!"), Color.valueOf("#ff5252"), false);
+                    return;
+                }
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     battleSystem.onPlayerEscape();
@@ -821,34 +838,45 @@ public class BattleScreen implements Screen {
     }
 
     /**
-     * Builds the in-arena tragic intro confrontation for The Dawn Warden climax trial.
+     * Builds the in-arena dramatic intro confrontation for Boss trials (The Dawn Warden and The Pale Shepherd).
      * Sits neatly in the bottom center space between the HP pills, below both fighters.
      */
-    private void buildDawnWardenIntroOverlay() {
+    private void buildBossIntroOverlay() {
         bossIntroTable = new Table();
         bossIntroTable.setFillParent(true);
         bossIntroTable.bottom().padBottom(22);
         bossIntroTable.setVisible(false);
 
-        if (!isDawnWardenBattle()) {
+        if (!isDawnWardenBattle() && !isPaleShepherdBattle()) {
             hudStage.addActor(bossIntroTable);
             return;
         }
 
         Table card = new Table();
-        card.setBackground(UIUtils.createRoundedDrawable(
-            960, 190, 18, Color.valueOf("#261105f4"), Color.valueOf("#c89259"), 3));
+        if (isPaleShepherdBattle()) {
+            card.setBackground(UIUtils.createRoundedDrawable(
+                960, 190, 18, Color.valueOf("#180609f6"), Color.valueOf("#a62828"), 3));
+        } else {
+            card.setBackground(UIUtils.createRoundedDrawable(
+                960, 190, 18, Color.valueOf("#261105f4"), Color.valueOf("#c89259"), 3));
+        }
         card.pad(14, 28, 16, 28);
 
         // Header Row: Speaker Label + Skip
         Table headerRow = new Table();
-        Label speakerLbl = new Label("THE DAWN WARDEN  |  GUARDIAN OF THE GATE",
-            new Label.LabelStyle(introSpeakerFont, Color.valueOf("#ffd54f")));
+        Label speakerLbl;
+        if (isPaleShepherdBattle()) {
+            speakerLbl = new Label("THE PALE SHEPHERD  |  HARVESTER OF SOULS",
+                new Label.LabelStyle(introSpeakerFont, Color.valueOf("#ff5252")));
+        } else {
+            speakerLbl = new Label("THE DAWN WARDEN  |  GUARDIAN OF THE GATE",
+                new Label.LabelStyle(introSpeakerFont, Color.valueOf("#ffd54f")));
+        }
         speakerLbl.setAlignment(Align.left);
 
         TextButton.TextButtonStyle skipStyle = new TextButton.TextButtonStyle();
         skipStyle.font = miniFont;
-        skipStyle.fontColor = Color.valueOf("#cfb896");
+        skipStyle.fontColor = isPaleShepherdBattle() ? Color.valueOf("#cf9696") : Color.valueOf("#cfb896");
         skipStyle.overFontColor = Color.WHITE;
         TextButton skipBtn = new TextButton("SKIP INTRO", skipStyle);
         skipBtn.addListener(new ChangeListener() {
@@ -856,7 +884,11 @@ public class BattleScreen implements Screen {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
-                finishDawnWardenIntro(0, 0, "The Dawn Warden descends before you to test your spirit!");
+                if (isPaleShepherdBattle()) {
+                    finishPaleShepherdIntro(0, 0, "The Pale Shepherd lowers his scythe for the final harvest!");
+                } else {
+                    finishDawnWardenIntro(0, 0, "The Dawn Warden descends before you to test your spirit!");
+                }
             }
         });
 
@@ -875,8 +907,13 @@ public class BattleScreen implements Screen {
         card.add(introActionsRow).width(900).center();
 
         TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
-        advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#854b25"), Color.valueOf("#c89259"), 2);
-        advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#a66032"), Color.valueOf("#ffd54f"), 2);
+        if (isPaleShepherdBattle()) {
+            advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#691515"), Color.valueOf("#b32b2b"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#8f1d1d"), Color.valueOf("#ff5252"), 2);
+        } else {
+            advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#854b25"), Color.valueOf("#c89259"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#a66032"), Color.valueOf("#ffd54f"), 2);
+        }
         advStyle.font = introBtnFont;
         advStyle.fontColor = Color.WHITE;
         introAdvanceBtn = new TextButton("CONTINUE  (1/3)", advStyle);
@@ -887,13 +924,118 @@ public class BattleScreen implements Screen {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
                 introBeatIndex++;
-                refreshDawnWardenIntroBeat();
+                if (isDawnWardenBattle()) {
+                    refreshDawnWardenIntroBeat();
+                } else if (isPaleShepherdBattle()) {
+                    refreshPaleShepherdIntroBeat();
+                }
             }
         });
 
         bossIntroTable.add(card).width(960).minHeight(186).center();
         hudStage.addActor(bossIntroTable);
-        refreshDawnWardenIntroBeat();
+        if (isDawnWardenBattle()) {
+            refreshDawnWardenIntroBeat();
+        } else if (isPaleShepherdBattle()) {
+            refreshPaleShepherdIntroBeat();
+        }
+    }
+
+    private String getPaleShepherdClassReflectiveLine() {
+        CharacterClass cls = (player != null) ? player.getCharacterClass() : null;
+        if (cls == null) {
+            return "\"Every step was borrowed time. Let go of the climb... and rest in the dark.\"";
+        }
+        switch (cls) {
+            case CAT:
+                return "\"Nine lives, they whispered of your kind. Did you squander eight to end here in the cold?\"";
+            case TURTLE:
+                return "\"Heavy iron and ancient stone... yet the hardest shell turns brittle beneath my scythe.\"";
+            case FOX:
+                return "\"You danced past every snare and outsmarted mortal hunters. But none bargain with the harvest.\"";
+            case RACCOON:
+                return "\"A satchel heavy with stolen trinkets. Leave them behind, scavenger... you will not need them where we go.\"";
+            default:
+                return "\"Every step was borrowed time. Let go of the climb... and rest in the dark.\"";
+        }
+    }
+
+    private void refreshPaleShepherdIntroBeat() {
+        if (introDialogueLabel == null || introActionsRow == null) return;
+        introActionsRow.clear();
+
+        if (introBeatIndex == 0) {
+            introDialogueLabel.setText(
+                "A suffocating frost grips the air as obsidian mist coils around your paws. "
+                + "\"You have run far along these stone ribs, little soul... yet every road carved in this mountain leads only to me.\"");
+            introAdvanceBtn.setText("CONTINUE  (1/3)");
+            introActionsRow.add(introAdvanceBtn).size(260, 46).center();
+        } else if (introBeatIndex == 1) {
+            introDialogueLabel.setText(getPaleShepherdClassReflectiveLine());
+            introAdvanceBtn.setText("CONFRONT  (2/3)");
+            introActionsRow.add(introAdvanceBtn).size(260, 46).center();
+        } else {
+            introDialogueLabel.setText("The golden scythe hums with mortal finality. How do you meet the inevitable?");
+
+            TextButton.TextButtonStyle atkChoiceStyle = new TextButton.TextButtonStyle();
+            atkChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#7a1a1a"), Color.valueOf("#d45d5d"), 2);
+            atkChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#9e2424"), Color.valueOf("#ff7b7b"), 2);
+            atkChoiceStyle.font = introBtnFont;
+            atkChoiceStyle.fontColor = Color.valueOf("#fff8ea");
+
+            TextButton.TextButtonStyle defChoiceStyle = new TextButton.TextButtonStyle();
+            defChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#261c3b"), Color.valueOf("#6e559e"), 2);
+            defChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#3b2a5c"), Color.valueOf("#9174cb"), 2);
+            defChoiceStyle.font = introBtnFont;
+            defChoiceStyle.fontColor = Color.valueOf("#fff8ea");
+
+            TextButton atkChoiceBtn = new TextButton("\"NOT TODAY, REAPER!\"  (+2 ATK)", atkChoiceStyle);
+            atkChoiceBtn.getLabel().setWrap(true);
+            atkChoiceBtn.getLabel().setAlignment(Align.center);
+            UIUtils.addScaleHoverEffect(atkChoiceBtn);
+            atkChoiceBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    finishPaleShepherdIntro(2, 0, "You defy Death itself with razor-sharp fury! (+2 ATK on Turn 1)");
+                }
+            });
+
+            TextButton defChoiceBtn = new TextButton("\"I REFUSE TO FALL!\"  (+3 DEF)", defChoiceStyle);
+            defChoiceBtn.getLabel().setWrap(true);
+            defChoiceBtn.getLabel().setAlignment(Align.center);
+            UIUtils.addScaleHoverEffect(defChoiceBtn);
+            defChoiceBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
+                    }
+                    finishPaleShepherdIntro(0, 3, "You brace your spirit against the reaper's mortal chill! (+3 DEF on Turn 1)");
+                }
+            });
+
+            introActionsRow.add(atkChoiceBtn).size(430, 50).padRight(18);
+            introActionsRow.add(defChoiceBtn).size(430, 50);
+        }
+    }
+
+    private void finishPaleShepherdIntro(int tempAtkBonus, int tempDefBonus, String startLog) {
+        isIntroDialogueActive = false;
+        if (bossIntroTable != null) {
+            bossIntroTable.setVisible(false);
+        }
+        if (tempAtkBonus > 0) {
+            player.addBattleAttack(tempAtkBonus);
+            spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "DEFIANCE: +" + tempAtkBonus + " ATK", Color.valueOf("#ff5252"), false);
+        }
+        if (tempDefBonus > 0) {
+            player.addBattleDefense(tempDefBonus);
+            spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
+            spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "STEEL WILL: +" + tempDefBonus + " DEF", Color.valueOf("#80d8ff"), false);
+        }
+        battleSystem.setBattleLog(startLog);
+        syncUi();
     }
 
     private String getClassReflectiveLine() {
@@ -981,11 +1123,11 @@ public class BattleScreen implements Screen {
             bossIntroTable.setVisible(false);
         }
         if (tempAtkBonus > 0) {
-            player.addTempAttack(tempAtkBonus);
+            player.addBattleAttack(tempAtkBonus);
             spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "RESOLVE: +" + tempAtkBonus + " ATK", Color.valueOf("#ffd54f"), false);
         }
         if (tempDefBonus > 0) {
-            player.addTempDefense(tempDefBonus);
+            player.addBattleDefense(tempDefBonus);
             spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
             spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "STEADFAST: +" + tempDefBonus + " DEF", Color.valueOf("#80d8ff"), false);
         }
@@ -1462,9 +1604,38 @@ public class BattleScreen implements Screen {
         if (isDawnWardenBattle()) {
             btnEscape.setDisabled(true);
             btnEscape.setVisible(false);
+        } else if (isPaleShepherdBattle()) {
+            btnEscape.setVisible(true);
+            int round = battleSystem.getCombatRound();
+            if (round < 3) {
+                btnEscape.setDisabled(true);
+                int roundsLeft = 3 - round;
+                btnEscape.setText("LOCKED (" + roundsLeft + ")");
+                btnEscape.getLabel().setFontScale(0.82f);
+                btnEscape.getLabel().setAlignment(Align.center);
+                btnEscape.setColor(0.55f, 0.40f, 0.40f, 0.55f);
+            } else {
+                btnEscape.setDisabled(!playerTurn);
+                btnEscape.setText("SCRAMBLE\n(-5 HP)");
+                btnEscape.getLabel().setFontScale(0.72f);
+                btnEscape.getLabel().setAlignment(Align.center);
+                btnEscape.setColor(1.0f, 0.38f, 0.38f, playerTurn ? 1f : 0.5f);
+
+                if (!scrambleAnnounced && !ended) {
+                    scrambleAnnounced = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "MIST CLEARS: SCRAMBLE UNLOCKED!", Color.valueOf("#ffd54f"), false);
+                    battleLogLabel.setText("An opening appears in the twilight mist! You can attempt a quiet scramble!");
+                }
+            }
         } else {
             btnEscape.setDisabled(!playerTurn);
             btnEscape.setVisible(true);
+            btnEscape.setText("ESCAPE");
+            btnEscape.getLabel().setFontScale(1f);
+            btnEscape.setColor(1, 1, 1, playerTurn ? 1f : 0.5f);
         }
 
         if (continueTable != null && continueTable.isVisible()) {
@@ -1478,7 +1649,7 @@ public class BattleScreen implements Screen {
         btnAttack.setColor(1, 1, 1, alpha);
         btnDefend.setColor(1, 1, 1, alpha);
         btnItem.setColor(1, 1, 1, alpha);
-        if (!isDawnWardenBattle()) {
+        if (!isDawnWardenBattle() && !isPaleShepherdBattle()) {
             btnEscape.setColor(1, 1, 1, alpha);
         }
 
@@ -1488,11 +1659,11 @@ public class BattleScreen implements Screen {
             BattleOutcome o = battleSystem.getFinalOutcome();
             if (isPaleShepherdBattle()) {
                 if (o == BattleOutcome.VICTORY) {
-                    outcomeMessage = "The Pale Shepherd dissolves into crimson mist, his golden scythe shattered!";
+                    outcomeMessage = "The Pale Shepherd yields with a soft nod, dissolving into gentle mist.";
                 } else if (o == BattleOutcome.ESCAPED) {
-                    outcomeMessage = "You barely evaded Death's scythe! (-20 HP Parting Blow)";
+                    outcomeMessage = "You slipped past The Pale Shepherd! (-5 HP Parting Wound)";
                 } else {
-                    outcomeMessage = "The Pale Shepherd harvested your soul.";
+                    outcomeMessage = "The Pale Shepherd gently carries your spirit.";
                 }
             } else if (isDawnWardenBattle()) {
                 outcomeMessage = (o == BattleOutcome.VICTORY) ? "The Dawn Warden bestows the breath of life!" : "Your spirit finds peace atop the clouds.";
@@ -1509,18 +1680,18 @@ public class BattleScreen implements Screen {
 
             if (isPaleShepherdBattle()) {
                 if (o == BattleOutcome.VICTORY) {
-                    topBannerLabel.setText("DEATH BANISHED!");
-                    modalTitleLabel.setText("MORTAL TRIUMPH!");
+                    topBannerLabel.setText("MIST SETTLES");
+                    modalTitleLabel.setText("QUIET TRIUMPH");
                     modalTitleLabel.setColor(Color.valueOf("#ffd54f"));
-                    modalSubtitleLabel.setText("YOU STRUCK DOWN THE PALE SHEPHERD!");
+                    modalSubtitleLabel.setText("THE PALE SHEPHERD YIELDS TO YOUR SPIRIT");
 
-                    rewardExpLabel.setText("+50 EXP  |  The Pale Shepherd is banished 15 tiles back!");
+                    rewardExpLabel.setText("+50 EXP  |  The Pale Shepherd pauses 15 tiles back.");
                     rewardExpLabel.setColor(Color.valueOf("#69f0ae"));
 
                     rewardLootLabel.setText("Pursuit Halted for 3 Rounds of Contemplation!");
                     rewardLootLabel.setColor(Color.valueOf("#ffd54f"));
 
-                    rewardStatusLabel.setText("Hero Health: " + player.getHealth() + " / " + maxHp + " HP   |   Mortal Defiance!");
+                    rewardStatusLabel.setText("Hero Health: " + player.getHealth() + " / " + maxHp + " HP   |   Quiet Defiance");
                     rewardStatusLabel.setColor(Color.valueOf("#ffe0b2"));
 
                     continueBtn.setText("RESUME ASCENT");
@@ -1533,18 +1704,18 @@ public class BattleScreen implements Screen {
                         game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
                     }
                 } else if (o == BattleOutcome.ESCAPED) {
-                    topBannerLabel.setText("DESPERATE FLIGHT!");
-                    modalTitleLabel.setText("HASTY ESCAPE!");
+                    topBannerLabel.setText("QUIET FLIGHT");
+                    modalTitleLabel.setText("HASTY ESCAPE");
                     modalTitleLabel.setColor(Color.valueOf("#ffb74d"));
-                    modalSubtitleLabel.setText("YOU BARELY EVADED THE GOLDEN SCYTHE!");
+                    modalSubtitleLabel.setText("YOU SLIPPED AWAY FROM THE PALE SHEPHERD!");
 
-                    rewardExpLabel.setText("Suffered heavy parting wound (-20 HP)");
+                    rewardExpLabel.setText("Suffered light parting wound (-5 HP)");
                     rewardExpLabel.setColor(Color.valueOf("#ff8a80"));
 
                     rewardLootLabel.setText("Scrambled 3 tiles ahead! Shepherd paused for 1 round.");
                     rewardLootLabel.setColor(Color.valueOf("#ffd54f"));
 
-                    rewardStatusLabel.setText("Hero Health: " + Math.max(1, player.getHealth() - 20) + " / " + maxHp + " HP");
+                    rewardStatusLabel.setText("Hero Health: " + Math.max(1, player.getHealth() - 5) + " / " + maxHp + " HP");
                     rewardStatusLabel.setColor(Color.valueOf("#ffe0b2"));
 
                     continueBtn.setText("SCRAMBLE AHEAD");
@@ -1552,10 +1723,10 @@ public class BattleScreen implements Screen {
                     continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
                     if (continueBtnCell != null) continueBtnCell.width(340);
                 } else {
-                    topBannerLabel.setText("CLAIMED BY DEATH");
-                    modalTitleLabel.setText("REST IN PEACE");
-                    modalTitleLabel.setColor(Color.valueOf("#ef5350"));
-                    modalSubtitleLabel.setText("THE PALE SHEPHERD HARVESTED YOUR SPIRIT");
+                    topBannerLabel.setText("REST, WEARY WANDERER");
+                    modalTitleLabel.setText("QUIET REST");
+                    modalTitleLabel.setColor(Color.valueOf("#b39ddb"));
+                    modalSubtitleLabel.setText("THE PALE SHEPHERD GENTLY CARRIES YOUR SPIRIT");
 
                     rewardExpLabel.setText("Your ascent has ended on the mountain trail.");
                     rewardExpLabel.setColor(Color.valueOf("#cfd8dc"));
@@ -2121,6 +2292,15 @@ public class BattleScreen implements Screen {
                 batch.draw(radialGlowTex, drawEX - 190f, centerY - 190f, 380f, 380f);
                 batch.setColor(haloInner);
                 batch.draw(radialGlowTex, drawEX - 125f, centerY - 125f, 250f, 250f);
+            } else if (isPaleShepherdBattle() && enemy.getHealth() > 0 && radialGlowTex != null) {
+                float pulse = 0.5f + 0.5f * MathUtils.sin(stateTime * 2.8f);
+                Color haloOuter = new Color(0.38f, 0.05f, 0.08f, 0.35f + pulse * 0.15f);
+                Color haloInner = new Color(0.85f, 0.12f, 0.18f, 0.22f + pulse * 0.12f);
+                float centerY = drawEY + enemyH * 0.50f;
+                batch.setColor(haloOuter);
+                batch.draw(radialGlowTex, drawEX - 170f, centerY - 170f, 340f, 340f);
+                batch.setColor(haloInner);
+                batch.draw(radialGlowTex, drawEX - 110f, centerY - 110f, 220f, 220f);
             }
 
             if (enemyFlinchTimer > 0.12f) {

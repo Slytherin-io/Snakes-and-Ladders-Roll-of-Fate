@@ -51,8 +51,10 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Entity;
+import io.github.snakes_and_ladders_roll_of_fate.items.BarterCategory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.items.ItemGenerator;
 import io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill;
 import io.github.snakes_and_ladders_roll_of_fate.skills.SkillResult;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
@@ -210,9 +212,11 @@ public class BoardScreen implements Screen {
     // Special Locomotion Animation (Ascending Ladder Celestial Arc & Descending Snake Slide)
     private enum SpecialMovePhase {
         NONE,
-        WINDUP,     // Standing on start tile, power gathers & discovery registers (0.8s)
-        IN_FLIGHT,  // Smooth soaring flight across the arc
-        LANDED      // Touchdown landing recovery on destination tile (0.6s)
+        WINDUP,                 // Standing on start tile, power gathers & discovery registers (0.8s)
+        IN_FLIGHT,              // Smooth soaring flight across the arc
+        INTERCEPTED_MIDAIR,     // Interrupted mid-flight by The Pale Shepherd, cushioned in mist
+        INTERCEPTED_DESCENT,    // Gently gliding down to shepherd's tile after dialogue
+        LANDED                  // Touchdown landing recovery on destination tile (0.6s)
     }
     private boolean isSpecialMoving = false;
     private SpecialMovePhase specialMovePhase = SpecialMovePhase.NONE;
@@ -250,6 +254,17 @@ public class BoardScreen implements Screen {
     private float shepherdDisplayX = -1f;
     private float shepherdDisplayY = -1f;
     private boolean isShepherdGliding = false;
+
+    // Pale Shepherd Board Dialogue UI & Midair Suspension
+    private Table shepherdDialogueTable;
+    private Label shepherdDialogueTitleLabel;
+    private Label shepherdDialogueSubLabel;
+    private Label shepherdDialogueBodyLabel;
+    private Table shepherdDialogueActionsRow;
+    private boolean isShepherdBoardDialogueActive = false;
+    private int shepherdBoardDialogueBeat = 0;
+    private float specialMoveDescentStartX = 0f;
+    private float specialMoveDescentStartY = 0f;
     private Label hudInventorySubLabel;
     private Table inventoryPopup;
     private Table inventorySlotsTable;
@@ -265,8 +280,10 @@ public class BoardScreen implements Screen {
     private Button.ButtonStyle skillCooldownStyle;
     private Image skillIcon;
     private Label skillNameLabel;
+    private Label skillEffectLabel;
     private Label skillStatusLabel;
     private BitmapFont skillTitleFont;
+    private BitmapFont skillEffectFont;
     private BitmapFont skillSubFont;
 
     // Pause, Settings, & Leave Game Modals
@@ -418,8 +435,9 @@ public class BoardScreen implements Screen {
         choiceD20Font          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.WHITE);
 
         // Class Skill Fonts
-        skillTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 18, nameBrown);
-        skillSubFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 13, Color.valueOf("#6d3a17"));
+        skillTitleFont  = UIUtils.createFont("ui/Fredoka-Bold.ttf", 16, nameBrown);
+        skillEffectFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 12, Color.valueOf("#e8d5b5"));
+        skillSubFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 13, Color.valueOf("#6d3a17"));
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();
@@ -442,6 +460,7 @@ public class BoardScreen implements Screen {
         buildDicePickerPopup();
         buildPauseAndSettingsModals(darkBrown, pillBrown);
         buildEventModal(darkBrown, pillBrown);
+        buildShepherdDialogueUI();
 
         // Configure global item swap handler for full satchel situations
         EventEffect.setItemSwapHandler(new EventEffect.ItemSwapHandler() {
@@ -546,14 +565,14 @@ public class BoardScreen implements Screen {
                     turnState = TurnState.WAITING_FOR_ROLL;
                     rollButton.setColor(1f, 1f, 1f, 1f);
                 } else if (pendingBattleOutcome == BattleOutcome.ESCAPED) {
-                    // Parting blow taken: -20 HP
+                    // Parting blow taken: -5 HP
                     if (current != null) {
-                        current.setHealth(Math.max(1, current.getHealth() - 20));
+                        current.setHealth(Math.max(1, current.getHealth() - 5));
                     }
                     game.setShepherdPauseRounds(1);
                     int scrambleDest = (current != null) ? Math.min(99, current.getPosition() + 3) : 1;
                     if (current != null) {
-                        topBannerLabel.setText(current.getName().toUpperCase() + " SCRAMBLED AWAY FROM DEATH! (-20 HP, +3 TILES AHEAD)!");
+                        topBannerLabel.setText(current.getName().toUpperCase() + " SCRAMBLED PAST THE SHEPHERD! (-5 HP, +3 TILES AHEAD)!");
                     }
                     startSpecialMove(curPos, scrambleDest, false);
                 } else {
@@ -583,6 +602,10 @@ public class BoardScreen implements Screen {
             worldCamera.update();
 
             updateHudDisplay();
+
+            if (game.consumeRoundCompleted() || (game.getPaleShepherdTile() == 0 && game.getTotalRounds() >= game.getShepherdDormantTurns())) {
+                handlePaleShepherdRoundProgression();
+            }
         }
     }
 
@@ -848,14 +871,17 @@ public class BoardScreen implements Screen {
         Table skillTextTable = new Table();
         skillNameLabel = new Label("SKILL", new Label.LabelStyle(skillTitleFont, nameBrown));
         skillNameLabel.setAlignment(Align.left);
+        skillEffectLabel = new Label("ACTION", new Label.LabelStyle(skillEffectFont, Color.valueOf("#e8d5b5")));
+        skillEffectLabel.setAlignment(Align.left);
         skillStatusLabel = new Label("4 TURNS", new Label.LabelStyle(skillSubFont, Color.valueOf("#fbf2dc")));
         skillStatusLabel.setAlignment(Align.left);
 
-        skillTextTable.add(skillNameLabel).left().padBottom(2).row();
-        skillTextTable.add(skillStatusLabel).left();
+        skillTextTable.add(skillNameLabel).left().row();
+        skillTextTable.add(skillEffectLabel).left().padTop(1).row();
+        skillTextTable.add(skillStatusLabel).left().padTop(2);
 
-        skillButton.add(skillIcon).size(42, 42).padLeft(12).padRight(10).center();
-        skillButton.add(skillTextTable).left().padRight(12).center();
+        skillButton.add(skillIcon).size(38, 38).padLeft(10).padRight(8).center();
+        skillButton.add(skillTextTable).left().padRight(10).center();
 
         skillButton.addListener(new ChangeListener() {
             @Override
@@ -882,7 +908,14 @@ public class BoardScreen implements Screen {
                     updateHudDisplay();
                     updateMiniMapProgress();
 
-                    if (res.getBonusMovement() > 0) {
+                    if (res.isDirectMove()) {
+                        // Direct safe march (e.g. Turtle Slow & Steady) - advances directly without dice roll
+                        hopCurrentTile = current.getPosition();
+                        hopTargetTile = Math.min(100, current.getPosition() + res.getBonusMovement());
+                        stepTimer = 0f;
+                        turnState = TurnState.STEPPING_TILES;
+                        rollButton.setColor(1f, 1f, 1f, 0.65f);
+                    } else if (res.getBonusMovement() > 0) {
                         hopCurrentTile = current.getPosition();
                         cameraFocusTile = current.getPosition();
                         if (current.getPosition() >= 100) {
@@ -918,7 +951,7 @@ public class BoardScreen implements Screen {
         rollButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                if (turnState == TurnState.WAITING_FOR_ROLL && cameraFocusOverrideTimer <= 0f) {
+                if (turnState == TurnState.WAITING_FOR_ROLL && cameraFocusOverrideTimer <= 0f && !isShepherdBoardDialogueActive) {
                     if (game.getAudioManager() != null) {
                         game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     }
@@ -1336,7 +1369,13 @@ public class BoardScreen implements Screen {
         }
 
         // Banner feedback
-        topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! (" + effectDesc + ")");
+        if (type == EventEffectType.ATTACK) {
+            topBannerLabel.setText(player.getName().toUpperCase() + " READIED " + itemName.toUpperCase() + "! (+" + effectVal + " ATK ON NEXT BATTLE)");
+        } else if (type == EventEffectType.DEFENSE) {
+            topBannerLabel.setText(player.getName().toUpperCase() + " RAISED " + itemName.toUpperCase() + "! (+" + effectVal + " DEF WARD ON NEXT BATTLE & HAZARDS)");
+        } else {
+            topBannerLabel.setText(player.getName().toUpperCase() + " USED " + itemName.toUpperCase() + "! (" + effectDesc + ")");
+        }
 
         if (game.getAudioManager() != null) {
             if (secType == EventEffectType.HEALTH && secVal < 0) {
@@ -1810,6 +1849,167 @@ public class BoardScreen implements Screen {
     }
 
     /**
+     * Builds the gentle pre-battle Board Dialogue UI for encounters with The Pale Shepherd.
+     * Displays a sorrowful, atmospheric dusk parchment card over the board tiles with Skip Intro.
+     */
+    private void buildShepherdDialogueUI() {
+        shepherdDialogueTable = new Table();
+        shepherdDialogueTable.setFillParent(true);
+        shepherdDialogueTable.bottom().padBottom(36);
+        shepherdDialogueTable.setVisible(false);
+
+        Table card = new Table();
+        card.setBackground(UIUtils.createRoundedDrawable(
+            960, 240, 18, Color.valueOf("#1a1024f2"), Color.valueOf("#72528a"), 2));
+        card.pad(16, 32, 16, 32);
+
+        // Header Row: Speaker Name & Subtitle on left, Skip Intro on right
+        Table headerRow = new Table();
+
+        Table titleBox = new Table();
+        shepherdDialogueTitleLabel = new Label("THE PALE SHEPHERD", new Label.LabelStyle(topBannerFont, Color.valueOf("#e8d5b5")));
+        shepherdDialogueTitleLabel.setAlignment(Align.left);
+        shepherdDialogueSubLabel = new Label("A Soft Whisper In The Mist", new Label.LabelStyle(miniFont, Color.valueOf("#b39ddb")));
+        shepherdDialogueSubLabel.setAlignment(Align.left);
+        titleBox.add(shepherdDialogueTitleLabel).left().row();
+        titleBox.add(shepherdDialogueSubLabel).left();
+
+        TextButton.TextButtonStyle skipStyle = new TextButton.TextButtonStyle();
+        skipStyle.font = miniFont;
+        skipStyle.fontColor = Color.valueOf("#cfb8d6");
+        skipStyle.overFontColor = Color.WHITE;
+        TextButton skipBtn = new TextButton("SKIP INTRO", skipStyle);
+        UIUtils.addScaleHoverEffect(skipBtn);
+        skipBtn.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                completeShepherdDialogue(game.getCurrentPlayer());
+            }
+        });
+
+        headerRow.add(titleBox).left().expandX();
+        headerRow.add(skipBtn).right().padTop(4);
+        card.add(headerRow).width(896).padBottom(10).row();
+
+        // Dialogue Body Label
+        shepherdDialogueBodyLabel = new Label("", new Label.LabelStyle(eventDescFont, Color.valueOf("#fffdfa")));
+        shepherdDialogueBodyLabel.setAlignment(Align.center);
+        shepherdDialogueBodyLabel.setWrap(true);
+        card.add(shepherdDialogueBodyLabel).width(880).minHeight(64).center().padBottom(12).row();
+
+        // Actions Row
+        shepherdDialogueActionsRow = new Table();
+        shepherdDialogueActionsRow.center();
+        card.add(shepherdDialogueActionsRow).width(880).center();
+
+        shepherdDialogueTable.add(card).width(960).minHeight(240).center();
+        hudStage.addActor(shepherdDialogueTable);
+    }
+
+    /**
+     * Presents the gentle pre-battle dialogue on the board screen when meeting The Pale Shepherd.
+     */
+    private void showPaleShepherdBoardDialogue(final Player player) {
+        if (player == null) return;
+        isShepherdBoardDialogueActive = true;
+        shepherdBoardDialogueBeat = 0;
+        if (shepherdDialogueTable != null) {
+            shepherdDialogueTable.setVisible(true);
+        }
+        topBannerLabel.setText("THE PALE SHEPHERD");
+        refreshShepherdBoardDialogueBeat(player);
+    }
+
+    private void refreshShepherdBoardDialogueBeat(final Player player) {
+        if (shepherdDialogueBodyLabel == null || shepherdDialogueActionsRow == null) return;
+        shepherdDialogueActionsRow.clear();
+
+        if (shepherdBoardDialogueBeat == 0) {
+            shepherdDialogueBodyLabel.setText("\"Softly now, little wanderer. You were falling so fast.\"");
+            TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
+            advStyle.up = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#4a3055"), Color.valueOf("#8f629f"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#614070"), Color.valueOf("#b382c4"), 2);
+            advStyle.font = choiceActionBtnFont;
+            advStyle.fontColor = Color.WHITE;
+            TextButton advBtn = new TextButton("CONTINUE  (1/3)", advStyle);
+            UIUtils.addScaleHoverEffect(advBtn);
+            advBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    shepherdBoardDialogueBeat = 1;
+                    refreshShepherdBoardDialogueBeat(player);
+                }
+            });
+            shepherdDialogueActionsRow.add(advBtn).size(260, 44).center();
+        } else if (shepherdBoardDialogueBeat == 1) {
+            shepherdDialogueBodyLabel.setText(
+                "\"The stones on this mountain are sharp, and your paws are bruised. Do you stumble because you are weary... or because you are rushing toward the end?\"");
+            TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
+            advStyle.up = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#4a3055"), Color.valueOf("#8f629f"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#614070"), Color.valueOf("#b382c4"), 2);
+            advStyle.font = choiceActionBtnFont;
+            advStyle.fontColor = Color.WHITE;
+            TextButton advBtn = new TextButton("CONTINUE  (2/3)", advStyle);
+            UIUtils.addScaleHoverEffect(advBtn);
+            advBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    shepherdBoardDialogueBeat = 2;
+                    refreshShepherdBoardDialogueBeat(player);
+                }
+            });
+            shepherdDialogueActionsRow.add(advBtn).size(260, 44).center();
+        } else {
+            shepherdDialogueBodyLabel.setText(
+                "\"If your heart still yearns to reach the summit, show me the warmth left in your spirit.\"");
+            TextButton.TextButtonStyle faceStyle = new TextButton.TextButtonStyle();
+            faceStyle.up = UIUtils.createRoundedDrawable(320, 46, 12, Color.valueOf("#7a4430"), Color.valueOf("#c88258"), 2);
+            faceStyle.over = UIUtils.createRoundedDrawable(320, 46, 12, Color.valueOf("#96543b"), Color.valueOf("#e89b6e"), 2);
+            faceStyle.font = choiceActionBtnFont;
+            faceStyle.fontColor = Color.valueOf("#fff8ea");
+            TextButton faceBtn = new TextButton("STAND UP & FACE HIM", faceStyle);
+            UIUtils.addScaleHoverEffect(faceBtn);
+            faceBtn.addListener(new ChangeListener() {
+                @Override public void changed(ChangeEvent event, Actor actor) {
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    }
+                    completeShepherdDialogue(player);
+                }
+            });
+            shepherdDialogueActionsRow.add(faceBtn).size(320, 46).center();
+        }
+    }
+
+    /**
+     * Concludes the dialogue: cleanly dismisses the UI, handles descent if suspended midair,
+     * and transitions directly to BattleScreen without stat-buff choices or bugs.
+     */
+    private void completeShepherdDialogue(final Player player) {
+        if (shepherdDialogueTable != null) {
+            shepherdDialogueTable.setVisible(false);
+        }
+        isShepherdBoardDialogueActive = false;
+
+        Player p = (player != null) ? player : game.getCurrentPlayer();
+        if (specialMovePhase == SpecialMovePhase.INTERCEPTED_MIDAIR) {
+            specialMovePhase = SpecialMovePhase.INTERCEPTED_DESCENT;
+            specialMoveElapsed = 0f;
+            specialMoveDuration = 0.45f;
+            specialMoveDescentStartX = specialMoveCurrentX;
+            specialMoveDescentStartY = specialMoveCurrentY;
+        } else {
+            triggerPaleShepherdEncounter(p);
+        }
+    }
+
+    /**
      * Displays the interactive choices for the tile landing event.
      * All choices show pure thematic narrative text with zero spoiled numbers or consequences.
      * Spaced and framed inside the enlarged scroll with ample headroom above the bottom curled edge.
@@ -2139,9 +2339,9 @@ public class BoardScreen implements Screen {
                     }
                     res.consequences.clear();
                     res.consequences.add(rollDesc);
-                    res.consequences.add("Intercepted by The Pale Shepherd at Tile " + shepherdPos + "!");
+                    res.consequences.add("Intercepted mid-slide by The Pale Shepherd!");
                     isSlideInterceptedByReaper = true;
-                    specialSlideTarget = shepherdPos;
+                    specialSlideTarget = dest;
                     showOutcomeView(cleanTitle, res, true);
                     return;
                 } else {
@@ -2336,18 +2536,19 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Interactive Barter Satchel Slot Selector for trading an item with the merchant.
+     * Interactive Barter Satchel Slot Selector for trading an item with the merchant on equal terms.
      */
     private void showBarterItemSelector(final Player player, final EventChoice choice, final Tile tile) {
         eventContentTable.clear();
 
-        setEventBadge("BARTER  -  SELECT AN ITEM", Color.valueOf("#9c6818"));
+        final BarterCategory cat = (choice.getBarterCategory() != null) ? choice.getBarterCategory() : BarterCategory.ELIXIR;
+        setEventBadge("BARTER  -  EQUAL EXCHANGE", Color.valueOf("#9c6818"));
 
-        Label titleLbl = new Label("Select Item to Trade", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label("Equal-Level Barter Trade", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
         eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
 
-        Label subLbl = new Label("The merchant inspects your inventory. Choose which relic to trade away:", new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
+        Label subLbl = new Label("The merchant values quality. Choose an item to exchange for equal-tier " + cat.getDisplayName() + ":", new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
         eventContentTable.add(subLbl).width(530).padBottom(12).center().row();
@@ -2356,9 +2557,18 @@ public class BoardScreen implements Screen {
         for (int i = 0; i < itemCount; i++) {
             final int slotIndex = i;
             final Item it = player.getInventory().getItem(i);
+            final int tier = it.getTier();
 
-            String typeLabel = it.isCurse() ? "[CURSE - TRADE AWAY!]" : (it.getItemType() == ItemType.CONSUMABLE ? "[Consumable]" : "[1-Use Relic]");
-            String itDesc = it.getName() + "  -  " + typeLabel;
+            final Item previewReward;
+            final String itDesc;
+            if (it.isCurse()) {
+                previewReward = ItemGenerator.generateCurseCleansingReward();
+                itDesc = "Trade: [CURSE] " + it.getName() + " -> Receive: " + previewReward.getName() + " (+18 HP & 20 EXP)";
+            } else {
+                previewReward = ItemGenerator.generateEqualBarterReward(tier, cat);
+                itDesc = "Trade: [" + it.getTierName() + "] " + it.getName() + " -> Equal Trade: [" + previewReward.getTierName() + "] " + previewReward.getName();
+            }
+
             TextButton itemBtn = new TextButton(itDesc, eventChoiceBtnStyle);
             itemBtn.getLabel().setWrap(true);
             itemBtn.getLabel().setAlignment(Align.center);
@@ -2374,11 +2584,25 @@ public class BoardScreen implements Screen {
                     Item traded = player.getInventory().removeItem(slotIndex);
                     EventChoice.EventResult res = new EventChoice.EventResult();
                     res.tradedItem = traded;
-                    res.consequences.add("Traded away: " + (traded != null ? traded.getName() : "Item"));
-                    for (EventEffect eff : choice.getSuccessEffects()) {
-                        eff.apply(player, res.consequences);
+                    res.consequences.add("Traded away: [" + (traded != null ? traded.getTierName() : "Item") + "] " + (traded != null ? traded.getName() : "Item"));
+
+                    Item reward;
+                    if (traded != null && traded.isCurse()) {
+                        reward = ItemGenerator.generateCurseCleansingReward();
+                        player.gainExperience(20);
+                        res.consequences.add("Curse Purged! The merchant rewards your dark curio with +20 Lore EXP!");
+                    } else {
+                        reward = ItemGenerator.generateEqualBarterReward(traded != null ? traded.getTier() : 1, cat);
                     }
-                    showOutcomeView("Barter Trade Completed", res, false);
+                    player.addItem(reward);
+                    res.consequences.add("Received: [" + reward.getTierName() + "] " + reward.getName() + " (" + reward.getEffect() + ")");
+
+                    for (EventEffect eff : choice.getSuccessEffects()) {
+                        if (eff.getType() != EventEffectType.ITEM) {
+                            eff.apply(player, res.consequences);
+                        }
+                    }
+                    showOutcomeView("Equal Barter Completed", res, false);
                 }
             });
             eventContentTable.add(itemBtn).width(530).minHeight(48).padBottom(6).center().row();
@@ -2831,6 +3055,19 @@ public class BoardScreen implements Screen {
                     int rawRoll = movementDice.roll();
                     StringBuilder modNote = new StringBuilder();
 
+                    // Lucky Paw: Guarantees a maximum roll of 6
+                    if (player.isLuckyPawActive()) {
+                        rawRoll = 6;
+                        player.setLuckyPawActive(false);
+                        modNote.append(" (LUCKY PAW: 6)");
+                    }
+
+                    // Serpent Whisperer: Fox gains +2 sprint movement
+                    if (player.isSerpentWhispererActive()) {
+                        rawRoll += 2;
+                        modNote.append(" (+2 FOX SPRINT)");
+                    }
+
                     int cap = player.getMaxDiceRollCap();
                     if (cap > 0) {
                         if (rawRoll > cap) {
@@ -2921,6 +3158,24 @@ public class BoardScreen implements Screen {
                                 float tY = Interpolation.linear.apply(progress);
                                 float dip = (float) Math.sin(progress * Math.PI) * specialMoveArcHeight;
                                 specialMoveCurrentY = MathUtils.lerp(startY, destY, tY) - dip;
+
+                                if (isSlideInterceptedByReaper) {
+                                    int shepherdPos = game.getPaleShepherdTile();
+                                    float interceptProgress = 0.50f;
+                                    if (specialMoveStartTile > specialMoveDestTile && shepherdPos < specialMoveStartTile && shepherdPos >= specialMoveDestTile) {
+                                        interceptProgress = (float) (specialMoveStartTile - shepherdPos) / (float) (specialMoveStartTile - specialMoveDestTile);
+                                        interceptProgress = MathUtils.clamp(interceptProgress, 0.30f, 0.70f);
+                                    }
+                                    if (progress >= interceptProgress) {
+                                        specialMovePhase = SpecialMovePhase.INTERCEPTED_MIDAIR;
+                                        specialMovePhaseTimer = 0f;
+                                        if (game.getAudioManager() != null) {
+                                            game.getAudioManager().playSound(AudioManager.SoundEffect.REAPER_APPEAR, 0.75f);
+                                        }
+                                        showPaleShepherdBoardDialogue(player);
+                                        break;
+                                    }
+                                }
                             }
 
                             if (progress >= 1.0f) {
@@ -2975,6 +3230,34 @@ public class BoardScreen implements Screen {
                             }
                             break;
 
+                        case INTERCEPTED_MIDAIR:
+                            // Hovering midair cushioned by gentle dark mist while dialogue is active
+                            specialMovePhaseTimer += delta;
+                            break;
+
+                        case INTERCEPTED_DESCENT:
+                            // Smoothly and gently gliding down from midair to the reaper's tile
+                            specialMoveElapsed += delta;
+                            float dProgress = MathUtils.clamp(specialMoveElapsed / specialMoveDuration, 0f, 1f);
+                            float dt = Interpolation.sineOut.apply(dProgress);
+                            int shepTile = Math.max(1, game.getPaleShepherdTile());
+                            float groundDestX = getTileCenterX(shepTile);
+                            float groundDestY = getCharacterDrawY(shepTile);
+
+                            specialMoveCurrentX = MathUtils.lerp(specialMoveDescentStartX, groundDestX, dt);
+                            specialMoveCurrentY = MathUtils.lerp(specialMoveDescentStartY, groundDestY, dt);
+
+                            if (dProgress >= 1.0f) {
+                                specialMoveCurrentX = groundDestX;
+                                specialMoveCurrentY = groundDestY;
+                                player.setPosition(shepTile);
+                                isSpecialMoving = false;
+                                specialMovePhase = SpecialMovePhase.NONE;
+                                isSlideInterceptedByReaper = false;
+                                triggerPaleShepherdEncounter(player);
+                            }
+                            break;
+
                         case LANDED:
                             // 3. TOUCHDOWN LANDING RECOVERY:
                             specialMoveCurrentX = destX;
@@ -2995,9 +3278,8 @@ public class BoardScreen implements Screen {
                                 if (game.getPaleShepherdTile() > 0 && finalPos == game.getPaleShepherdTile()) {
                                     if (isSlideInterceptedByReaper) {
                                         isSlideInterceptedByReaper = false;
-                                        topBannerLabel.setText("INTERCEPTED BY DEATH! MORTAL CLASH IN THE VOID!");
                                     }
-                                    triggerPaleShepherdEncounter(player);
+                                    showPaleShepherdBoardDialogue(player);
                                     return;
                                 }
 
@@ -3061,6 +3343,9 @@ public class BoardScreen implements Screen {
                         return;
                     }
                     player.clearTemporaryBuffs();
+                    player.setHazardImmune(false);
+                    player.setLuckyPawActive(false);
+                    player.setSerpentWhispererActive(false);
                     game.nextTurn();
                     Player nextPlayer = game.getCurrentPlayer();
                     if (nextPlayer != null) {
@@ -3076,8 +3361,7 @@ public class BoardScreen implements Screen {
                     }
 
                     // The Pale Shepherd Pursuer Round Progression
-                    if (game.getCurrentTurn() == 0 || game.getPlayers().size() == 1) {
-                        game.incrementTotalRounds();
+                    if (game.consumeRoundCompleted() || (game.getPaleShepherdTile() == 0 && game.getTotalRounds() >= game.getShepherdDormantTurns())) {
                         handlePaleShepherdRoundProgression();
                         if (isEventModalActive) {
                             return;
@@ -3094,7 +3378,9 @@ public class BoardScreen implements Screen {
                     }
                     turnState = TurnState.WAITING_FOR_ROLL;
                     updateActMusic();
-                    topBannerLabel.setText(nextPlayer.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
+                    if (cameraFocusOverrideTimer <= 0f && reaperAwakenTimer <= 0f) {
+                        topBannerLabel.setText(nextPlayer.getName().toUpperCase() + "'S TURN - ROLL THE DICE!");
+                    }
                 }
                 break;
 
@@ -3285,10 +3571,10 @@ public class BoardScreen implements Screen {
         int rounds = game.getTotalRounds();
         int dormant = game.getShepherdDormantTurns();
 
-        if (rounds < dormant) {
-            return;
-        } else if (rounds == dormant) {
-            triggerPaleShepherdAwakening();
+        if (game.getPaleShepherdTile() == 0) {
+            if (rounds >= dormant) {
+                triggerPaleShepherdAwakening();
+            }
             return;
         }
 
@@ -3341,15 +3627,15 @@ public class BoardScreen implements Screen {
         }
 
         if (interceptedPlayer != null) {
-            triggerPaleShepherdEncounter(interceptedPlayer);
+            showPaleShepherdBoardDialogue(interceptedPlayer);
         } else if (speed > 0) {
             topBannerLabel.setText("THE PALE SHEPHERD ADVANCES TO TILE " + game.getPaleShepherdTile() + " (+" + speed + " TILES)!");
         }
     }
 
     /**
-     * Triggers the mortal clash encounter when The Pale Shepherd catches a player.
-     * Launches direct, high-stakes combat against Death itself!
+     * Triggers the encounter when The Pale Shepherd catches a player.
+     * Launches gentle, contemplative combat against the mountain's sorrowful wanderer.
      */
     private void triggerPaleShepherdEncounter(final Player player) {
         if (player == null || player.getHealth() <= 0) return;
@@ -3362,18 +3648,20 @@ public class BoardScreen implements Screen {
         if (dicePickerPopup != null) dicePickerPopup.setVisible(false);
         if (modalScrim != null) modalScrim.setVisible(false);
         if (eventModalTable != null) eventModalTable.setVisible(false);
+        if (shepherdDialogueTable != null) shepherdDialogueTable.setVisible(false);
         isEventModalActive = false;
         isShepherdAmbushActive = false;
+        isShepherdBoardDialogueActive = false;
 
-        // Build Pale Shepherd Boss Enemy with high-stakes pursuer stats
+        // Build Pale Shepherd Enemy with gentle, sorrowful wanderer stats
         Enemy shepherd = new Enemy("The Pale Shepherd");
-        shepherd.setBehavior("Harvester of Souls");
-        shepherd.setHealth(80);
-        shepherd.setAttack(12);
-        shepherd.setDefense(4);
+        shepherd.setBehavior("A Quiet Watcher");
+        shepherd.setHealth(45);
+        shepherd.setAttack(5);
+        shepherd.setDefense(2);
         shepherd.setReward("Shattered Scythe Shard");
 
-        topBannerLabel.setText("THE PALE SHEPHERD DESCENDS! MORTAL DUEL!");
+        topBannerLabel.setText("THE PALE SHEPHERD");
         game.setScreen(new BattleScreen(game, player, shepherd));
     }
 
@@ -3416,8 +3704,50 @@ public class BoardScreen implements Screen {
             return;
         }
 
-        // 1. SNAKE TILE -> Check Snake Charmer's Flute ward first, otherwise trigger serpent ambush narrative modal
+        // 1. SNAKE TILE -> Check Serpent Whisperer, Hazard Immunity, Snake Charmer's Flute ward first, otherwise trigger serpent ambush narrative modal
         if (tile instanceof SnakeTile) {
+            // Fox Serpent Whisperer: Charms serpent, negates slide and glides +3 tiles forward!
+            if (player.isSerpentWhispererActive()) {
+                player.setSerpentWhispererActive(false);
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
+                }
+                int glideDest = Math.min(100, tileIndex + 3);
+                EventChoice.EventResult charmRes = new EventChoice.EventResult();
+                charmRes.consequences.add("Fox played the Serpent Whisperer's melodic charm!");
+                charmRes.consequences.add("The coiled serpent bowed in enchantment.");
+                charmRes.consequences.add("Instead of sliding down, you glided safely +3 tiles forward to Tile " + glideDest + "!");
+                specialSlideTarget = glideDest;
+                isEventModalActive = true;
+                modalScrim.setVisible(true);
+                eventModalTable.setVisible(true);
+                turnState = TurnState.RESOLVING_TILE_EVENT;
+                topBannerLabel.setText("SERPENT CHARMED! " + player.getName().toUpperCase() + " GLIDED SAFELY TO TILE " + glideDest + "!");
+                showOutcomeView("Serpent Charmed!", charmRes, false);
+                return;
+            }
+
+            // Turtle Slow & Steady Hazard Immunity: Withstands serpent ambush completely
+            if (player.isHazardImmune()) {
+                player.setHazardImmune(false);
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
+                }
+                EventChoice.EventResult wardRes = new EventChoice.EventResult();
+                wardRes.shieldDeflected = true;
+                wardRes.consequences.add("Slow & Steady: The Turtle's impenetrable march held steady!");
+                wardRes.consequences.add("The serpent lunged harmlessly off your iron shell.");
+                wardRes.consequences.add("Avoided ambush and held your ground safely on Tile " + tileIndex + "!");
+                specialSlideTarget = -1;
+                isEventModalActive = true;
+                modalScrim.setVisible(true);
+                eventModalTable.setVisible(true);
+                turnState = TurnState.RESOLVING_TILE_EVENT;
+                topBannerLabel.setText("SLOW & STEADY! " + player.getName().toUpperCase() + " WITHSTOOD THE SERPENT ON TILE " + tileIndex + "!");
+                showOutcomeView("Iron Resilience!", wardRes, false);
+                return;
+            }
+
             if (player.hasSnakeWard()) {
                 player.setHasSnakeWard(false);
                 if (game.getAudioManager() != null) {
@@ -3562,6 +3892,8 @@ public class BoardScreen implements Screen {
                 targetY = baselineY + (getTileBottomY(specialMoveStartTile) - 220f);
             } else if (specialMovePhase == SpecialMovePhase.LANDED) {
                 targetY = baselineY + (getTileBottomY(specialMoveDestTile) - 220f);
+            } else if (specialMovePhase == SpecialMovePhase.INTERCEPTED_MIDAIR || specialMovePhase == SpecialMovePhase.INTERCEPTED_DESCENT) {
+                targetY = baselineY + (specialMoveCurrentY - 220f);
             } else {
                 float moveProgress = MathUtils.clamp(specialMoveElapsed / specialMoveDuration, 0f, 1f);
                 float startElev = getTileBottomY(specialMoveStartTile) - 220f;
@@ -3724,9 +4056,10 @@ public class BoardScreen implements Screen {
             Tile tile = board.getTile(i);
             boolean isRevealed = tile.isRevealed();
             Texture slabTex = stoneNormal;
-            if (isRevealed) {
-                if (tile instanceof SnakeTile) slabTex = stoneSnake;
-                else if (tile instanceof LadderTile) slabTex = stoneLadder;
+            if (tile instanceof SnakeTile) {
+                slabTex = stoneSnake;
+            } else if (tile instanceof LadderTile) {
+                slabTex = stoneLadder;
             }
 
             // =========================================================================
@@ -3764,9 +4097,9 @@ public class BoardScreen implements Screen {
             if (isVoidTile) {
                 // Swallowed by The Pale Void: desaturated dark obsidian with spectral crimson undertone
                 batch.setColor(0.24f, 0.12f, 0.16f, 0.88f);
-            } else if (isRevealed && tile instanceof LadderTile) {
+            } else if (tile instanceof LadderTile) {
                 batch.setColor(1.0f, 0.92f, 0.70f, 0.85f);
-            } else if (isRevealed && tile instanceof SnakeTile) {
+            } else if (tile instanceof SnakeTile) {
                 batch.setColor(0.98f, 0.70f, 0.74f, 0.85f);
             } else if (isRevealed && tile.getLandmark() == TileLandmark.SHRINE) {
                 batch.setColor(0.68f, 0.84f, 1.0f, 0.88f);
@@ -3918,9 +4251,9 @@ public class BoardScreen implements Screen {
             batch.setColor(Color.WHITE);
 
             // =========================================================================
-            // Visual Structural Features: Upright Ladder & Snake Hazard Runes (REVEALED ONLY)
+            // Visual Structural Features: Upright Ladder & Snake Hazard Runes (PERMANENTLY VISIBLE)
             // =========================================================================
-            if (isRevealed && tile instanceof LadderTile) {
+            if (tile instanceof LadderTile) {
                 float ladderX = tileLeft + 35f;
                 float ladderY = tileY + TILE_HEIGHT;
                 float ladderH = 80f;
@@ -3942,7 +4275,7 @@ public class BoardScreen implements Screen {
                     batch.draw(whitePixelTex, ladderX + 2f, ry, ladderW - 4f, 3f);
                 }
                 batch.setColor(Color.WHITE);
-            } else if (isRevealed && tile instanceof SnakeTile) {
+            } else if (tile instanceof SnakeTile) {
                 float snakeX = tileLeft + 32f;
                 float snakeY = tileY + TILE_HEIGHT;
                 float snakeW = 40f;
@@ -3967,19 +4300,10 @@ public class BoardScreen implements Screen {
 
             // =========================================================================
             // Tile Typography & Badges
+            // Snakes and Ladders are permanently revealed across the mountain!
+            // Mystery events remain uncharted until explored.
             // =========================================================================
-            if (!isRevealed) {
-                // UNCHARTED BADGE (Fog of War)
-                float pulse = 0.60f + 0.35f * MathUtils.sinDeg(stateTime * 140f + (i * 22f));
-                tileBadgeFont.setColor(0.08f, 0.12f, 0.16f, 0.80f);
-                tileBadgeFont.draw(batch, "? UNCHARTED ?", tileLeft + 1f, tileY + 27f, TILE_WIDTH, Align.center, false);
-                tileBadgeFont.setColor(0.72f, 0.86f, 0.98f, pulse);
-                tileBadgeFont.draw(batch, "? UNCHARTED ?", tileLeft, tileY + 28f, TILE_WIDTH, Align.center, false);
-
-                miniFont.setColor(0.75f, 0.86f, 0.94f, 0.85f);
-                miniFont.draw(batch, "TILE " + i, tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
-
-            } else if (tile instanceof LadderTile) {
+            if (tile instanceof LadderTile) {
                 LadderTile ladder = (LadderTile) tile;
                 int dest = ladder.getDestination();
 
@@ -3999,6 +4323,17 @@ public class BoardScreen implements Screen {
                 tileBadgeFont.setColor(Color.valueOf("#ff6b6b"));
                 tileBadgeFont.draw(batch, "- SNAKE -> " + dest, tileLeft, tileY + 28f, TILE_WIDTH, Align.center, false);
                 miniFont.setColor(Color.valueOf("#ffebee"));
+                miniFont.draw(batch, "TILE " + i, tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
+
+            } else if (!isRevealed) {
+                // UNCHARTED BADGE (Fog of War for mystery events)
+                float pulse = 0.60f + 0.35f * MathUtils.sinDeg(stateTime * 140f + (i * 22f));
+                tileBadgeFont.setColor(0.08f, 0.12f, 0.16f, 0.80f);
+                tileBadgeFont.draw(batch, "? UNCHARTED ?", tileLeft + 1f, tileY + 27f, TILE_WIDTH, Align.center, false);
+                tileBadgeFont.setColor(0.72f, 0.86f, 0.98f, pulse);
+                tileBadgeFont.draw(batch, "? UNCHARTED ?", tileLeft, tileY + 28f, TILE_WIDTH, Align.center, false);
+
+                miniFont.setColor(0.75f, 0.86f, 0.94f, 0.85f);
                 miniFont.draw(batch, "TILE " + i, tileLeft, tileY + 45f, TILE_WIDTH, Align.center, false);
 
             } else {
@@ -4155,6 +4490,23 @@ public class BoardScreen implements Screen {
                         batch.draw(whitePixelTex, specialMoveCurrentX - ringW / 2f, drawY - 4f, ringW, 12f);
                         batch.setColor(Color.WHITE);
                     }
+                } else if (specialMovePhase == SpecialMovePhase.INTERCEPTED_MIDAIR) {
+                    float hoverBob = (float) Math.sin(stateTime * 2.5f) * 6f;
+                    drawY = specialMoveCurrentY + hoverBob;
+                    activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
+
+                    // Soft misty cushion beneath character
+                    float pulse = 0.5f + 0.5f * MathUtils.sinDeg(stateTime * 180f);
+                    if (softShadowTex != null) {
+                        batch.setColor(0.20f, 0.10f, 0.28f, 0.50f + 0.15f * pulse);
+                        batch.draw(softShadowTex, specialMoveCurrentX - 45f, drawY - 8f, 90f, 22f);
+                        batch.setColor(0.60f, 0.15f, 0.35f, 0.25f + 0.10f * pulse);
+                        batch.draw(softShadowTex, specialMoveCurrentX - 35f, drawY - 4f, 70f, 16f);
+                        batch.setColor(Color.WHITE);
+                    }
+                } else if (specialMovePhase == SpecialMovePhase.INTERCEPTED_DESCENT) {
+                    drawY = specialMoveCurrentY;
+                    activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
                 } else {
                     // IN_FLIGHT: active walking/climbing motion along the soaring arc
                     activeFrame = (anim != null) ? anim.getKeyFrame(walkStateTime, true) : new TextureRegion(charTex);
@@ -4261,24 +4613,27 @@ public class BoardScreen implements Screen {
         }
         skillButton.setVisible(true);
 
-        if (player.getCharacterClass() != null && game.getAssetManager().isLoaded(Assets.getCharacterHeadTexture(player.getCharacterClass()))) {
-            Texture headTex = game.getAssetManager().get(Assets.getCharacterHeadTexture(player.getCharacterClass()));
-            skillIcon.setDrawable(new TextureRegionDrawable(new TextureRegion(headTex)));
+        if (skill.getIconAsset() != null && game.getAssetManager().isLoaded(skill.getIconAsset())) {
+            Texture iconTex = game.getAssetManager().get(skill.getIconAsset());
+            skillIcon.setDrawable(new TextureRegionDrawable(new TextureRegion(iconTex)));
         }
 
-        skillNameLabel.setText(skill.getSkillName().toUpperCase());
+        skillNameLabel.setText(skill.getActionTitle());
+        skillEffectLabel.setText(skill.getActionSubtext());
 
         if (player.isSkillReady()) {
             skillButton.setStyle(skillReadyStyle);
-            skillStatusLabel.setText("READY (USE)");
+            skillStatusLabel.setText("READY");
             skillStatusLabel.setColor(Color.valueOf("#206a24")); // Vibrant active green
             skillNameLabel.setColor(Color.valueOf("#361704"));
+            skillEffectLabel.setColor(Color.valueOf("#5e3717"));
         } else {
             skillButton.setStyle(skillCooldownStyle);
             int cd = player.getSkillCooldown();
             skillStatusLabel.setText(cd + (cd == 1 ? " TURN" : " TURNS"));
             skillStatusLabel.setColor(Color.valueOf("#fbf2dc")); // Readable cream on cooldown leather
             skillNameLabel.setColor(Color.valueOf("#fff3dd"));
+            skillEffectLabel.setColor(Color.valueOf("#e8d5b5"));
         }
     }
 
@@ -4640,6 +4995,7 @@ public class BoardScreen implements Screen {
         if (choiceOutcomeValueFont != null) choiceOutcomeValueFont.dispose();
         if (choiceD20Font != null) choiceD20Font.dispose();
         if (skillTitleFont != null) skillTitleFont.dispose();
+        if (skillEffectFont != null) skillEffectFont.dispose();
         if (skillSubFont != null) skillSubFont.dispose();
     }
 }

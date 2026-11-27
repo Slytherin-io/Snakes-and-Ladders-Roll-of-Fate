@@ -338,17 +338,17 @@ public class BoardAdventureBugFixTest {
 
         // Case B: Escape from Death
         p.setHealth(80);
-        p.setHealth(Math.max(1, p.getHealth() - 20));
+        p.setHealth(Math.max(1, p.getHealth() - 5));
         game.setShepherdPauseRounds(1);
         int scrambleDest = Math.min(99, p.getPosition() + 3);
 
-        if (p.getHealth() != 60) {
-            throw new AssertionError("Escape parting blow should cost 20 HP, was: " + p.getHealth());
+        if (p.getHealth() != 75) {
+            throw new AssertionError("Escape parting blow should cost 5 HP, was: " + p.getHealth());
         }
         if (scrambleDest != 28) {
             throw new AssertionError("Escape scramble should propel player to Tile 28, was: " + scrambleDest);
         }
-        System.out.println("  [PASS] Pale Shepherd victory banishes reaper 15 tiles (+3 pause rounds), and escape incurs -20 HP and +3 scramble.");
+        System.out.println("  [PASS] Pale Shepherd victory banishes reaper 15 tiles (+3 pause rounds), and escape incurs -5 HP and +3 scramble.");
     }
 
     private static void testDawnWardenPhase2Transition() {

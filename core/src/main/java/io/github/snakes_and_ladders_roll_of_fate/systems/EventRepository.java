@@ -1,5 +1,6 @@
 package io.github.snakes_and_ladders_roll_of_fate.systems;
 
+import io.github.snakes_and_ladders_roll_of_fate.items.BarterCategory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
 import java.util.ArrayList;
@@ -21,71 +22,87 @@ public class EventRepository {
         int act = EventStoryGenerator.getAct(tilePosition);
         Event merchant = new Event(story[0], story[1], EventCategory.MERCHANT, 1, 100);
 
-        List<EventChoice> merchantDeck = new ArrayList<>();
+        List<EventChoice> barterChoices = new ArrayList<>();
+        barterChoices.add(EventChoice.createEqualBarterChoice(
+            "[Barter: Elixirs] Trade an item for an equal-tier Healing Potion",
+            BarterCategory.ELIXIR
+        ));
+        barterChoices.add(EventChoice.createEqualBarterChoice(
+            "[Barter: Armaments] Trade an item for an equal-tier Weapon or Shield",
+            BarterCategory.ARMAMENT
+        ));
+        barterChoices.add(EventChoice.createEqualBarterChoice(
+            "[Barter: Relics] Trade an item for an equal-tier Tactical Board Relic",
+            BarterCategory.RELIC
+        ));
+        Collections.shuffle(barterChoices);
+
+        EventChoice costChoice;
+        EventChoice thirdChoice;
 
         if (act == 1) {
-            merchantDeck.add(EventChoice.createBarterChoice(
-                "[Barter Supplies] Trade 1 item from your bag for a Healing Potion (+25 HP & Lore)",
-                Item.createConsumable("Minor Health Potion", EventEffectType.HEALTH, 25, "Restores 25 HP")
-            ).withEffect(EventEffectType.EXPERIENCE, 20));
-            merchantDeck.add(EventChoice.createExpCostChoice(
+            costChoice = EventChoice.createExpCostChoice(
                 "[Buy Trail Map] Spend 15 EXP to reveal 12 uncharted tiles ahead",
                 15,
                 null
-            ).withEffect(EventEffectType.SCOUT, 12).withEffect(EventEffectType.HEALTH, 10));
-            merchantDeck.add(new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 10 HP", 11)
-                .onSuccess(EventEffectType.ITEM)
-                .onSuccess(EventEffectType.EXPERIENCE, 15)
-                .onFailure(EventEffectType.HEALTH, -10));
-            merchantDeck.add(EventChoice.createBloodCostChoice(
-                "[Buy Sharp Dagger] Pay 10 HP blood price for a Bronze Dagger (+3 ATK)",
-                10,
-                Item.createEquipment("Bronze Dagger", EventEffectType.ATTACK, 3, 2, 3, "+3 ATK (1 Turn Buff)")
-            ));
+            ).withEffect(EventEffectType.SCOUT, 12).withEffect(EventEffectType.HEALTH, 10);
+
+            if (Math.random() < 0.5) {
+                thirdChoice = EventChoice.createBloodCostChoice(
+                    "[Buy Sharp Dagger] Pay 10 HP blood price for a Bronze Dagger (+3 ATK)",
+                    10,
+                    Item.createEquipment("Bronze Dagger", EventEffectType.ATTACK, 3, 1, 1, "+3 ATK (Ready for next battle)")
+                );
+            } else {
+                thirdChoice = new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 10 HP", 11)
+                    .onSuccess(EventEffectType.ITEM)
+                    .onSuccess(EventEffectType.EXPERIENCE, 15)
+                    .onFailure(EventEffectType.HEALTH, -10);
+            }
         } else if (act == 2) {
-            merchantDeck.add(EventChoice.createBarterChoice(
-                "[Barter Supplies] Trade 1 item from your bag for a Greater Elixir (+50 HP & Lore)",
-                Item.createConsumable("Greater Health Elixir", EventEffectType.HEALTH, 50, "Restores 50 HP")
-            ).withEffect(EventEffectType.EXPERIENCE, 35));
-            merchantDeck.add(EventChoice.createExpCostChoice(
+            costChoice = EventChoice.createExpCostChoice(
                 "[Buy Cavern Map] Spend 25 EXP to reveal 16 uncharted tiles ahead",
                 25,
                 null
-            ).withEffect(EventEffectType.SCOUT, 16).withEffect(EventEffectType.HEALTH, 15));
-            merchantDeck.add(new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 16 HP", 12)
-                .onSuccess(EventEffectType.ITEM)
-                .onSuccess(EventEffectType.EXPERIENCE, 25)
-                .onFailure(EventEffectType.HEALTH, -16));
-            merchantDeck.add(EventChoice.createBloodCostChoice(
-                "[Buy Tempered Sword] Pay 18 HP blood price for an Iron Sword (+5 ATK)",
-                18,
-                Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 5, 2, 4, "+5 ATK (1 Turn Buff)")
-            ));
+            ).withEffect(EventEffectType.SCOUT, 16).withEffect(EventEffectType.HEALTH, 15);
+
+            if (Math.random() < 0.5) {
+                thirdChoice = EventChoice.createBloodCostChoice(
+                    "[Buy Tempered Sword] Pay 18 HP blood price for an Iron Sword (+5 ATK)",
+                    18,
+                    Item.createEquipment("Iron Sword", EventEffectType.ATTACK, 5, 1, 1, "+5 ATK (Ready for next battle)")
+                );
+            } else {
+                thirdChoice = new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 16 HP", 12)
+                    .onSuccess(EventEffectType.ITEM)
+                    .onSuccess(EventEffectType.EXPERIENCE, 25)
+                    .onFailure(EventEffectType.HEALTH, -16);
+            }
         } else {
-            merchantDeck.add(EventChoice.createBarterChoice(
-                "[Barter Supplies] Trade 1 item from your bag for Celestial Ambrosia (+80 HP & Lore)",
-                Item.createConsumable("Celestial Ambrosia", EventEffectType.HEALTH, 80, "Restores 80 HP")
-            ).withEffect(EventEffectType.EXPERIENCE, 55));
-            merchantDeck.add(EventChoice.createExpCostChoice(
+            costChoice = EventChoice.createExpCostChoice(
                 "[Buy Summit Map] Spend 35 EXP to reveal 20 uncharted tiles ahead",
                 35,
                 null
-            ).withEffect(EventEffectType.SCOUT, 20).withEffect(EventEffectType.HEALTH, 25));
-            merchantDeck.add(new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 24 HP", 13)
-                .onSuccess(EventEffectType.ITEM)
-                .onSuccess(EventEffectType.EXPERIENCE, 40)
-                .onFailure(EventEffectType.HEALTH, -24));
-            merchantDeck.add(EventChoice.createBloodCostChoice(
-                "[Buy Dragon Blade] Pay 28 HP blood price for a Dragon-Slayer Blade (+7 ATK)",
-                28,
-                Item.createEquipment("Dragon-Slayer Blade", EventEffectType.ATTACK, 7, 3, 5, "+7 ATK (1 Turn Buff)")
-            ));
+            ).withEffect(EventEffectType.SCOUT, 20).withEffect(EventEffectType.HEALTH, 25);
+
+            if (Math.random() < 0.5) {
+                thirdChoice = EventChoice.createBloodCostChoice(
+                    "[Buy Dragon Blade] Pay 28 HP blood price for a Dragon-Slayer Blade (+8 ATK)",
+                    28,
+                    Item.createEquipment("Dragon-Slayer Blade", EventEffectType.ATTACK, 8, 1, 1, "+8 ATK (Ready for next battle)")
+                );
+            } else {
+                thirdChoice = new EventChoice("[Haggle for Mystery Box] Gamble (D20): High roll wins rare loot; fail costs 24 HP", 13)
+                    .onSuccess(EventEffectType.ITEM)
+                    .onSuccess(EventEffectType.EXPERIENCE, 40)
+                    .onFailure(EventEffectType.HEALTH, -24);
+            }
         }
 
-        Collections.shuffle(merchantDeck);
-        merchant.addChoice(merchantDeck.get(0));
-        merchant.addChoice(merchantDeck.get(1));
-        merchant.addChoice(merchantDeck.get(2));
+        // Always guarantee 1 equal-tier barter choice, 1 EXP/map cost choice, and 1 combat/mystery offer
+        merchant.addChoice(barterChoices.get(0));
+        merchant.addChoice(costChoice);
+        merchant.addChoice(thirdChoice);
         merchant.addChoice(new EventChoice("[Politely Decline] Save your supplies and continue your climb"));
         return merchant;
     }

@@ -1,22 +1,41 @@
 package io.github.snakes_and_ladders_roll_of_fate.skills;
 
+import com.badlogic.gdx.assets.AssetDescriptor;
+import com.badlogic.gdx.graphics.Texture;
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 
 /**
- * Cat (Nimble Prowler) Board Skill: Prowl Leap.
- * Polymorphic implementation: Instantly leaps +2 tiles forward along the path.
+ * Cat (Nimble Prowler) Board Skill: Lucky Paw.
+ * Polymorphic implementation: Feline fortune guarantees a maximum roll of 6 on your next roll.
+ * Cats always land on their feet!
  */
 public class CatAgilitySkill implements ClassSkill {
 
     @Override
     public String getSkillName() {
-        return "Prowl Leap";
+        return "Lucky Paw";
+    }
+
+    @Override
+    public String getActionTitle() {
+        return "LUCKY PAW";
+    }
+
+    @Override
+    public String getActionSubtext() {
+        return "GUARANTEED 6";
+    }
+
+    @Override
+    public AssetDescriptor<Texture> getIconAsset() {
+        return Assets.ICON_DICE_D6;
     }
 
     @Override
     public String getDescription() {
-        return "Agile feline reflex: Instantly leap +2 tiles forward on the board.";
+        return "Feline fortune: Guarantees a maximum roll of 6 on your next dice roll.";
     }
 
     @Override
@@ -32,11 +51,9 @@ public class CatAgilitySkill implements ClassSkill {
     @Override
     public SkillResult execute(Player player, RollOfFateGame game) {
         if (!canUse(player)) {
-            return new SkillResult(false, "Cannot leap while incapacitated or at summit.");
+            return new SkillResult(false, "Cannot use Lucky Paw while incapacitated or at summit.");
         }
-        int oldPos = player.getPosition();
-        int newPos = Math.min(100, oldPos + 2);
-        player.setPosition(newPos);
-        return new SkillResult(true, "Cat leaped +2 tiles forward with feline grace! (Tile " + oldPos + " -> " + newPos + ")", 2);
+        player.setLuckyPawActive(true);
+        return new SkillResult(true, "Cat activated Lucky Paw! Your next dice roll is guaranteed to be 6!");
     }
 }

@@ -2,6 +2,8 @@ package io.github.snakes_and_ladders_roll_of_fate.skills;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 
 /**
  * Automated verification suite for the Polymorphic ClassSkill system.
@@ -14,10 +16,11 @@ public class ClassSkillVerificationTest {
         testAllClassesImplementPolymorphicSkills();
         testSkillsStartInactiveOnCooldown();
         testCooldownDecrementAndReadyState();
-        testCatAgilitySkill();
-        testTurtleShellSkill();
-        testFoxCunningSkill();
-        testRaccoonScavengeSkill();
+        testSkillUIMetadata();
+        testCatLuckyPaw();
+        testTurtleSlowAndSteady();
+        testFoxSerpentWhisperer();
+        testRaccoonScrapSalvage();
         testInventoryStartsEmpty();
 
         System.out.println(">>> ALL CLASS SKILL SYSTEM VERIFICATIONS PASSED WITH ZERO FAILURES!");
@@ -75,72 +78,111 @@ public class ClassSkillVerificationTest {
         System.out.println("  Cooldown decrements properly across 4 turns and transitions to READY.");
     }
 
-    private static void testCatAgilitySkill() {
-        System.out.println("\n[Test 4] Verifying Cat 'Prowl Leap' (+2 tiles forward)...");
+    private static void testSkillUIMetadata() {
+        System.out.println("\n[Test 4] Verifying Skill UI Action titles, subtexts, and icons...");
+        for (CharacterClass cc : CharacterClass.values()) {
+            Player p = new Player("Hero", cc);
+            ClassSkill skill = p.getClassSkill();
+            if (skill.getActionTitle() == null || skill.getActionTitle().isEmpty()) {
+                throw new AssertionError("Skill " + skill.getSkillName() + " must have a non-empty action title!");
+            }
+            if (skill.getActionSubtext() == null || skill.getActionSubtext().isEmpty()) {
+                throw new AssertionError("Skill " + skill.getSkillName() + " must have a non-empty action subtext!");
+            }
+            if (skill.getIconAsset() == null) {
+                throw new AssertionError("Skill " + skill.getSkillName() + " must have a non-null icon asset descriptor!");
+            }
+            System.out.println("  " + cc.getName() + " -> [" + skill.getActionTitle() + "] (" + skill.getActionSubtext() + ") Icon: " + skill.getIconAsset().fileName);
+        }
+    }
+
+    private static void testCatLuckyPaw() {
+        System.out.println("\n[Test 5] Verifying Cat 'Lucky Paw' (Guaranteed 6 Roll)...");
         Player p = new Player("CatHero", CharacterClass.CAT);
-        p.setPosition(15);
         p.setSkillCooldown(0); // Ready
 
+        if (p.isLuckyPawActive()) throw new AssertionError("Cat should not start with Lucky Paw primed");
         SkillResult res = p.useClassSkill(null);
-        if (!res.isSuccess() || res.getBonusMovement() != 2) {
-            throw new AssertionError("Cat skill should succeed with +2 movement!");
-        }
-        if (p.getPosition() != 17) {
-            throw new AssertionError("Cat position should be 17, got: " + p.getPosition());
+        if (!res.isSuccess() || !p.isLuckyPawActive()) {
+            throw new AssertionError("Cat skill should succeed and prime Lucky Paw!");
         }
         if (p.getSkillCooldown() != 4) {
             throw new AssertionError("Skill cooldown must reset to 4 after use!");
         }
-        System.out.println("  Cat leaped +2 tiles (15 -> 17), cooldown reset to 4.");
+        System.out.println("  Cat primed Lucky Paw (guaranteed 6), cooldown reset to 4.");
     }
 
-    private static void testTurtleShellSkill() {
-        System.out.println("\n[Test 5] Verifying Turtle 'Shell Barrier' (Ward against hazard/serpent)...");
+    private static void testTurtleSlowAndSteady() {
+        System.out.println("\n[Test 6] Verifying Turtle 'Slow & Steady' (Cleanses curses & safe 4-step march)...");
         Player p = new Player("TurtleHero", CharacterClass.TURTLE);
         p.setSkillCooldown(0); // Ready
 
-        if (p.hasSnakeWard()) throw new AssertionError("Turtle should not start with active ward");
+        // Add a mock curse to test cleansing
+        p.getInventory().addItem(Item.createCurse("Mock Hex", EventEffectType.MOVE, -1, "Test penalty"));
+        if (!p.hasCurse()) throw new AssertionError("Turtle should have a curse before cleansing");
+
         SkillResult res = p.useClassSkill(null);
-        if (!res.isSuccess() || !p.hasSnakeWard()) {
-            throw new AssertionError("Turtle skill must activate Snake Ward!");
+        if (!res.isSuccess() || !res.isDirectMove() || res.getBonusMovement() != 4) {
+            throw new AssertionError("Turtle skill must succeed with direct move of 4 safe steps!");
+        }
+        if (p.hasCurse()) {
+            throw new AssertionError("Turtle skill must cleanse all active curses!");
+        }
+        if (!p.isHazardImmune()) {
+            throw new AssertionError("Turtle must be granted hazard immunity for the march!");
         }
         if (p.getSkillCooldown() != 4) {
             throw new AssertionError("Skill cooldown must reset to 4 after use!");
         }
-        System.out.println("  Turtle activated Shell Barrier (Snake Ward enabled), cooldown reset to 4.");
+        System.out.println("  Turtle cleansed curses, gained hazard immunity, and prepared 4-tile direct march.");
     }
 
-    private static void testFoxCunningSkill() {
-        System.out.println("\n[Test 6] Verifying Fox 'Cunning Sleight' (+25 EXP & +3 Temp ATK)...");
+    private static void testFoxSerpentWhisperer() {
+        System.out.println("\n[Test 7] Verifying Fox 'Serpent Whisperer' (+2 movement & snake charm)...");
         Player p = new Player("FoxHero", CharacterClass.FOX);
         p.setSkillCooldown(0); // Ready
-        int initialExp = p.getExperience();
-        int initialAtk = p.getAttack();
 
+        if (p.isSerpentWhispererActive()) throw new AssertionError("Fox should not start with Serpent Whisperer primed");
         SkillResult res = p.useClassSkill(null);
-        if (!res.isSuccess()) throw new AssertionError("Fox skill should succeed!");
-        if (p.getExperience() <= initialExp) throw new AssertionError("Fox should gain bonus EXP!");
-        if (p.getAttack() <= initialAtk) throw new AssertionError("Fox should gain temporary ATK!");
-        if (p.getSkillCooldown() != 4) throw new AssertionError("Skill cooldown must reset to 4!");
-        System.out.println("  Fox gained EXP and ATK buff, cooldown reset to 4.");
+        if (!res.isSuccess() || !p.isSerpentWhispererActive()) {
+            throw new AssertionError("Fox skill should succeed and prime Serpent Whisperer!");
+        }
+        if (p.getSkillCooldown() != 4) {
+            throw new AssertionError("Skill cooldown must reset to 4!");
+        }
+        System.out.println("  Fox primed Serpent Whisperer (+2 movement and snake charm), cooldown reset to 4.");
     }
 
-    private static void testRaccoonScavengeSkill() {
-        System.out.println("\n[Test 7] Verifying Raccoon 'Forage & Patch' (+20 HP restore)...");
+    private static void testRaccoonScrapSalvage() {
+        System.out.println("\n[Test 8] Verifying Raccoon 'Scrap Salvage' (Loot table & Full bag +15 HP fallback)...");
         Player p = new Player("RaccoonHero", CharacterClass.RACCOON);
-        p.setHealth(40);
         p.setSkillCooldown(0); // Ready
 
-        SkillResult res = p.useClassSkill(null);
-        if (!res.isSuccess() || p.getHealth() != 60) {
-            throw new AssertionError("Raccoon health should be 60, got: " + p.getHealth());
+        // Case A: Bag not full -> pulls loot
+        SkillResult res1 = p.useClassSkill(null);
+        if (!res1.isSuccess() || p.getInventory().size() != 1) {
+            throw new AssertionError("Raccoon should have scavenged an item into inventory!");
+        }
+        System.out.println("  Scavenged loot: " + p.getInventory().getItems().get(0).getName());
+
+        // Case B: Bag full -> converts scraps to +15 HP
+        p.getInventory().addItem(Item.createConsumable("Item 2", EventEffectType.HEALTH, 10, ""));
+        p.getInventory().addItem(Item.createConsumable("Item 3", EventEffectType.HEALTH, 10, ""));
+        p.getInventory().addItem(Item.createConsumable("Item 4", EventEffectType.HEALTH, 10, ""));
+        if (!p.getInventory().isFull()) throw new AssertionError("Inventory should now be full (4/4)");
+
+        p.setHealth(50);
+        p.setSkillCooldown(0); // Reset for test
+        SkillResult res2 = p.useClassSkill(null);
+        if (!res2.isSuccess() || p.getHealth() != 65) {
+            throw new AssertionError("Full bag fallback should heal +15 HP (50 -> 65), got: " + p.getHealth());
         }
         if (p.getSkillCooldown() != 4) throw new AssertionError("Skill cooldown must reset to 4!");
-        System.out.println("  Raccoon healed +20 HP (40 -> 60), cooldown reset to 4.");
+        System.out.println("  Full bag triage fallback healed +15 HP (50 -> 65), cooldown reset to 4.");
     }
 
     private static void testInventoryStartsEmpty() {
-        System.out.println("\n[Test 8] Verifying that player inventory starts 100% empty (0/4 slots)...");
+        System.out.println("\n[Test 9] Verifying that player inventory starts 100% empty (0/4 slots)...");
         for (CharacterClass cc : CharacterClass.values()) {
             Player p = new Player("Adventurer", cc);
             if (p.getInventory().size() != 0) {
