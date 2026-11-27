@@ -29,6 +29,7 @@ public class BoardAdventureBugFixTest {
         testSerpentsBaneReaperRepelAndAdrenalineSurge();
         testPaleShepherdMortalDuelResolution();
         testDawnWardenPhase2Transition();
+        testMultiplayerBossDefeatReturnToBoard();
 
         System.out.println(">>> ALL BUG FIX & COMBAT SYSTEM VERIFICATIONS PASSED WITH ZERO FAILURES!");
     }
@@ -454,5 +455,48 @@ public class BoardAdventureBugFixTest {
             throw new AssertionError("Depleting Phase 2 Dawn Warden must trigger VICTORY, was: " + bs.getFinalOutcome());
         }
         System.out.println("  [PASS] Dawn Warden cleanly transitions Phase 1 (120 HP) -> Phase 2 (150 HP, +3 ATK, +2 DEF) -> VICTORY.");
+    }
+
+    private static void testMultiplayerBossDefeatReturnToBoard() {
+        System.out.println("\n[Test 11] Verifying Multiplayer Boss Defeat Returns Turn to Surviving Teammate...");
+        RollOfFateGame game = new RollOfFateGame();
+        Player p1 = new Player("Player 1", CharacterClass.CAT);
+        Player p2 = new Player("Player 2", CharacterClass.TURTLE);
+        p1.setPosition(100); // Reached Summit / Dawn Warden
+        p2.setPosition(42);  // Still exploring on board
+        List<Player> party = new ArrayList<>();
+        party.add(p1);
+        party.add(p2);
+        game.setPlayers(party);
+
+        // Simulate Dawn Warden defeating Player 1 in BattleSystem
+        io.github.snakes_and_ladders_roll_of_fate.entities.Enemy boss =
+            new io.github.snakes_and_ladders_roll_of_fate.entities.Enemy("The Dawn Warden");
+        boss.setHealth(120);
+        boss.setAttack(14);
+        boss.setDefense(7);
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem bs =
+            new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        bs.startBattle(p1, boss);
+        p1.setHealth(0);
+
+        if (game.isPartyWiped()) {
+            throw new AssertionError("Party should NOT be wiped while Player 2 still has HP > 0");
+        }
+        if (game.getPlayers().size() <= 1) {
+            throw new AssertionError("Multiplayer party size must remain > 1");
+        }
+
+        // Simulate BoardScreen TURN_TRANSITION advancing turn away from fallen P1 to living P2
+        Player cur = game.getCurrentPlayer();
+        boolean shouldReTriggerBoss = (cur.getHealth() > 0 && cur.getPosition() >= 100);
+        if (shouldReTriggerBoss) {
+            throw new AssertionError("Fallen Player 1 at Tile 100 must NOT re-trigger Dawn Warden trial");
+        }
+        game.nextTurn();
+        if (game.getCurrentPlayer() != p2) {
+            throw new AssertionError("nextTurn() must switch active control back to surviving Player 2 on the board");
+        }
+        System.out.println("  [PASS] Multiplayer boss defeat preserves surviving party and hands turn back to Player 2 at Tile 42.");
     }
 }

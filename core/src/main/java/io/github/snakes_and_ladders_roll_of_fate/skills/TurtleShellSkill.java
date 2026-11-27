@@ -25,7 +25,7 @@ public class TurtleShellSkill implements ClassSkill {
 
     @Override
     public String getActionSubtext() {
-        return "+4 SAFE TILES";
+        return "MOVE +4 (NO SNAKE)";
     }
 
     @Override
@@ -35,7 +35,7 @@ public class TurtleShellSkill implements ClassSkill {
 
     @Override
     public String getDescription() {
-        return "The tortoise fable: Cleanses curses and marches exactly 4 safe tiles with total hazard immunity.";
+        return "Cleanses curses and marches +4 tiles safely, immune to snakes.";
     }
 
     @Override

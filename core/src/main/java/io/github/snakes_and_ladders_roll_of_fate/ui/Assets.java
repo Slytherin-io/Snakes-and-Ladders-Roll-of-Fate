@@ -76,9 +76,18 @@ public class Assets {
     public static final AssetDescriptor<Texture> LOADING_SNAKE =
         new AssetDescriptor<>("img/loading_snake_spritesheet.png", Texture.class);
 
-    // Enemy combat spritesheet (224x32, 7 frames of 32x32)
+    // Enemy combat spritesheets (Act-stratified: 768x128, 6 frames of 128x128)
+    // Act I: Forest Green Snake (Authentic pixel art sheet)
+    // Act II: Sapphire Horned Serpent (Cavern/Mist horned viper)
+    // Act III: Crimson Magma Wyrm (Volcanic horned dragon)
     public static final AssetDescriptor<Texture> ENEMY_SNAKE =
         new AssetDescriptor<>("img/enemy_snake.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENEMY_SNAKE_ACT1 =
+        new AssetDescriptor<>("img/enemy_snake_act1.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENEMY_SNAKE_ACT2 =
+        new AssetDescriptor<>("img/enemy_snake_act2.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENEMY_SNAKE_ACT3 =
+        new AssetDescriptor<>("img/enemy_snake_act3.png", Texture.class);
 
     // Boss combat spritesheet (1376x768, 2 rows of 4 frames @ 344x384)
     public static final AssetDescriptor<Texture> BOSS_DAWN_WARDEN =
@@ -87,6 +96,38 @@ public class Assets {
     // Pale Shepherd pursuer spritesheet (1376x768, 2 rows of 4 frames @ 344x384)
     public static final AssetDescriptor<Texture> CHAR_PALE_SHEPHERD =
         new AssetDescriptor<>("img/char_pale_shepherd.png", Texture.class);
+
+    // Ending Story Epilogue Illustrations (16:9 1920x1080 / 1280x720)
+    public static final AssetDescriptor<Texture> ENDING_DAWN_SUMMIT =
+        new AssetDescriptor<>("img/ending_dawn_summit.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_CAT_REST =
+        new AssetDescriptor<>("img/ending_cat_rest.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_TURTLE_REST =
+        new AssetDescriptor<>("img/ending_turtle_rest.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_FOX_REST =
+        new AssetDescriptor<>("img/ending_fox_rest.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_RACCOON_REST =
+        new AssetDescriptor<>("img/ending_raccoon_rest.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_FELLOWSHIP_REST =
+        new AssetDescriptor<>("img/ending_fellowship_rest.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_GUARDIANS_FAREWELL =
+        new AssetDescriptor<>("img/ending_guardians_farewell.png", Texture.class);
+
+    // Victory Epilogue Illustrations (16:9 1920x1080 / 1280x720)
+    public static final AssetDescriptor<Texture> ENDING_DAWN_VICTORY =
+        new AssetDescriptor<>("img/ending_dawn_victory.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_WARDEN_CONCESSION =
+        new AssetDescriptor<>("img/ending_warden_concession.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_CAT_VICTORY =
+        new AssetDescriptor<>("img/ending_cat_victory.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_TURTLE_VICTORY =
+        new AssetDescriptor<>("img/ending_turtle_victory.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_FOX_VICTORY =
+        new AssetDescriptor<>("img/ending_fox_victory.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_RACCOON_VICTORY =
+        new AssetDescriptor<>("img/ending_raccoon_victory.png", Texture.class);
+    public static final AssetDescriptor<Texture> ENDING_FELLOWSHIP_VICTORY =
+        new AssetDescriptor<>("img/ending_fellowship_victory.png", Texture.class);
 
     // =========================================================================
     // In-Game Board: Parallax Act Backgrounds
@@ -195,6 +236,27 @@ public class Assets {
 
     // Background video
     public static final String MENU_VIDEO = "video/menu_bg.webm";
+
+    /**
+     * Helper to retrieve the serpent spritesheet for a specific Act (1 = Emerald, 2 = Sapphire, 3 = Crimson).
+     */
+    public static AssetDescriptor<Texture> getSnakeTextureForAct(int act) {
+        switch (act) {
+            case 2: return ENEMY_SNAKE_ACT2;
+            case 3: return ENEMY_SNAKE_ACT3;
+            case 1:
+            default: return ENEMY_SNAKE_ACT1;
+        }
+    }
+
+    /**
+     * Helper to retrieve the serpent spritesheet based on board tile position.
+     * Act I: 1-30, Act II: 31-70, Act III: 71-100.
+     */
+    public static AssetDescriptor<Texture> getSnakeTextureForPosition(int position) {
+        int act = (position <= 30) ? 1 : ((position <= 70) ? 2 : 3);
+        return getSnakeTextureForAct(act);
+    }
 
     /**
      * Helper to retrieve the texture descriptor for any CharacterClass enum.
@@ -354,6 +416,9 @@ public class Assets {
         manager.load(CHAR_RACCOON_WALK);
         manager.load(LOADING_SNAKE);
         manager.load(ENEMY_SNAKE);
+        manager.load(ENEMY_SNAKE_ACT1);
+        manager.load(ENEMY_SNAKE_ACT2);
+        manager.load(ENEMY_SNAKE_ACT3);
         manager.load(BOSS_DAWN_WARDEN);
         manager.load(CHAR_PALE_SHEPHERD);
         manager.load(CHAR_PALE_SHEPHERD_HEAD);
@@ -402,5 +467,19 @@ public class Assets {
         manager.load(ITEM_SNAKE_DAGGER);
         manager.load(ITEM_FLAME_SWORD);
         manager.load(ITEM_DARK_BLADE);
+        manager.load(ENDING_DAWN_SUMMIT);
+        manager.load(ENDING_CAT_REST);
+        manager.load(ENDING_TURTLE_REST);
+        manager.load(ENDING_FOX_REST);
+        manager.load(ENDING_RACCOON_REST);
+        manager.load(ENDING_FELLOWSHIP_REST);
+        manager.load(ENDING_GUARDIANS_FAREWELL);
+        manager.load(ENDING_DAWN_VICTORY);
+        manager.load(ENDING_WARDEN_CONCESSION);
+        manager.load(ENDING_CAT_VICTORY);
+        manager.load(ENDING_TURTLE_VICTORY);
+        manager.load(ENDING_FOX_VICTORY);
+        manager.load(ENDING_RACCOON_VICTORY);
+        manager.load(ENDING_FELLOWSHIP_VICTORY);
     }
 }

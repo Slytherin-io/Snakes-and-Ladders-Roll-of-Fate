@@ -25,7 +25,7 @@ public class CatAgilitySkill implements ClassSkill {
 
     @Override
     public String getActionSubtext() {
-        return "GUARANTEED 6";
+        return "NEXT ROLL = 6";
     }
 
     @Override
@@ -35,7 +35,7 @@ public class CatAgilitySkill implements ClassSkill {
 
     @Override
     public String getDescription() {
-        return "Feline fortune: Guarantees a maximum roll of 6 on your next dice roll.";
+        return "Makes your next dice roll an automatic 6.";
     }
 
     @Override

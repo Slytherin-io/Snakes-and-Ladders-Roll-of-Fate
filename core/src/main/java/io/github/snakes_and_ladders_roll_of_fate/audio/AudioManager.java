@@ -34,8 +34,10 @@ public class AudioManager {
         ACT3("music_act3", "act3", "act_3", "music_act_3"),
         BATTLE("music_battle", "battle", "combat", "music_combat"),
         BOSS("music_boss", "boss", "music_dawn_warden", "dawn_warden"),
-        VICTORY("music_victory", "victory", "win", "music_win"),
-        DEFEAT("music_defeat", "defeat", "gameover", "music_gameover", "loss");
+        VICTORY("music_victory", "victory", "win", "win_music", "music_win"),
+        DEFEAT("music_defeat", "defeat", "gameover", "music_gameover", "loss"),
+        EPILOGUE_VICTORY("music_epilogue_victory", "music_epilogue", "epilogue_victory", "epilogue", "music_act4", "music_victory"),
+        EPILOGUE_REST("music_epilogue_rest", "epilogue_rest", "music_ending_rest", "music_act5", "music_defeat");
 
         private final String[] aliases;
         MusicTrack(String... aliases) {

@@ -920,10 +920,29 @@ public class GameSummaryScreen implements Screen {
             }
         });
 
-        // 3. MAIN MENU Button (Navigation - Dark leather with muted border)
+        // 3. REPLAY EPILOGUE Button (Allows reviewing the storybook ending anytime)
+        TextButton.TextButtonStyle epilogueStyle = new TextButton.TextButtonStyle();
+        epilogueStyle.up = UIUtils.createRoundedDrawable(260, 60, 14, Color.valueOf("#261933"), Color.valueOf("#a779c2"), 2);
+        epilogueStyle.over = UIUtils.createRoundedDrawable(260, 60, 14, Color.valueOf("#3b2650"), Color.valueOf("#ffd54f"), 2);
+        epilogueStyle.font = buttonFont;
+        epilogueStyle.fontColor = Color.valueOf("#ffd54f");
+
+        TextButton epilogueBtn = new TextButton("REPLAY EPILOGUE", epilogueStyle);
+        UIUtils.addScaleHoverEffect(epilogueBtn);
+        epilogueBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                game.setScreen(new EndingStoryScreen(game, hero, party, endingType));
+            }
+        });
+
+        // 4. MAIN MENU Button (Navigation - Dark leather with muted border)
         TextButton.TextButtonStyle menuStyle = new TextButton.TextButtonStyle();
-        menuStyle.up = UIUtils.createRoundedDrawable(280, 60, 14, Color.valueOf("#4a2307"), Color.valueOf("#854b25"), 2);
-        menuStyle.over = UIUtils.createRoundedDrawable(280, 60, 14, Color.valueOf("#5e2e0a"), Color.valueOf("#c89259"), 2);
+        menuStyle.up = UIUtils.createRoundedDrawable(240, 60, 14, Color.valueOf("#4a2307"), Color.valueOf("#854b25"), 2);
+        menuStyle.over = UIUtils.createRoundedDrawable(240, 60, 14, Color.valueOf("#5e2e0a"), Color.valueOf("#c89259"), 2);
         menuStyle.font = buttonFont;
         menuStyle.fontColor = Color.WHITE;
 
@@ -939,9 +958,10 @@ public class GameSummaryScreen implements Screen {
             }
         });
 
-        table.add(playAgainBtn).size(280, 60).padRight(30);
-        table.add(toggleViewBtn).size(420, 60).padRight(30);
-        table.add(menuBtn).size(280, 60);
+        table.add(playAgainBtn).size(260, 60).padRight(20);
+        table.add(toggleViewBtn).size(420, 60).padRight(20);
+        table.add(epilogueBtn).size(260, 60).padRight(20);
+        table.add(menuBtn).size(240, 60);
 
         return table;
     }

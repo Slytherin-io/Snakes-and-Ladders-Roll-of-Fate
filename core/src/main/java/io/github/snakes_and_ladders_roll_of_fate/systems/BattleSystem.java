@@ -384,12 +384,12 @@ public class BattleSystem {
                     currentState = BattleState.PLAYER_TURN;
                     return;
                 }
-                battleLog = "🛡️ Blocked! Took " + damage + " dmg and riposted for " + riposteDamage + " dmg! "
+                battleLog = "Blocked! Took " + damage + " dmg and riposted for " + riposteDamage + " dmg! "
                     + enemy.getEnemyType() + " collapses!";
                 endBattle(BattleOutcome.VICTORY);
                 return;
             }
-            log.append("🛡️ Blocked! Took ").append(damage).append(" dmg and riposted for ").append(riposteDamage).append(" dmg! ");
+            log.append("Blocked! Took ").append(damage).append(" dmg and riposted for ").append(riposteDamage).append(" dmg! ");
         } else {
             log.append(enemy.getEnemyType()).append(" deals ").append(damage).append(" damage! ");
         }

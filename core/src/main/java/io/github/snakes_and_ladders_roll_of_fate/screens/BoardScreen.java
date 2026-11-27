@@ -3,11 +3,13 @@ package io.github.snakes_and_ladders_roll_of_fate.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.assets.AssetDescriptor;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.TextureData;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -16,6 +18,7 @@ import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.Group;
+import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
@@ -27,6 +30,8 @@ import com.badlogic.gdx.scenes.scene2d.ui.Stack;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
+import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Scaling;
@@ -35,6 +40,7 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -136,10 +142,11 @@ public class BoardScreen implements Screen {
     private BitmapFont shepherdDialogueTitleFont;
     private BitmapFont shepherdDialogueFont;
 
-    // Parallax Slices for the 3 Acts (Far Canopy, Mid Silhouettes, Foreground Ground)
-    private TextureRegion act1Far, act1Mid, act1Ground;
-    private TextureRegion act2Far, act2Mid, act2Ground;
-    private TextureRegion act3Far, act3Mid, act3Ground;
+    // Seamless Repeating Parallax Layers for the 3 Acts (Far Silhouettes, Detailed Forest, Foreground Ground)
+    private Texture act1SilTex, act1TreeTex, act1GroundTex;
+    private Texture act2SilTex, act2TreeTex, act2GroundTex;
+    private Texture act3SilTex, act3TreeTex, act3GroundTex;
+    private final List<Texture> generatedParallaxTextures = new ArrayList<>();
 
     // Layout Alignment Constants (Elevated to give the bottom HUD console generous room)
     private static final float GROUND_BASE_Y = 110f;    // Base anchor of the terrain ground slice
@@ -178,6 +185,27 @@ public class BoardScreen implements Screen {
     private Event activeCurrentEvent;
     private Tile activeCurrentTile;
 
+    // Event D20 Rolling Anticipation Animation State
+    private boolean isD20Rolling = false;
+    private float d20RollElapsed = 0f;
+    private float d20NextTickTime = 0f;
+    private boolean d20Landed = false;
+    private int d20DisplayValue = 1;
+    private int d20FinalRoll = 1;
+    private int d20TargetDc = 10;
+    private boolean d20Succeeded = false;
+    private boolean d20IsTailSlide = false;
+    private String d20PendingTitle;
+    private EventChoice.EventResult d20PendingResult;
+    private boolean d20PendingRetreat = false;
+    private Texture d20EmblemTex;
+    private BitmapFont d20BigNumFont;
+    private Stack d20DieStack;
+    private Label d20NumberLabel;
+    private Label d20StatusLabel;
+    private Table d20StatusBanner;
+    private Drawable d20StatusIdleBg, d20StatusPassBg, d20StatusCritBg, d20StatusFailBg;
+
     // Dice & Animation State
     private int currentRollValue = 6;
     private float diceTumbleTimer = 0f;
@@ -202,6 +230,11 @@ public class BoardScreen implements Screen {
     private Animation<TextureRegion> shepherdIdleAnim;
     private Animation<TextureRegion> shepherdWalkAnim;
     private boolean isShepherdAmbushActive = false;
+
+    // Board Snake Landmark Animations (Act-stratified matching BattleScreen encounters)
+    private Animation<TextureRegion> boardSnakeAnimAct1;
+    private Animation<TextureRegion> boardSnakeAnimAct2;
+    private Animation<TextureRegion> boardSnakeAnimAct3;
 
     // Cinematic Camera Override for Events (e.g. Pale Shepherd Awakening)
     private float cameraFocusOverrideTimer = 0f;
@@ -297,6 +330,28 @@ public class BoardScreen implements Screen {
     private Label actToastTitleLabel;
     private Label actToastSubtitleLabel;
     private int lastTrackedAct = 1;
+
+    // Right-Side Event Happenings Ledger (Idea A: Light Cream, Low-Emphasis Idle, Max 3 Rows)
+    private enum LedgerTone { FATE, GAIN, HAZARD, INFO }
+    private static final class LedgerEntry {
+        final String tag;
+        final String summary;
+        final LedgerTone tone;
+        LedgerEntry(String tag, String summary, LedgerTone tone) {
+            this.tag = tag;
+            this.summary = summary;
+            this.tone = tone;
+        }
+    }
+    private static final int MAX_LEDGER_ENTRIES = 3;
+    private static final float LEDGER_IDLE_ALPHA = 0.60f;
+    private Table boardLedgerCard;
+    private Table boardLedgerRowsTable;
+    private final LinkedList<LedgerEntry> ledgerEntries = new LinkedList<>();
+    private BitmapFont ledgerHeaderFont, ledgerTagFont, ledgerBodyFont;
+    private Drawable ledgerRowBg;
+    private boolean isLedgerHovered = false;
+    private float ledgerPulseTimer = 0f;
 
     // Post-Battle Resolution Transition Fields
     private BattleOutcome pendingBattleOutcome = null;
@@ -431,8 +486,20 @@ public class BoardScreen implements Screen {
         choiceOutcomeBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#5a3616"));
         choiceOutcomeValueFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
         choiceD20Font          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.WHITE);
+        d20BigNumFont          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 54, Color.valueOf("#fff8ea"));
         shepherdDialogueTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
         shepherdDialogueFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.WHITE);
+
+        // Right-Side Event Happenings Ledger Fonts & Procedural D20 Emblem
+        ledgerHeaderFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 17, Color.valueOf("#7c441d"));
+        ledgerTagFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 14, Color.WHITE);
+        ledgerBodyFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 16, Color.valueOf("#361704"));
+        ledgerRowBg      = UIUtils.createRoundedDrawable(374, 48, 8, Color.valueOf("#fffbf2c2"));
+        d20EmblemTex     = UIUtils.createD20EmblemTexture(180);
+        d20StatusIdleBg  = UIUtils.createRoundedDrawable(490, 48, 12, Color.valueOf("#faedd7"), Color.valueOf("#854b25"), 2);
+        d20StatusPassBg  = UIUtils.createRoundedDrawable(490, 48, 12, Color.valueOf("#2e7d4fd8"), Color.valueOf("#7ac997"), 2);
+        d20StatusCritBg  = UIUtils.createRoundedDrawable(490, 48, 12, Color.valueOf("#7a4f12e0"), Color.valueOf("#ffd54f"), 2);
+        d20StatusFailBg  = UIUtils.createRoundedDrawable(490, 48, 12, Color.valueOf("#963030dc"), Color.valueOf("#ef8686"), 2);
 
         // Class Skill Fonts
         skillTitleFont  = UIUtils.createFont("ui/Fredoka-Bold.ttf", 16, nameBrown);
@@ -452,6 +519,7 @@ public class BoardScreen implements Screen {
 
         // --- Build In-Game HUD Overlay ---
         buildPauseButton();
+        buildRightEventLedger();
         buildTopBanner();
         buildActTransitionBanner();
         buildMiniMap();
@@ -591,11 +659,21 @@ public class BoardScreen implements Screen {
                 } else {
                     if (current != null) {
                         topBannerLabel.setText(current.getName().toUpperCase() + " HAS BEEN CLAIMED BY THE PALE SHEPHERD...");
+                        recordBoardHappening("PALE SHEPHERD", current.getName() + " fell in mortal duel.", LedgerTone.HAZARD);
                     }
                     rollButton.setColor(1f, 1f, 1f, 0.5f);
                     turnState = TurnState.TURN_TRANSITION;
                     actionPauseTimer = 1.2f;
                 }
+            } else {
+                // Returning from The Dawn Warden Summit Trial defeat in Multiplayer while teammates still live
+                if (current != null) {
+                    topBannerLabel.setText(current.getName().toUpperCase() + " FINDS PEACE AT THE SUMMIT! NEXT TRAVELER'S TURN...");
+                    recordBoardHappening("SUMMIT TRIAL", current.getName() + " rests at the Summit.", LedgerTone.HAZARD);
+                }
+                rollButton.setColor(1f, 1f, 1f, 0.5f);
+                turnState = TurnState.TURN_TRANSITION;
+                actionPauseTimer = 1.2f;
             }
 
             pendingBattleOutcome = null;
@@ -623,30 +701,90 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Slices the 1024x585 background textures into Far Canopy (Top strip),
-     * Mid Silhouettes (Middle strip), and Ground Platform (Bottom strip)
-     * using exact pixel bounds to eliminate all artifact borders and gaps.
+     * Extracts each biome's 3 parallax strips from the 1024x585 sheets into dedicated,
+     * seamless horizontally-wrapping Textures so linear filtering and infinite scrolling
+     * have zero border halos, seams, or aspect distortion.
      */
     private void initParallaxSlices() {
+        for (Texture tex : generatedParallaxTextures) {
+            if (tex != null) tex.dispose();
+        }
+        generatedParallaxTextures.clear();
+
         Texture bg1 = game.getAssetManager().get(Assets.ACT1_BG);
         Texture bg2 = game.getAssetManager().get(Assets.ACT2_BG);
         Texture bg3 = game.getAssetManager().get(Assets.ACT3_BG);
 
-        // Exact pixel bounds cropped within 100% opaque boundaries to eliminate transparent edge artifacts:
-        // Act 1 (Green Forest):
-        act1Far    = new TextureRegion(bg1, 7, 0, 1010, 264);
-        act1Mid    = new TextureRegion(bg1, 7, 268, 1010, 188);
-        act1Ground = new TextureRegion(bg1, 7, 464, 1010, 108); // row 464..572: 100% solid rock at bottom
+        Pixmap p1 = acquirePixmap(bg1);
+        act1TreeTex   = extractSeamlessLayer(p1, 12, 0,   1000, 255, 48);
+        act1SilTex    = extractSeamlessLayer(p1, 22, 264, 920,  183, 56);
+        act1GroundTex = extractSeamlessLayer(p1, 12, 465, 1002, 107, 36);
+        releasePixmapIfNeeded(bg1, p1);
 
-        // Act 2 (Blue Caverns):
-        act2Far    = new TextureRegion(bg2, 8, 0, 1004, 264);
-        act2Mid    = new TextureRegion(bg2, 8, 268, 998, 188);
-        act2Ground = new TextureRegion(bg2, 10, 464, 1002, 110); // row 464..574: pure ground platform, eliminating mid-strip leak
+        Pixmap p2 = acquirePixmap(bg2);
+        act2TreeTex   = extractSeamlessLayer(p2, 42, 8,   948,  252, 48);
+        act2SilTex    = extractSeamlessLayer(p2, 82, 270, 876,  183, 56);
+        act2GroundTex = extractSeamlessLayer(p2, 22, 460, 970,  112, 36);
+        releasePixmapIfNeeded(bg2, p2);
 
-        // Act 3 (Red Twilight):
-        act3Far    = new TextureRegion(bg3, 7, 0, 1006, 264);
-        act3Mid    = new TextureRegion(bg3, 7, 268, 1004, 188);
-        act3Ground = new TextureRegion(bg3, 6, 464, 1008, 110); // row 464..574: pure ground platform, eliminating mid-strip leak
+        Pixmap p3 = acquirePixmap(bg3);
+        act3TreeTex   = extractSeamlessLayer(p3, 56, 6,   942,  253, 48);
+        act3SilTex    = extractSeamlessLayer(p3, 44, 271, 934,  182, 56);
+        act3GroundTex = extractSeamlessLayer(p3, 12, 461, 996,  112, 36);
+        releasePixmapIfNeeded(bg3, p3);
+    }
+
+    private Pixmap acquirePixmap(Texture tex) {
+        TextureData td = tex.getTextureData();
+        if (!td.isPrepared()) td.prepare();
+        return td.consumePixmap();
+    }
+
+    private void releasePixmapIfNeeded(Texture tex, Pixmap pixmap) {
+        if (tex.getTextureData().disposePixmap()) {
+            pixmap.dispose();
+        }
+    }
+
+    private Texture extractSeamlessLayer(Pixmap src, int cropX, int cropY, int cropW, int cropH, int seamBlend) {
+        int outW = cropW - seamBlend;
+        Pixmap dst = new Pixmap(outW, cropH, Pixmap.Format.RGBA8888);
+        dst.setBlending(Pixmap.Blending.None);
+
+        for (int y = 0; y < cropH; y++) {
+            int sy = cropY + y;
+            for (int x = 0; x < seamBlend; x++) {
+                float t = (x + 0.5f) / seamBlend;
+                float s = t * t * (3f - 2f * t);
+                int pxR = src.getPixel(cropX + outW + x, sy);
+                int pxL = src.getPixel(cropX + x, sy);
+
+                int rR = (pxR >>> 24) & 0xFF, gR = (pxR >>> 16) & 0xFF, bR = (pxR >>> 8) & 0xFF, aR = pxR & 0xFF;
+                int rL = (pxL >>> 24) & 0xFF, gL = (pxL >>> 16) & 0xFF, bL = (pxL >>> 8) & 0xFF, aL = pxL & 0xFF;
+
+                float wR = (1f - s) * (aR / 255f);
+                float wL = s * (aL / 255f);
+                float wSum = wR + wL;
+                int outA = MathUtils.clamp(Math.round((1f - s) * aR + s * aL), 0, 255);
+                int outR = 0, outG = 0, outB = 0;
+                if (wSum > 0.0001f) {
+                    outR = MathUtils.clamp(Math.round((rR * wR + rL * wL) / wSum), 0, 255);
+                    outG = MathUtils.clamp(Math.round((gR * wR + gL * wL) / wSum), 0, 255);
+                    outB = MathUtils.clamp(Math.round((bR * wR + bL * wL) / wSum), 0, 255);
+                }
+                dst.drawPixel(x, y, (outR << 24) | (outG << 16) | (outB << 8) | outA);
+            }
+            for (int x = seamBlend; x < outW; x++) {
+                dst.drawPixel(x, y, src.getPixel(cropX + x, sy));
+            }
+        }
+
+        Texture layerTex = new Texture(dst);
+        dst.dispose();
+        layerTex.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.ClampToEdge);
+        layerTex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        generatedParallaxTextures.add(layerTex);
+        return layerTex;
     }
 
     /**
@@ -674,6 +812,44 @@ public class BoardScreen implements Screen {
             shepherdIdleAnim.setPlayMode(Animation.PlayMode.LOOP);
             shepherdWalkAnim = new Animation<>(0.14f, shepherdGrid[1]);
             shepherdWalkAnim.setPlayMode(Animation.PlayMode.LOOP);
+        }
+
+        // Initialize Board Snake Tile Landmark Idle Animations (Act-stratified matching BattleScreen)
+        // Act I: Forest Green Snake
+        if (game.getAssetManager().isLoaded(Assets.ENEMY_SNAKE_ACT1)) {
+            Texture snakeSheet = game.getAssetManager().get(Assets.ENEMY_SNAKE_ACT1);
+            TextureRegion[] snakeFrames = new TextureRegion[2];
+            snakeFrames[0] = new TextureRegion(snakeSheet, 41, 80, 46, 31);
+            snakeFrames[1] = new TextureRegion(snakeSheet, 128 + 41, 80, 46, 31);
+            boardSnakeAnimAct1 = new Animation<>(0.35f, snakeFrames);
+            boardSnakeAnimAct1.setPlayMode(Animation.PlayMode.LOOP);
+        } else if (game.getAssetManager().isLoaded(Assets.ENEMY_SNAKE)) {
+            Texture snakeSheet = game.getAssetManager().get(Assets.ENEMY_SNAKE);
+            TextureRegion[] snakeFrames = new TextureRegion[2];
+            snakeFrames[0] = new TextureRegion(snakeSheet, 0, 11, 32, 21);
+            snakeFrames[1] = new TextureRegion(snakeSheet, 32, 11, 32, 21);
+            boardSnakeAnimAct1 = new Animation<>(0.35f, snakeFrames);
+            boardSnakeAnimAct1.setPlayMode(Animation.PlayMode.LOOP);
+        }
+
+        // Act II: Sapphire Horned Serpent
+        if (game.getAssetManager().isLoaded(Assets.ENEMY_SNAKE_ACT2)) {
+            Texture snakeSheet = game.getAssetManager().get(Assets.ENEMY_SNAKE_ACT2);
+            TextureRegion[] snakeFrames = new TextureRegion[2];
+            snakeFrames[0] = new TextureRegion(snakeSheet, 32, 45, 84, 66);
+            snakeFrames[1] = new TextureRegion(snakeSheet, 128 + 41, 45, 75, 66);
+            boardSnakeAnimAct2 = new Animation<>(0.35f, snakeFrames);
+            boardSnakeAnimAct2.setPlayMode(Animation.PlayMode.LOOP);
+        }
+
+        // Act III: Crimson Magma Wyrm
+        if (game.getAssetManager().isLoaded(Assets.ENEMY_SNAKE_ACT3)) {
+            Texture snakeSheet = game.getAssetManager().get(Assets.ENEMY_SNAKE_ACT3);
+            TextureRegion[] snakeFrames = new TextureRegion[2];
+            snakeFrames[0] = new TextureRegion(snakeSheet, 43, 43, 72, 67);
+            snakeFrames[1] = new TextureRegion(snakeSheet, 128 + 43, 43, 72, 67);
+            boardSnakeAnimAct3 = new Animation<>(0.35f, snakeFrames);
+            boardSnakeAnimAct3.setPlayMode(Animation.PlayMode.LOOP);
         }
     }
 
@@ -868,12 +1044,12 @@ public class BoardScreen implements Screen {
         Color cooldownBorder = Color.valueOf("#54341e");
 
         skillReadyStyle = new Button.ButtonStyle();
-        skillReadyStyle.up = UIUtils.createRoundedDrawable(185, 120, 20, leatherSolid, containerBorder, 3);
-        skillReadyStyle.over = UIUtils.createRoundedDrawable(185, 120, 20, leatherHover, containerBorder, 3);
+        skillReadyStyle.up = UIUtils.createRoundedDrawable(238, 120, 20, leatherSolid, containerBorder, 3);
+        skillReadyStyle.over = UIUtils.createRoundedDrawable(238, 120, 20, leatherHover, containerBorder, 3);
 
         skillCooldownStyle = new Button.ButtonStyle();
-        skillCooldownStyle.up = UIUtils.createRoundedDrawable(185, 120, 20, cooldownSolid, cooldownBorder, 3);
-        skillCooldownStyle.over = UIUtils.createRoundedDrawable(185, 120, 20, cooldownHover, cooldownBorder, 3);
+        skillCooldownStyle.up = UIUtils.createRoundedDrawable(238, 120, 20, cooldownSolid, cooldownBorder, 3);
+        skillCooldownStyle.over = UIUtils.createRoundedDrawable(238, 120, 20, cooldownHover, cooldownBorder, 3);
 
         skillButton = new Button(skillCooldownStyle);
         UIUtils.addScaleHoverEffect(skillButton);
@@ -886,15 +1062,16 @@ public class BoardScreen implements Screen {
         skillNameLabel.setAlignment(Align.left);
         skillEffectLabel = new Label("ACTION", new Label.LabelStyle(skillEffectFont, Color.valueOf("#e8d5b5")));
         skillEffectLabel.setAlignment(Align.left);
+        skillEffectLabel.setWrap(true);
         skillStatusLabel = new Label("4 TURNS", new Label.LabelStyle(skillSubFont, Color.valueOf("#fbf2dc")));
         skillStatusLabel.setAlignment(Align.left);
 
-        skillTextTable.add(skillNameLabel).left().row();
-        skillTextTable.add(skillEffectLabel).left().padTop(1).row();
-        skillTextTable.add(skillStatusLabel).left().padTop(2);
+        skillTextTable.add(skillNameLabel).width(164).left().row();
+        skillTextTable.add(skillEffectLabel).width(164).left().padTop(1).row();
+        skillTextTable.add(skillStatusLabel).width(164).left().padTop(2);
 
-        skillButton.add(skillIcon).size(38, 38).padLeft(10).padRight(8).center();
-        skillButton.add(skillTextTable).left().padRight(10).center();
+        skillButton.add(skillIcon).size(38, 38).padLeft(12).padRight(8).center();
+        skillButton.add(skillTextTable).width(164).left().padRight(12).center();
 
         skillButton.addListener(new ChangeListener() {
             @Override
@@ -1021,7 +1198,7 @@ public class BoardScreen implements Screen {
         bottomBar.bottom().padBottom(24);
 
         bottomBar.add(inventoryBtn).size(250, 120).padLeft(35);
-        bottomBar.add(skillButton).size(185, 120).padLeft(14);
+        bottomBar.add(skillButton).size(238, 120).padLeft(14);
         bottomBar.add().expandX(); // Push Roll to center
         bottomBar.add(rollButton).size(220, 120);
         bottomBar.add().expandX(); // Push Stats to right
@@ -1507,6 +1684,141 @@ public class BoardScreen implements Screen {
         container.add(pauseBtn).size(164, 70);
 
         hudStage.addActor(container);
+    }
+
+    /**
+     * Right-Side Event Happenings Ledger (Idea A: Soft light cream tone, low emphasis when idle,
+     * zero left border stripes on entries, strictly capped at 3 recent entries).
+     */
+    private void buildRightEventLedger() {
+        boardLedgerCard = new Table();
+        boardLedgerCard.setBackground(UIUtils.createRoundedDrawable(
+            410, 140, 14, Color.valueOf("#faedd7e8"), Color.valueOf("#c8925999"), 2));
+        boardLedgerCard.pad(12, 18, 12, 18);
+        boardLedgerCard.setTouchable(Touchable.enabled);
+        boardLedgerCard.getColor().a = LEDGER_IDLE_ALPHA;
+
+        boardLedgerCard.addListener(new ClickListener() {
+            @Override
+            public void enter(InputEvent event, float x, float y, int pointer, Actor fromActor) {
+                if (pointer == -1) {
+                    isLedgerHovered = true;
+                }
+            }
+
+            @Override
+            public void exit(InputEvent event, float x, float y, int pointer, Actor toActor) {
+                if (pointer == -1) {
+                    isLedgerHovered = false;
+                }
+            }
+        });
+
+        // Header Row: Title + Compact Fate Tag (with generous spacing so they never overlap)
+        Table headerRow = new Table();
+        Label hdrLbl = new Label("EVENT HAPPENINGS", new Label.LabelStyle(ledgerHeaderFont, Color.valueOf("#7c441d")));
+        hdrLbl.setAlignment(Align.left);
+
+        String fateTagText = (board.getActiveModifier() != null)
+            ? board.getActiveModifier().getDisplayName().toUpperCase()
+            : "STANDARD";
+        Table fatePill = new Table();
+        fatePill.setBackground(UIUtils.createRoundedDrawable(170, 24, 12, Color.valueOf("#854b2520"), Color.valueOf("#854b2548"), 1));
+        Label fatePillLbl = new Label(fateTagText, new Label.LabelStyle(choiceTagFont, Color.valueOf("#6d3a17")));
+        fatePillLbl.setAlignment(Align.center);
+        fatePill.add(fatePillLbl).pad(2, 10, 2, 10);
+
+        headerRow.add(hdrLbl).left().expandX().padRight(10);
+        headerRow.add(fatePill).right();
+
+        Table divider = new Table();
+        divider.setBackground(UIUtils.createRoundedDrawable(374, 1, 0, Color.valueOf("#854b2538")));
+
+        boardLedgerRowsTable = new Table();
+        boardLedgerRowsTable.top();
+
+        boardLedgerCard.add(headerRow).width(374).padBottom(6).row();
+        boardLedgerCard.add(divider).size(374, 1).padBottom(8).row();
+        boardLedgerCard.add(boardLedgerRowsTable).width(374).top();
+
+        Table ledgerWrap = new Table();
+        ledgerWrap.setFillParent(true);
+        ledgerWrap.top().right().padTop(104).padRight(35);
+        ledgerWrap.add(boardLedgerCard).width(410).top();
+        hudStage.addActor(ledgerWrap);
+
+        // Seed initial board context without cluttering (max 3 entries)
+        ledgerEntries.clear();
+        String modDesc = (board.getActiveModifier() != null)
+            ? board.getActiveModifier().getDisplayName()
+            : "Balanced Ascent";
+        ledgerEntries.add(new LedgerEntry("FATE MODIFIER", modDesc, LedgerTone.FATE));
+
+        int shepherdTile = game.getPaleShepherdTile();
+        if (shepherdTile > 0) {
+            ledgerEntries.add(new LedgerEntry("PALE SHEPHERD", "Stalking on Tile " + shepherdTile, LedgerTone.HAZARD));
+        } else {
+            ledgerEntries.add(new LedgerEntry("EXPEDITION", "Roll the dice to begin your climb.", LedgerTone.INFO));
+        }
+        refreshBoardLedgerUI();
+    }
+
+    private void recordBoardHappening(String tag, String summary, LedgerTone tone) {
+        if (tag == null || summary == null) return;
+        String cleanTag = tag.replace('\u2022', '-').replace('\n', ' ').trim();
+        String cleanSummary = summary.replace('\u2022', '-').replace('\n', ' ').trim();
+        if (cleanSummary.length() > 74) {
+            cleanSummary = cleanSummary.substring(0, 71).trim() + "...";
+        }
+        ledgerEntries.addFirst(new LedgerEntry(cleanTag.toUpperCase(), cleanSummary, tone != null ? tone : LedgerTone.INFO));
+        while (ledgerEntries.size() > MAX_LEDGER_ENTRIES) {
+            ledgerEntries.removeLast();
+        }
+        ledgerPulseTimer = 2.6f;
+        refreshBoardLedgerUI();
+    }
+
+    private void refreshBoardLedgerUI() {
+        if (boardLedgerRowsTable == null) return;
+        boardLedgerRowsTable.clear();
+
+        for (int i = 0; i < ledgerEntries.size() && i < MAX_LEDGER_ENTRIES; i++) {
+            LedgerEntry entry = ledgerEntries.get(i);
+            Table rowCard = new Table();
+            rowCard.setBackground(ledgerRowBg); // Light borderless row (zero left border)
+            rowCard.pad(7, 11, 7, 11);
+
+            Color tagColor;
+            switch (entry.tone) {
+                case GAIN:   tagColor = Color.valueOf("#1d5c3a"); break;
+                case HAZARD: tagColor = Color.valueOf("#8a2424"); break;
+                case FATE:   tagColor = Color.valueOf("#855918"); break;
+                default:     tagColor = Color.valueOf("#6d3a17"); break;
+            }
+            Label tagLbl = new Label(entry.tag, new Label.LabelStyle(ledgerTagFont, tagColor));
+            tagLbl.setAlignment(Align.left);
+            tagLbl.setWrap(true);
+
+            Label bodyLbl = new Label(entry.summary, new Label.LabelStyle(ledgerBodyFont, Color.valueOf("#361704")));
+            bodyLbl.setAlignment(Align.left);
+            bodyLbl.setWrap(true);
+
+            rowCard.add(tagLbl).width(352).left().row();
+            rowCard.add(bodyLbl).width(352).left().padTop(2);
+
+            float padBot = (i < Math.min(ledgerEntries.size(), MAX_LEDGER_ENTRIES) - 1) ? 7f : 0f;
+            boardLedgerRowsTable.add(rowCard).width(374).padBottom(padBot).row();
+        }
+    }
+
+    private void updateLedgerFocusAlpha(float delta) {
+        if (boardLedgerCard == null) return;
+        if (ledgerPulseTimer > 0f) {
+            ledgerPulseTimer = Math.max(0f, ledgerPulseTimer - delta);
+        }
+        float targetAlpha = (isLedgerHovered || ledgerPulseTimer > 0f) ? 0.96f : LEDGER_IDLE_ALPHA;
+        float curAlpha = boardLedgerCard.getColor().a;
+        boardLedgerCard.getColor().a = MathUtils.lerp(curAlpha, targetAlpha, Math.min(1f, delta * 9f));
     }
 
     /**
@@ -2356,7 +2668,7 @@ public class BoardScreen implements Screen {
                     res.consequences.add("Caught upon descent by The Pale Shepherd at Tile " + shepherdPos + "!");
                     isSlideInterceptedByReaper = true;
                     specialSlideTarget = shepherdPos;
-                    showOutcomeView(cleanTitle, res, true);
+                    showD20RollAnimationView(cleanTitle, tumbleRoll, 10, tumbleRoll >= 10, true, res, true);
                     return;
                 } else {
                     // Safe slide ahead of the reaper
@@ -2378,7 +2690,7 @@ public class BoardScreen implements Screen {
                     res.consequences.add("Slid down to Tile " + dest + ".");
                     isSlideInterceptedByReaper = false;
                     specialSlideTarget = dest;
-                    showOutcomeView(cleanTitle, res, true);
+                    showD20RollAnimationView(cleanTitle, tumbleRoll, 10, tumbleRoll >= 10, true, res, true);
                     return;
                 }
             }
@@ -2396,7 +2708,102 @@ public class BoardScreen implements Screen {
             specialSlideTarget = -1;
         }
 
-        showOutcomeView(cleanTitle, res, false);
+        if (res.difficultyClass > 0) {
+            showD20RollAnimationView(cleanTitle, res.d20Roll, res.difficultyClass, res.checkSucceeded, false, res, false);
+        } else {
+            showOutcomeView(cleanTitle, res, false);
+        }
+    }
+
+    /**
+     * Intermediate D20 rolling anticipation stage displayed inside the event scroll before
+     * revealing the outcome consequences.
+     */
+    private void showD20RollAnimationView(String choiceTitle, int finalRoll, int targetDc,
+                                          boolean succeeded, boolean isTailSlide,
+                                          EventChoice.EventResult res, boolean isRetreat) {
+        eventContentTable.clear();
+        isD20Rolling = true;
+        d20RollElapsed = 0f;
+        d20NextTickTime = 0f;
+        d20Landed = false;
+        d20FinalRoll = MathUtils.clamp(finalRoll, 1, 20);
+        d20TargetDc = Math.max(1, targetDc);
+        d20Succeeded = succeeded;
+        d20IsTailSlide = isTailSlide;
+        d20PendingTitle = choiceTitle;
+        d20PendingResult = res;
+        d20PendingRetreat = isRetreat;
+
+        setEventBadge(isTailSlide ? "ACROBATICS D20 CHECK" : "D20 FATE CHECK", Color.valueOf("#8f5e16"));
+
+        Label titleLbl = new Label(choiceTitle, new Label.LabelStyle(choiceOutcomeTitleFont, Color.valueOf("#361704")));
+        titleLbl.setAlignment(Align.center);
+        titleLbl.setWrap(true);
+        eventContentTable.add(titleLbl).width(540).padTop(4).padBottom(6).center().row();
+
+        String dcText = isTailSlide
+            ? "ACROBATICS TUMBLE  -  10+ HALVES FALL / 20 NO DAMAGE"
+            : ("TARGET: ROLL " + d20TargetDc + "+ ON D20");
+        Table targetPill = new Table();
+        targetPill.setBackground(UIUtils.createRoundedDrawable(420, 32, 16, Color.valueOf("#5a2d0c"), Color.valueOf("#c89259"), 2));
+        Label targetLbl = new Label(dcText, new Label.LabelStyle(choiceTagFont, Color.valueOf("#ffd54f")));
+        targetLbl.setAlignment(Align.center);
+        targetPill.add(targetLbl).pad(4, 16, 4, 16);
+        eventContentTable.add(targetPill).size(420, 32).padBottom(14).center().row();
+
+        d20DisplayValue = MathUtils.random(1, 20);
+        Image emblemImg = new Image(d20EmblemTex);
+        emblemImg.setScaling(Scaling.fit);
+
+        d20NumberLabel = new Label(String.valueOf(d20DisplayValue), new Label.LabelStyle(d20BigNumFont, Color.valueOf("#fff8ea")));
+        d20NumberLabel.setAlignment(Align.center);
+
+        d20DieStack = new Stack();
+        d20DieStack.add(emblemImg);
+        d20DieStack.add(d20NumberLabel);
+        d20DieStack.setSize(166, 166);
+        d20DieStack.setOrigin(Align.center);
+        d20DieStack.setTransform(true);
+
+        eventContentTable.add(d20DieStack).size(166, 166).padBottom(14).center().row();
+
+        d20StatusLabel = new Label("ROLLING THE DIE OF FATE...", new Label.LabelStyle(choiceD20Font, Color.WHITE));
+        d20StatusLabel.setColor(Color.valueOf("#361704"));
+        d20StatusLabel.setAlignment(Align.center);
+
+        d20StatusBanner = new Table();
+        d20StatusBanner.setBackground(d20StatusIdleBg);
+        d20StatusBanner.add(d20StatusLabel).width(470).center();
+        eventContentTable.add(d20StatusBanner).size(490, 48).padBottom(12).center().row();
+
+        TextButton skipRollBtn = new TextButton("TAP TO REVEAL", cancelEventChoiceBtnStyle);
+        skipRollBtn.getLabel().setFontScale(0.85f);
+        UIUtils.addScaleHoverEffect(skipRollBtn);
+        skipRollBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent evt, Actor actor) {
+                if (!isD20Rolling) return;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                finishD20RollAnimation();
+            }
+        });
+        eventContentTable.add(skipRollBtn).size(220, 38).center().row();
+
+        if (game.getAudioManager() != null) {
+            game.getAudioManager().playSound(AudioManager.SoundEffect.DICE_ROLL);
+        }
+    }
+
+    private void finishD20RollAnimation() {
+        isD20Rolling = false;
+        d20Landed = false;
+        if (d20PendingResult != null) {
+            showOutcomeView(d20PendingTitle, d20PendingResult, d20PendingRetreat);
+            d20PendingResult = null;
+        }
     }
 
     /**
@@ -2563,7 +2970,7 @@ public class BoardScreen implements Screen {
         titleLbl.setAlignment(Align.center);
         eventContentTable.add(titleLbl).padTop(8).padBottom(2).center().row();
 
-        Label subLbl = new Label("Choose an item from your satchel to trade for an equal-tier " + cat.getDisplayName() + ":",
+        Label subLbl = new Label("Choose an item from your satchel to trade for a matching-tier item (" + cat.getDisplayName() + "):",
             new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
@@ -2589,10 +2996,10 @@ public class BoardScreen implements Screen {
                 previewReward = ItemGenerator.generateEqualBarterReward(tier, cat);
             }
 
-            // High-readability Structured Barter Card
+            // High-readability Structured Barter Card (strictly bounded widths prevent overflow)
             Button itemCard = new Button(eventChoiceCardStyle);
             UIUtils.addScaleHoverEffect(itemCard);
-            itemCard.pad(6, 16, 6, 16);
+            itemCard.pad(8, 16, 8, 16);
 
             Table leftTable = new Table();
             leftTable.left();
@@ -2600,15 +3007,17 @@ public class BoardScreen implements Screen {
             // Line 1: GIVE item
             Table giveRow = new Table();
             giveRow.left();
-            Label giveTag = new Label("GIVE: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#e8be8b")));
+            Label giveTag = new Label("GIVE:", new Label.LabelStyle(choiceTagFont, Color.valueOf("#e8be8b")));
             Label giveName = new Label(it.getName(), new Label.LabelStyle(choiceCardTitleFont, Color.valueOf("#fff8ea")));
-            giveRow.add(giveTag).left().padRight(4);
-            giveRow.add(giveName).left();
+            giveName.setAlignment(Align.left);
+            giveName.setWrap(true);
+            giveRow.add(giveTag).left().padRight(6);
+            giveRow.add(giveName).width(334).left();
 
             // Line 2: RECEIVE item + concise effect preview
             Table receiveRow = new Table();
             receiveRow.left();
-            Label receiveTag = new Label("RECEIVE: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#95d5aa")));
+            Label receiveTag = new Label("RECEIVE:", new Label.LabelStyle(choiceTagFont, Color.valueOf("#95d5aa")));
 
             String eff = previewReward.getEffect();
             if (eff != null && eff.contains("(")) {
@@ -2621,11 +3030,13 @@ public class BoardScreen implements Screen {
                 rewardDesc = previewReward.getName() + (eff != null && !eff.isEmpty() ? " (" + eff + ")" : "");
             }
             Label receiveName = new Label(rewardDesc, new Label.LabelStyle(choiceBtnFont, Color.valueOf("#dcf7e4")));
-            receiveRow.add(receiveTag).left().padRight(4);
-            receiveRow.add(receiveName).left();
+            receiveName.setAlignment(Align.left);
+            receiveName.setWrap(true);
+            receiveRow.add(receiveTag).top().left().padRight(6);
+            receiveRow.add(receiveName).width(310).left();
 
-            leftTable.add(giveRow).left().row();
-            leftTable.add(receiveRow).left().padTop(2);
+            leftTable.add(giveRow).width(386).left().row();
+            leftTable.add(receiveRow).width(386).left().padTop(3);
 
             // Right Pill Badge: Tier or Purify
             Table tagPill = new Table();
@@ -2641,13 +3052,13 @@ public class BoardScreen implements Screen {
                 tagColor = (tier == 1) ? Color.valueOf("#4a6b36") : ((tier == 2) ? Color.valueOf("#855918") : Color.valueOf("#7a2b6e"));
                 tagBorder = (tier == 1) ? Color.valueOf("#89bf6b") : ((tier == 2) ? Color.valueOf("#cfa259") : Color.valueOf("#d46ebc"));
             }
-            tagPill.setBackground(UIUtils.createRoundedDrawable(90, 24, 6, tagColor, tagBorder, 2));
+            tagPill.setBackground(UIUtils.createRoundedDrawable(92, 26, 6, tagColor, tagBorder, 2));
             Label tagLbl = new Label(tagText, new Label.LabelStyle(choiceTagFont, Color.WHITE));
             tagLbl.setAlignment(Align.center);
             tagPill.add(tagLbl).pad(2, 8, 2, 8);
 
-            itemCard.add(leftTable).expandX().left().padRight(8);
-            itemCard.add(tagPill).right();
+            itemCard.add(leftTable).width(386).left().padRight(10);
+            itemCard.add(tagPill).width(92).right();
 
             itemCard.addListener(new ChangeListener() {
                 @Override
@@ -2679,7 +3090,7 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Equal Barter Completed", res, false);
                 }
             });
-            eventContentTable.add(itemCard).width(530).minHeight(56).padBottom(6).center().row();
+            eventContentTable.add(itemCard).width(530).minHeight(60).padBottom(6).center().row();
         }
 
         TextButton cancelBtn = new TextButton("CANCEL & RETURN", cancelEventChoiceBtnStyle);
@@ -2720,7 +3131,7 @@ public class BoardScreen implements Screen {
 
             Button swapCard = new Button(eventChoiceCardStyle);
             UIUtils.addScaleHoverEffect(swapCard);
-            swapCard.pad(6, 16, 6, 16);
+            swapCard.pad(8, 16, 8, 16);
 
             Table leftTable = new Table();
             leftTable.left();
@@ -2728,36 +3139,40 @@ public class BoardScreen implements Screen {
             // Row 1: DISCARD existing
             Table discardRow = new Table();
             discardRow.left();
-            Label discardTag = new Label("DISCARD: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#e8998b")));
+            Label discardTag = new Label("DISCARD:", new Label.LabelStyle(choiceTagFont, Color.valueOf("#e8998b")));
             Label discardName = new Label(existing.getName(), new Label.LabelStyle(choiceCardTitleFont, Color.valueOf("#fff8ea")));
-            discardRow.add(discardTag).left().padRight(4);
-            discardRow.add(discardName).left();
+            discardName.setAlignment(Align.left);
+            discardName.setWrap(true);
+            discardRow.add(discardTag).left().padRight(6);
+            discardRow.add(discardName).width(310).left();
 
             // Row 2: TAKE new item
             Table takeRow = new Table();
             takeRow.left();
-            Label takeTag = new Label("TAKE: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#95d5aa")));
+            Label takeTag = new Label("TAKE:", new Label.LabelStyle(choiceTagFont, Color.valueOf("#95d5aa")));
             String cleanEff = newItem.getEffect();
             if (cleanEff != null && cleanEff.contains("(")) {
                 cleanEff = cleanEff.substring(0, cleanEff.indexOf('(')).trim();
             }
             String takeDesc = newItem.getName() + (cleanEff != null && !cleanEff.isEmpty() ? " (" + cleanEff + ")" : "");
             Label takeName = new Label(takeDesc, new Label.LabelStyle(choiceBtnFont, Color.valueOf("#dcf7e4")));
-            takeRow.add(takeTag).left().padRight(4);
-            takeRow.add(takeName).left();
+            takeName.setAlignment(Align.left);
+            takeName.setWrap(true);
+            takeRow.add(takeTag).top().left().padRight(6);
+            takeRow.add(takeName).width(332).left();
 
-            leftTable.add(discardRow).left().row();
-            leftTable.add(takeRow).left().padTop(2);
+            leftTable.add(discardRow).width(386).left().row();
+            leftTable.add(takeRow).width(386).left().padTop(3);
 
             // Right Pill Badge: REPLACE
             Table tagPill = new Table();
-            tagPill.setBackground(UIUtils.createRoundedDrawable(90, 24, 6, Color.valueOf("#8a2e24"), Color.valueOf("#d46e66"), 2));
+            tagPill.setBackground(UIUtils.createRoundedDrawable(92, 26, 6, Color.valueOf("#8a2e24"), Color.valueOf("#d46e66"), 2));
             Label tagLbl = new Label("REPLACE", new Label.LabelStyle(choiceTagFont, Color.WHITE));
             tagLbl.setAlignment(Align.center);
             tagPill.add(tagLbl).pad(2, 8, 2, 8);
 
-            swapCard.add(leftTable).expandX().left().padRight(8);
-            swapCard.add(tagPill).right();
+            swapCard.add(leftTable).width(386).left().padRight(10);
+            swapCard.add(tagPill).width(92).right();
 
             swapCard.addListener(new ChangeListener() {
                 @Override
@@ -2771,7 +3186,7 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Item Swapped", res, false);
                 }
             });
-            eventContentTable.add(swapCard).width(530).minHeight(56).padBottom(6).center().row();
+            eventContentTable.add(swapCard).width(530).minHeight(60).padBottom(6).center().row();
         }
 
         TextButton leaveBtn = new TextButton("LEAVE " + newItem.getName().toUpperCase() + " BEHIND", cancelEventChoiceBtnStyle);
@@ -2799,7 +3214,23 @@ public class BoardScreen implements Screen {
      * and semantically color-coded consequences inside an auto-sized parchment inset card.
      */
     private void showOutcomeView(String choiceTitle, EventChoice.EventResult res, boolean isRetreat) {
+        isD20Rolling = false;
         eventContentTable.clear();
+
+        if (res != null && res.consequences != null && !res.consequences.isEmpty()) {
+            String firstConseq = res.consequences.get(0);
+            LedgerTone tone = LedgerTone.INFO;
+            if (res.difficultyClass > 0) {
+                tone = res.checkSucceeded ? LedgerTone.GAIN : LedgerTone.HAZARD;
+            } else if (firstConseq.contains(": +") || firstConseq.startsWith("Acquired")) {
+                tone = LedgerTone.GAIN;
+            } else if (firstConseq.contains(": -") || isRetreat || firstConseq.contains("lashed out")) {
+                tone = LedgerTone.HAZARD;
+            }
+            Player cur = game.getCurrentPlayer();
+            String tileTag = (cur != null) ? ("TILE " + cur.getPosition() + " - " + choiceTitle) : choiceTitle;
+            recordBoardHappening(tileTag, firstConseq, tone);
+        }
 
         setEventBadge("EVENT RESOLUTION", Color.valueOf("#7a4823"));
 
@@ -2810,8 +3241,8 @@ public class BoardScreen implements Screen {
 
         // D20 Skill Check Outcome Banner (if applicable)
         if (res.difficultyClass > 0) {
-            Color d20Color = res.checkSucceeded ? Color.valueOf("#1d5c3a") : Color.valueOf("#8a2424");
-            Color d20Border = res.checkSucceeded ? Color.valueOf("#113b24") : Color.valueOf("#5e1414");
+            Color d20Color = res.checkSucceeded ? Color.valueOf("#2e7d4fd8") : Color.valueOf("#963030dc");
+            Color d20Border = res.checkSucceeded ? Color.valueOf("#7ac997") : Color.valueOf("#ef8686");
             String d20Text = String.format("D20 CHECK: ROLLED %d (DC %d) - %s",
                 res.d20Roll, res.difficultyClass, (res.checkSucceeded ? "SUCCESS!" : "FAILED!"));
 
@@ -2913,6 +3344,8 @@ public class BoardScreen implements Screen {
      * Closes the active event modal and smoothly transitions turn or handles movement.
      */
     private void closeEventModal() {
+        isD20Rolling = false;
+        d20PendingResult = null;
         modalScrim.setVisible(false);
         eventModalTable.setVisible(false);
         isEventModalActive = false;
@@ -3081,9 +3514,9 @@ public class BoardScreen implements Screen {
 
         // 2. Clear Screen with smoothly interpolated Act Atmospheric Sky Color
         float camTilePos = 1f + (worldCamera.position.x - FIRST_TILE_X) / TILE_SPACING;
-        Color act1Sky = Color.valueOf("#42828a"); // Act 1 Atmospheric forest teal daytime sky
-        Color act2Sky = Color.valueOf("#183864"); // Act 2 Vibrant deep sapphire twilight sky
-        Color act3Sky = Color.valueOf("#4a1424"); // Act 3 Dramatic crimson twilight sky
+        Color act1Sky = Color.valueOf("#2d5b61"); // Act 1 Misty forest teal sky matching canopy haze
+        Color act2Sky = Color.valueOf("#1a4074"); // Act 2 Deep sapphire cavern sky
+        Color act3Sky = Color.valueOf("#39263d"); // Act 3 Dusky plum twilight sky matching blood-moon dusk
 
         Color skyColor;
         if (camTilePos <= 27f) {
@@ -3127,6 +3560,7 @@ public class BoardScreen implements Screen {
      * Updates movement state machine, dice tumbling, and tile triggers.
      */
     private void updateTurnLogic(float delta) {
+        updateLedgerFocusAlpha(delta);
         Player player = game.getCurrentPlayer();
         if (player == null) return;
 
@@ -3217,7 +3651,72 @@ public class BoardScreen implements Screen {
                 break;
 
             case RESOLVING_TILE_EVENT:
-                // Paused waiting for user interaction on the interactive event modal
+                if (isD20Rolling) {
+                    d20RollElapsed += delta;
+                    final float rollDuration = 0.95f;
+                    final float totalDuration = 2.60f;
+
+                    if (!d20Landed && d20RollElapsed < rollDuration) {
+                        if (d20RollElapsed >= d20NextTickTime) {
+                            int nextVal = MathUtils.random(1, 20);
+                            if (nextVal == d20DisplayValue) {
+                                nextVal = (nextVal % 20) + 1;
+                            }
+                            d20DisplayValue = nextVal;
+                            if (d20NumberLabel != null) {
+                                d20NumberLabel.setText(String.valueOf(d20DisplayValue));
+                            }
+                            if (d20DieStack != null) {
+                                d20DieStack.setRotation(MathUtils.random(-15f, 15f));
+                                d20DieStack.setScale(MathUtils.random(0.94f, 1.12f));
+                            }
+                            float progress = d20RollElapsed / rollDuration;
+                            float tickDelay = MathUtils.lerp(0.045f, 0.145f, progress * progress);
+                            d20NextTickTime = d20RollElapsed + tickDelay;
+                        }
+                    } else if (!d20Landed) {
+                        d20Landed = true;
+                        if (d20NumberLabel != null) {
+                            d20NumberLabel.setText(String.valueOf(d20FinalRoll));
+                        }
+                        if (d20DieStack != null) {
+                            d20DieStack.setRotation(0f);
+                            d20DieStack.clearActions();
+                            d20DieStack.addAction(Actions.sequence(
+                                Actions.scaleTo(1.26f, 1.26f, 0.08f, Interpolation.pow2Out),
+                                Actions.scaleTo(1.0f, 1.0f, 0.16f, Interpolation.bounceOut)
+                            ));
+                        }
+                        if (d20StatusBanner != null && d20StatusLabel != null) {
+                            if (d20FinalRoll == 20) {
+                                d20StatusBanner.setBackground(d20StatusCritBg);
+                                d20StatusLabel.setColor(Color.valueOf("#fff4be"));
+                                d20StatusLabel.setText("NATURAL 20!  -  CRITICAL TRIUMPH!");
+                            } else if (d20Succeeded) {
+                                d20StatusBanner.setBackground(d20StatusPassBg);
+                                d20StatusLabel.setColor(Color.WHITE);
+                                d20StatusLabel.setText(d20IsTailSlide
+                                    ? ("ROLLED " + d20FinalRoll + "  -  CUSHIONED TUMBLE!")
+                                    : ("ROLLED " + d20FinalRoll + " (DC " + d20TargetDc + ")  -  SUCCEEDED!"));
+                            } else {
+                                d20StatusBanner.setBackground(d20StatusFailBg);
+                                d20StatusLabel.setColor(Color.WHITE);
+                                d20StatusLabel.setText(d20IsTailSlide
+                                    ? ("ROLLED " + d20FinalRoll + "  -  HARD FALL!")
+                                    : ("ROLLED " + d20FinalRoll + " (DC " + d20TargetDc + ")  -  FAILED!"));
+                            }
+                        }
+                        if (game.getAudioManager() != null) {
+                            if (d20Succeeded || d20FinalRoll == 20) {
+                                game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL, 0.7f);
+                            } else {
+                                game.getAudioManager().playSound(AudioManager.SoundEffect.PLAYER_HURT, 0.65f);
+                            }
+                        }
+                    } else if (d20RollElapsed >= totalDuration) {
+                        finishD20RollAnimation();
+                    }
+                }
                 break;
 
             case TILE_ACTION_PAUSE:
@@ -3401,7 +3900,7 @@ public class BoardScreen implements Screen {
                             return;
                         }
                     }
-                    if (player.getPosition() >= 100) {
+                    if (player.getHealth() > 0 && player.getPosition() >= 100) {
                         triggerDawnWardenSummitTrial(player);
                         return;
                     }
@@ -3540,6 +4039,7 @@ public class BoardScreen implements Screen {
         cameraFocusOverrideTimer = 3.2f;
         reaperAwakenTimer = 3.2f;
         topBannerLabel.setText("A CHILLING SHADOW RISES... THE PALE SHEPHERD AWAKENS ON TILE 1!");
+        recordBoardHappening("PALE SHEPHERD", "Awakened on Tile 1! Pursuit begins.", LedgerTone.HAZARD);
         if (game.getAudioManager() != null) {
             game.getAudioManager().playSound(AudioManager.SoundEffect.REAPER_APPEAR);
         }
@@ -3690,9 +4190,11 @@ public class BoardScreen implements Screen {
         }
 
         if (interceptedPlayer != null) {
+            recordBoardHappening("PALE SHEPHERD", "Intercepted " + interceptedPlayer.getName() + " on Tile " + game.getPaleShepherdTile() + "!", LedgerTone.HAZARD);
             showPaleShepherdBoardDialogue(interceptedPlayer);
         } else if (speed > 0) {
             topBannerLabel.setText("THE PALE SHEPHERD ADVANCES TO TILE " + game.getPaleShepherdTile() + " (+" + speed + " TILES)!");
+            recordBoardHappening("PALE SHEPHERD", "Advanced to Tile " + game.getPaleShepherdTile() + " (+" + speed + " tiles)", LedgerTone.HAZARD);
         }
     }
 
@@ -3865,8 +4367,10 @@ public class BoardScreen implements Screen {
                 player.gainExperience(expEarned);
                 if (wasUnrevealed) {
                     topBannerLabel.setText("DISCOVERY! " + player.getName().toUpperCase() + " UNCOVERED A CELESTIAL LADDER ON TILE " + tileIndex + " -> TILE " + dest + "! (+" + (expEarned + discoveryBonus) + " EXP)");
+                    recordBoardHappening("TILE " + tileIndex + " - LADDER", "Climbed to Tile " + dest + " (+" + (expEarned + discoveryBonus) + " EXP)", LedgerTone.GAIN);
                 } else {
                     topBannerLabel.setText("STABLE ASCENT ON TILE " + tileIndex + "! CLIMBING UP TO TILE " + dest + "! (+" + expEarned + " EXP)");
+                    recordBoardHappening("TILE " + tileIndex + " - LADDER", "Climbed to Tile " + dest + " (+" + expEarned + " EXP)", LedgerTone.GAIN);
                 }
                 updateHudDisplay();
                 startSpecialMove(tileIndex, dest, true);
@@ -3908,6 +4412,7 @@ public class BoardScreen implements Screen {
                 if (isItemMovement) {
                     isItemMovement = false;
                     topBannerLabel.setText(player.getName().toUpperCase() + " ADVANCED TO TILE " + tileIndex + " - SAFE GROUND. ROLL THE DICE!");
+                    recordBoardHappening("TILE " + tileIndex + " - SAFE GROUND", player.getName() + " advanced (+ " + expEarned + " EXP)", LedgerTone.GAIN);
                     turnState = TurnState.WAITING_FOR_ROLL;
                 } else {
                     if (tileIndex == 30) {
@@ -3917,6 +4422,7 @@ public class BoardScreen implements Screen {
                         int cleansed = player.cleanseCurses();
                         String cleanseNote = cleansed > 0 ? " (" + cleansed + " CURSE(S) PURIFIED!)" : "";
                         topBannerLabel.setText(player.getName().toUpperCase() + " REACHED SANCTUARY (ACT I FINALE)! REST BEFORE ENTERING THE SUNKEN RUINS." + cleanseNote);
+                        recordBoardHappening("SANCTUARY - TILE 30", "Entered Sunken Ruins (+" + expEarned + " EXP)" + (cleansed > 0 ? ", " + cleansed + " purified" : ""), LedgerTone.FATE);
                     } else if (tileIndex == 70) {
                         if (game.getAudioManager() != null) {
                             game.getAudioManager().playSound(AudioManager.SoundEffect.SANCTUARY_HEAL);
@@ -3924,10 +4430,13 @@ public class BoardScreen implements Screen {
                         int cleansed = player.cleanseCurses();
                         String cleanseNote = cleansed > 0 ? " (" + cleansed + " CURSE(S) PURIFIED!)" : "";
                         topBannerLabel.setText(player.getName().toUpperCase() + " REACHED THE ABYSS GATE (ACT II FINALE)! GIRD RESOLVE FOR THE INFERNAL VOID." + cleanseNote);
+                        recordBoardHappening("ABYSS GATE - TILE 70", "Entered Infernal Void (+" + expEarned + " EXP)" + (cleansed > 0 ? ", " + cleansed + " purified" : ""), LedgerTone.FATE);
                     } else if (wasUnrevealed) {
                         topBannerLabel.setText(player.getName().toUpperCase() + " UNCOVERED TILE " + tileIndex + " - SAFE GROUND. (+" + expEarned + " EXP)");
+                        recordBoardHappening("TILE " + tileIndex + " - DISCOVERED", player.getName() + " gained +" + expEarned + " EXP", LedgerTone.GAIN);
                     } else {
                         topBannerLabel.setText(player.getName().toUpperCase() + " REACHED TILE " + tileIndex + " - SAFE GROUND. (+" + expEarned + " EXP)");
+                        recordBoardHappening("TILE " + tileIndex + " - SAFE GROUND", player.getName() + " gained +" + expEarned + " EXP", LedgerTone.INFO);
                     }
                     turnState = TurnState.TILE_ACTION_PAUSE;
                     actionPauseTimer = 0.8f;
@@ -3983,11 +4492,8 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Renders seamlessly composited multi-layer parallax backgrounds with smooth crossfading between Acts.
-     * Layering order (from back to front):
-     * 1. Layer 3 (Far Canopy & Sky): Sits in the back, extends to screen top, 0.15x parallax.
-     * 2. Layer 2 (Midground Silhouettes & Ruins): Sits behind the ground ledge, 0.35x parallax.
-     * 3. Layer 1 (Foreground Ground Platform): Anchored at y=0, turf embeds stepping stones, 1.0x scroll.
+     * Renders seamlessly composited multi-layer parallax backgrounds in true depth order
+     * (Far Silhouettes -> Main Detailed Forest -> Foreground Terrain Ground) with smooth Act crossfading.
      */
     private void renderParallaxBackground(float camTilePos) {
         float camX = worldCamera.position.x;
@@ -3995,13 +4501,12 @@ public class BoardScreen implements Screen {
         float viewW = worldCamera.viewportWidth;
         float viewH = worldCamera.viewportHeight;
         float leftVisible = camX - viewW / 2f;
-        float rightVisible = camX + viewW / 2f;
         float bottomVisible = camY - viewH / 2f;
 
-        // 0. Subterranean Foundation (Layer 0) - Smoothly interpolated
+        // 0. Subterranean Foundation (Layer 0) - Pixel-matched to each Act's ground bottom edge
         Color act1Lower = Color.valueOf("#20202a");
-        Color act2Lower = Color.valueOf("#0a204f");
-        Color act3Lower = Color.valueOf("#2e1534");
+        Color act2Lower = Color.valueOf("#173066");
+        Color act3Lower = Color.valueOf("#311634");
 
         Color lowerBgColor;
         if (camTilePos <= 27f) {
@@ -4018,74 +4523,75 @@ public class BoardScreen implements Screen {
             lowerBgColor = act3Lower;
         }
         float foundationBottom = bottomVisible - 100f;
-        float foundationTop = GROUND_BASE_Y + 25f;
+        float foundationTop = GROUND_BASE_Y + 65f;
         float foundationH = Math.max(50f, foundationTop - foundationBottom);
         batch.setColor(lowerBgColor);
         batch.draw(whitePixelTex, leftVisible - 200f, foundationBottom, viewW + 400f, foundationH);
         batch.setColor(Color.WHITE);
 
-        // 1, 2, 3. Parallax Layers Crossfade
+        Texture silA, treeA, groundA;
+        Texture silB = null, treeB = null, groundB = null;
+        float blend = 0f;
+
         if (camTilePos <= 27f) {
-            drawParallaxSliceSet(act1Far, act1Mid, act1Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+            silA = act1SilTex; treeA = act1TreeTex; groundA = act1GroundTex;
         } else if (camTilePos < 33f) {
-            float blend = Interpolation.smooth.apply((camTilePos - 27f) / 6f);
-            drawParallaxSliceSet(act1Far, act1Mid, act1Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
-            drawParallaxSliceSet(act2Far, act2Mid, act2Ground, blend, camX, leftVisible, rightVisible, viewH);
+            blend = Interpolation.smooth.apply((camTilePos - 27f) / 6f);
+            silA = act1SilTex; treeA = act1TreeTex; groundA = act1GroundTex;
+            silB = act2SilTex; treeB = act2TreeTex; groundB = act2GroundTex;
         } else if (camTilePos <= 67f) {
-            drawParallaxSliceSet(act2Far, act2Mid, act2Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+            silA = act2SilTex; treeA = act2TreeTex; groundA = act2GroundTex;
         } else if (camTilePos < 73f) {
-            float blend = Interpolation.smooth.apply((camTilePos - 67f) / 6f);
-            drawParallaxSliceSet(act2Far, act2Mid, act2Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
-            drawParallaxSliceSet(act3Far, act3Mid, act3Ground, blend, camX, leftVisible, rightVisible, viewH);
+            blend = Interpolation.smooth.apply((camTilePos - 67f) / 6f);
+            silA = act2SilTex; treeA = act2TreeTex; groundA = act2GroundTex;
+            silB = act3SilTex; treeB = act3TreeTex; groundB = act3GroundTex;
         } else {
-            drawParallaxSliceSet(act3Far, act3Mid, act3Ground, 1.0f, camX, leftVisible, rightVisible, viewH);
+            silA = act3SilTex; treeA = act3TreeTex; groundA = act3GroundTex;
         }
+
+        // Depth Pass 1: Far Silhouettes & Ruins (0.12x parallax, softly blended against sky haze)
+        float silAlpha = 0.52f;
+        float silY = GROUND_BASE_Y + 235f;
+        float silH = 440f;
+        drawRepeatLayer(silA, (silB != null ? (1f - blend) * silAlpha : silAlpha), camX, leftVisible, viewW, silY, silH, 0.12f);
+        if (silB != null) {
+            drawRepeatLayer(silB, blend * silAlpha, camX, leftVisible, viewW, silY, silH, 0.12f);
+        }
+
+        // Depth Pass 2: Main Detailed Forest & Blood Moon (0.35x parallax, grounded behind turf ridge)
+        float treeY = GROUND_BASE_Y + 62f;
+        float treeH = 560f;
+        drawRepeatLayer(treeA, 1.0f, camX, leftVisible, viewW, treeY, treeH, 0.35f);
+        if (treeB != null) {
+            drawRepeatLayer(treeB, blend, camX, leftVisible, viewW, treeY, treeH, 0.35f);
+        }
+
+        // Depth Pass 3: Foreground Terrain Ground Platform (1.0x world-locked scroll)
+        float groundY = GROUND_BASE_Y;
+        float groundH = 248f;
+        drawRepeatLayer(groundA, 1.0f, camX, leftVisible, viewW, groundY, groundH, 1.0f);
+        if (groundB != null) {
+            drawRepeatLayer(groundB, blend, camX, leftVisible, viewW, groundY, groundH, 1.0f);
+        }
+
+        batch.setColor(Color.WHITE);
     }
 
-    private void drawParallaxSliceSet(TextureRegion farSlice, TextureRegion midSlice, TextureRegion groundSlice, float alpha,
-                                      float camX, float leftVisible, float rightVisible, float viewH) {
-        if (alpha <= 0.001f) return;
+    private void drawRepeatLayer(Texture tex, float alpha, float camX, float leftVisible, float viewW,
+                                 float layerY, float layerH, float parallaxSpeed) {
+        if (tex == null || alpha <= 0.001f) return;
 
-        // 1. Layer 3 (Backdrop): Far Canopy / Deep Forest (0.15x parallax)
-        float farH = Math.max(1050f, viewH) + 380f;
-        float farW = farH * ((float) farSlice.getRegionWidth() / farSlice.getRegionHeight());
-        float stepFar = farW - 2f;
-        float farOffset = (camX * 0.15f) % stepFar;
-        if (farOffset < 0) farOffset += stepFar;
+        float texW = layerH * ((float) tex.getWidth() / tex.getHeight());
+        float pad = 24f;
+        float quadX = leftVisible - pad;
+        float quadW = viewW + pad * 2f;
 
-        float farStart = leftVisible - farOffset;
-        while (farStart > leftVisible - farW) farStart -= stepFar;
+        float baseU = (camX * parallaxSpeed - viewW / 2f - pad) / texW;
+        float fracU = baseU - (float) Math.floor(baseU);
+        float uSpan = quadW / texW;
+
         batch.setColor(1f, 1f, 1f, alpha);
-        for (float x = farStart; x < rightVisible + farW; x += stepFar) {
-            batch.draw(farSlice, x, 140f, farW, farH);
-        }
-
-        // 2. Layer 2 (Midground): Silhouettes & Ancient Ruins (0.35x parallax)
-        float midH = 620f;
-        float midW = midH * ((float) midSlice.getRegionWidth() / midSlice.getRegionHeight());
-        float stepMid = midW - 2f;
-        float midOffset = (camX * 0.35f) % stepMid;
-        if (midOffset < 0) midOffset += stepMid;
-
-        float midStart = leftVisible - midOffset;
-        while (midStart > leftVisible - midW) midStart -= stepMid;
-        for (float x = midStart; x < rightVisible + midW; x += stepMid) {
-            batch.draw(midSlice, x, 180f, midW, midH);
-        }
-
-        // 3. Layer 1 (Foreground): Terrain Ground Platform (1.0x scroll with world)
-        float groundH = 260f;
-        float groundW = groundH * ((float) groundSlice.getRegionWidth() / groundSlice.getRegionHeight());
-        float stepGround = groundW - 2f;
-        float groundOffset = (camX) % stepGround;
-        if (groundOffset < 0) groundOffset += stepGround;
-
-        float groundStart = leftVisible - groundOffset;
-        while (groundStart > leftVisible - groundW) groundStart -= stepGround;
-        for (float x = groundStart; x < rightVisible + groundW; x += stepGround) {
-            batch.draw(groundSlice, x, GROUND_BASE_Y, groundW, groundH);
-        }
-        batch.setColor(Color.WHITE);
+        batch.draw(tex, quadX, layerY, quadW, layerH, fracU, 1f, fracU + uSpan, 0f);
     }
 
     /**
@@ -4338,25 +4844,48 @@ public class BoardScreen implements Screen {
                 }
                 batch.setColor(Color.WHITE);
             } else if (tile instanceof SnakeTile) {
-                float snakeX = tileLeft + 32f;
-                float snakeY = tileY + TILE_HEIGHT;
-                float snakeW = 40f;
-                float pulse = 0.65f + 0.30f * MathUtils.sinDeg(stateTime * 200f);
+                // Determine Act matching BattleScreen encounters:
+                // Act 1 (Tiles 1-30): Forest Green Snake
+                // Act 2 (Tiles 31-70): Sapphire Horned Serpent
+                // Act 3 (Tiles 71-100): Crimson Magma Wyrm
+                int act = (i <= 30) ? 1 : ((i <= 70) ? 2 : 3);
+                Animation<TextureRegion> anim;
+                float snakeW, snakeH, xOffset, yOffset;
+                if (act == 1) {
+                    anim = boardSnakeAnimAct1;
+                    snakeW = 100f;
+                    snakeH = 67f;
+                    xOffset = -6f;
+                    yOffset = -6f;
+                } else if (act == 2) {
+                    anim = boardSnakeAnimAct2;
+                    snakeW = 110f;
+                    snakeH = 86f;
+                    xOffset = -6f;
+                    yOffset = -6f;
+                } else {
+                    anim = boardSnakeAnimAct3;
+                    snakeW = 96f;
+                    snakeH = 88f;
+                    xOffset = -6f;
+                    yOffset = -6f;
+                }
+                if (anim == null) anim = boardSnakeAnimAct1;
 
-                // Hazard aura along slab surface
-                batch.setColor(0.85f, 0.15f, 0.20f, 0.25f * pulse);
-                batch.draw(whitePixelTex, tileLeft + 12f, tileY + TILE_HEIGHT, TILE_WIDTH - 24f, 8f);
+                // Subtle grounding shadow along slab surface
+                batch.setColor(0.08f, 0.04f, 0.04f, 0.35f);
+                batch.draw(whitePixelTex, tileLeft + 30f, tileY + TILE_HEIGHT - 4f, TILE_WIDTH - 60f, 6f);
 
-                // Hazard Crest
-                batch.setColor(0.95f, 0.25f, 0.30f, 0.85f);
-                batch.draw(whitePixelTex, snakeX, snakeY, 4f, 22f);
-                batch.draw(whitePixelTex, snakeX + snakeW - 4f, snakeY, 4f, 22f);
-                batch.draw(whitePixelTex, snakeX, snakeY + 10f, snakeW, 3f);
+                // Render Act-specific serpent coiled on top of the tile platform
+                if (anim != null) {
+                    float snakeTime = stateTime * 0.85f + (i * 0.45f);
+                    TextureRegion snakeFrame = anim.getKeyFrame(snakeTime, true);
+                    float snakeX = getTileCenterX(i) - snakeW / 2f + xOffset;
+                    float snakeY = tileY + TILE_HEIGHT + yOffset;
 
-                // Glowing Serpent Eyes
-                batch.setColor(1.0f, 0.10f, 0.15f, pulse);
-                batch.draw(whitePixelTex, snakeX + 10f, snakeY + 15f, 5f, 5f);
-                batch.draw(whitePixelTex, snakeX + snakeW - 15f, snakeY + 15f, 5f, 5f);
+                    batch.setColor(Color.WHITE);
+                    batch.draw(snakeFrame, snakeX, snakeY, snakeW, snakeH);
+                }
                 batch.setColor(Color.WHITE);
             }
 
@@ -5004,6 +5533,11 @@ public class BoardScreen implements Screen {
         if (whitePixelTex != null) whitePixelTex.dispose();
         if (vignetteTex != null) vignetteTex.dispose();
         if (softShadowTex != null) softShadowTex.dispose();
+        if (d20EmblemTex != null) d20EmblemTex.dispose();
+        for (Texture tex : generatedParallaxTextures) {
+            if (tex != null) tex.dispose();
+        }
+        generatedParallaxTextures.clear();
 
         if (titleFont != null) titleFont.dispose();
         if (topBannerFont != null) topBannerFont.dispose();
@@ -5039,6 +5573,10 @@ public class BoardScreen implements Screen {
         if (choiceOutcomeBodyFont != null) choiceOutcomeBodyFont.dispose();
         if (choiceOutcomeValueFont != null) choiceOutcomeValueFont.dispose();
         if (choiceD20Font != null) choiceD20Font.dispose();
+        if (d20BigNumFont != null) d20BigNumFont.dispose();
+        if (ledgerHeaderFont != null) ledgerHeaderFont.dispose();
+        if (ledgerTagFont != null) ledgerTagFont.dispose();
+        if (ledgerBodyFont != null) ledgerBodyFont.dispose();
         if (shepherdDialogueTitleFont != null) shepherdDialogueTitleFont.dispose();
         if (shepherdDialogueFont != null) shepherdDialogueFont.dispose();
         if (skillTitleFont != null) skillTitleFont.dispose();

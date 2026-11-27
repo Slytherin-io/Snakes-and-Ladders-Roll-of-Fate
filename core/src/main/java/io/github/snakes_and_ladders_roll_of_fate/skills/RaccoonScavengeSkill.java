@@ -29,7 +29,7 @@ public class RaccoonScavengeSkill implements ClassSkill {
 
     @Override
     public String getActionSubtext() {
-        return "LOOT / +15 HP";
+        return "ITEM OR +15 HP";
     }
 
     @Override
@@ -39,7 +39,7 @@ public class RaccoonScavengeSkill implements ClassSkill {
 
     @Override
     public String getDescription() {
-        return "Survival scavenger: Forages useful supplies. If backpack is full, converts scraps into +15 HP emergency medicine.";
+        return "Finds a random trail item, or heals +15 HP if your satchel is full.";
     }
 
     @Override

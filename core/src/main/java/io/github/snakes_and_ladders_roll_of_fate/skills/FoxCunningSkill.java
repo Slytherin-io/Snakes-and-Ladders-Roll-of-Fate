@@ -25,7 +25,7 @@ public class FoxCunningSkill implements ClassSkill {
 
     @Override
     public String getActionSubtext() {
-        return "+2 & GLIDE";
+        return "+2 ROLL & DODGE SNAKE";
     }
 
     @Override
@@ -35,7 +35,7 @@ public class FoxCunningSkill implements ClassSkill {
 
     @Override
     public String getDescription() {
-        return "Cunning serpent charmer: Grants +2 movement. If you land on a Snake, charms it to negate the drop and glide +3 tiles forward!";
+        return "Adds +2 to your next roll. Landing on a snake glides +3 tiles forward instead of sliding.";
     }
 
     @Override

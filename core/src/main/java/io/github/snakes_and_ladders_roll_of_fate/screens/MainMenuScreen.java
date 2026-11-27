@@ -66,6 +66,10 @@ public class MainMenuScreen implements Screen {
     private BitmapFont modeSubtitleFont;
     private BitmapFont instructionFont;
     private BitmapFont statFont;
+    private BitmapFont statLabelFont;
+    private BitmapFont statValueFont;
+    private BitmapFont skillTitleFont;
+    private BitmapFont skillTagFont;
     private BitmapFont perkFont;
     private BitmapFont countNumFont;
 
@@ -88,9 +92,14 @@ public class MainMenuScreen implements Screen {
     private Image characterImage;
     private Label charNameLabel;
     private Label charTitleLabel;
-    private Label charStatsLabel;
+    private Label charHpValLabel;
+    private Label charAtkValLabel;
+    private Label charDefValLabel;
+    private Label charSkillTitleLabel;
     private Label charPerkLabel;
+    private Table lockOverlayTable;
     private Label lockBanner;
+    private Table rosterPipsRow;
     private TextButton enterButton;
 
     public MainMenuScreen(RollOfFateGame game) {
@@ -138,7 +147,11 @@ public class MainMenuScreen implements Screen {
         modeSubtitleFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, darkBrown);
         instructionFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 25, darkBrown);
         statFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 24, darkBrown);
-        perkFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#6d3b17"));
+        statLabelFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 14, pillBrown);
+        statValueFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.valueOf("#361704"));
+        skillTitleFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.valueOf("#361704"));
+        skillTagFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 13, Color.WHITE);
+        perkFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 18, Color.valueOf("#5a3616"));
         countNumFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 64, darkBrown);
 
         // --- Main Menu Buttons & Title ---
@@ -541,9 +554,10 @@ public class MainMenuScreen implements Screen {
         badgeTable.setBackground(UIUtils.createRoundedDrawable(420, 60, 20, pillBrown));
         badgeTable.add(characterBadge).pad(8, 35, 8, 35);
 
-        // --- 2. Carousel Row (< arrow, frame with sprite, > arrow) ---
+        // --- 2. Carousel Row (< arrow, framed pedestal with sprite + lock stamp, > arrow) ---
         TextButton.TextButtonStyle arrowStyle = new TextButton.TextButtonStyle();
-        arrowStyle.up = UIUtils.createRoundedDrawable(54, 54, 18, pillBrown);
+        arrowStyle.up = UIUtils.createRoundedDrawable(52, 52, 16, Color.valueOf("#9c572b"), Color.valueOf("#d8a46f"), 2);
+        arrowStyle.over = UIUtils.createRoundedDrawable(52, 52, 16, Color.valueOf("#b36634"), Color.valueOf("#ffd54f"), 2);
         arrowStyle.font = badgeFont;
         arrowStyle.fontColor = Color.WHITE;
 
@@ -573,54 +587,92 @@ public class MainMenuScreen implements Screen {
             }
         });
 
-        // =========================================================================
-        // Character Frame with Sprite Placeholder
-        // NOTE FOR USER: The image below uses Assets.getCharacterTexture(cls).
-        // When your real pixel character sprites are added into assets/img/,
-        // they will automatically render inside this frame!
-        // =========================================================================
+        // Framed Portrait Pedestal with gold/mahogany trim + non-shifting lock overlay
         Table frameBox = new Table();
-        frameBox.setBackground(UIUtils.createRoundedDrawable(190, 190, 20, Color.valueOf("#4a2307")));
+        frameBox.setBackground(UIUtils.createRoundedDrawable(170, 170, 22, Color.valueOf("#3a1906"), Color.valueOf("#c89259"), 3));
 
         characterImage = new Image(game.getAssetManager().get(Assets.CHAR_TURTLE));
         characterImage.setScaling(Scaling.fit);
-        frameBox.add(characterImage).size(175, 175).center();
+        frameBox.add(characterImage).size(148, 148).center();
 
-        // Lock Banner (Displayed directly over the character if already taken by Player 1)
-        lockBanner = new Label("LOCKED BY PLAYER 1", new Label.LabelStyle(modeSubtitleFont, Color.valueOf("#ff5252")));
+        lockOverlayTable = new Table();
+        lockOverlayTable.setBackground(UIUtils.createRoundedDrawable(170, 170, 22, Color.valueOf("#140805b8"), Color.valueOf("#c89259"), 3));
+        Table lockStampBox = new Table();
+        lockStampBox.setBackground(UIUtils.createRoundedDrawable(148, 30, 8, Color.valueOf("#8a2424"), Color.valueOf("#ff8a80"), 2));
+        lockBanner = new Label("LOCKED BY P1", new Label.LabelStyle(skillTagFont, Color.WHITE));
         lockBanner.setAlignment(Align.center);
-        lockBanner.setVisible(false);
+        lockStampBox.add(lockBanner).pad(4, 8, 4, 8);
+        lockOverlayTable.add(lockStampBox).center();
+        lockOverlayTable.setVisible(false);
+
+        Stack portraitStack = new Stack();
+        portraitStack.add(frameBox);
+        portraitStack.add(lockOverlayTable);
 
         // Carousel row assembly
         Table carouselRow = new Table();
-        carouselRow.add(leftArrow).size(54, 54).padRight(28);
-        carouselRow.add(frameBox).size(190, 190);
-        carouselRow.add(rightArrow).size(54, 54).padLeft(28);
+        carouselRow.add(leftArrow).size(52, 52).padRight(26);
+        carouselRow.add(portraitStack).size(170, 170);
+        carouselRow.add(rightArrow).size(52, 52).padLeft(26);
 
-        // --- 3. Clean Text & Stats Below Frame ---
-        charNameLabel  = new Label("TURTLE", new Label.LabelStyle(modeTitleFont, darkBrown));
-        charTitleLabel = new Label("Iron Guardian", new Label.LabelStyle(modeSubtitleFont, Color.valueOf("#854b25")));
-        charStatsLabel = new Label("HP 120   |   ATK 4   |   DEF 7", new Label.LabelStyle(statFont, darkBrown));
-        charPerkLabel  = new Label("Perk: Iron Shell\n(Turtle Shell Buckler)", new Label.LabelStyle(perkFont, Color.valueOf("#6d3b17")));
+        // Roster Indicator Pips
+        rosterPipsRow = new Table();
+        rosterPipsRow.center();
 
+        // --- 3. Structured Hero Header, Stat Pills & Inset Skill/Perk Card ---
+        charNameLabel  = new Label("TURTLE", new Label.LabelStyle(modeTitleFont, Color.valueOf("#361704")));
+        charTitleLabel = new Label("Iron Guardian", new Label.LabelStyle(modeSubtitleFont, Color.valueOf("#7c441d")));
         charNameLabel.setAlignment(Align.center);
         charTitleLabel.setAlignment(Align.center);
-        charStatsLabel.setAlignment(Align.center);
-        charPerkLabel.setAlignment(Align.center);
-
-        // Enable wrapping so text never spills over onto the scroll curls
         charTitleLabel.setWrap(true);
-        charPerkLabel.setWrap(true);
-        lockBanner.setWrap(true);
 
-        // Stack the content inside the parchment area (confined to 460px width, well within the two curls)
+        // 3 Stat Pills (HEALTH | ATTACK | DEFENSE)
+        Color creamFill = Color.valueOf("#faedd7");
+        Table hpPill  = createHeroStatPill("HEALTH",  "120", creamFill, pillBrown);
+        Table atkPill = createHeroStatPill("ATTACK",  "4",   creamFill, pillBrown);
+        Table defPill = createHeroStatPill("DEFENSE", "7",   creamFill, pillBrown);
+        charHpValLabel  = (Label) hpPill.getUserObject();
+        charAtkValLabel = (Label) atkPill.getUserObject();
+        charDefValLabel = (Label) defPill.getUserObject();
+
+        Table statPillsRow = new Table();
+        statPillsRow.add(hpPill).size(158, 54).padRight(12);
+        statPillsRow.add(atkPill).size(158, 54).padRight(12);
+        statPillsRow.add(defPill).size(158, 54);
+
+        // Inset Skill & Perk Card (wider 4px border + generous inner padding around text)
+        Table perkCard = new Table();
+        perkCard.setBackground(UIUtils.createRoundedDrawable(510, 114, 14, creamFill, pillBrown, 4));
+        perkCard.pad(12, 22, 12, 22);
+
+        Table perkTopRow = new Table();
+        charSkillTitleLabel = new Label("Skill: Slow & Steady", new Label.LabelStyle(skillTitleFont, Color.valueOf("#361704")));
+        charSkillTitleLabel.setAlignment(Align.left);
+
+        Table cdTag = new Table();
+        cdTag.setBackground(UIUtils.createRoundedDrawable(102, 22, 10, Color.valueOf("#854b251c"), Color.valueOf("#854b2555"), 1));
+        Label cdLbl = new Label("4-TURN CD", new Label.LabelStyle(skillTagFont, Color.valueOf("#7c441d")));
+        cdLbl.setAlignment(Align.center);
+        cdTag.add(cdLbl).pad(2, 8, 2, 8);
+
+        perkTopRow.add(charSkillTitleLabel).left().expandX();
+        perkTopRow.add(cdTag).right();
+
+        charPerkLabel = new Label("Cleanses curses and marches +4 tiles safely.", new Label.LabelStyle(perkFont, Color.valueOf("#5a3616")));
+        charPerkLabel.setAlignment(Align.left);
+        charPerkLabel.setWrap(true);
+
+        perkCard.add(perkTopRow).width(466).padBottom(5).row();
+        perkCard.add(charPerkLabel).width(466).left();
+
+        // Stack the content cleanly inside the flat parchment scroll
         Table contentTable = new Table();
-        contentTable.add(carouselRow).padBottom(4).center().row();
-        contentTable.add(lockBanner).width(460).padBottom(2).center().row();
-        contentTable.add(charNameLabel).width(460).center().row();
-        contentTable.add(charTitleLabel).width(460).padBottom(6).center().row();
-        contentTable.add(charStatsLabel).width(460).padBottom(4).center().row();
-        contentTable.add(charPerkLabel).width(460).center().row();
+        contentTable.add(carouselRow).padBottom(6).center().row();
+        contentTable.add(rosterPipsRow).padBottom(6).center().row();
+        contentTable.add(charNameLabel).width(510).center().row();
+        contentTable.add(charTitleLabel).width(510).padBottom(8).center().row();
+        contentTable.add(statPillsRow).width(510).padBottom(10).center().row();
+        contentTable.add(perkCard).width(510).minHeight(110).center().row();
 
         Image scrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
         scrollBg.setScaling(Scaling.stretch);
@@ -703,33 +755,74 @@ public class MainMenuScreen implements Screen {
         characterSelectTable.setFillParent(true);
         characterSelectTable.setVisible(false);
 
-        characterSelectTable.add(badgeTable).size(420, 60).padBottom(-22).center().row();
-        characterSelectTable.add(scrollStack).size(840, 646).center().row();
-        characterSelectTable.add(bottomBtnTable).padTop(-22).center().row();
+        characterSelectTable.add(badgeTable).size(420, 60).padBottom(-24).center().row();
+        characterSelectTable.add(scrollStack).size(940, 710).center().row();
+        characterSelectTable.add(bottomBtnTable).padTop(-24).center().row();
+    }
+
+    private Table createHeroStatPill(String label, String value, Color fill, Color border) {
+        Table pill = new Table();
+        pill.setBackground(UIUtils.createRoundedDrawable(158, 54, 12, fill, border, 4));
+        Label lbl = new Label(label, new Label.LabelStyle(statLabelFont, Color.valueOf("#854b25")));
+        lbl.setAlignment(Align.center);
+        Label val = new Label(value, new Label.LabelStyle(statValueFont, Color.valueOf("#361704")));
+        val.setAlignment(Align.center);
+        pill.add(lbl).center().row();
+        pill.add(val).center().padTop(-2);
+        pill.setUserObject(val);
+        return pill;
     }
 
     /**
      * Updates the Character Select display to reflect the current character and player turn.
-     * Implements Approach A: shows locked status and dims/disables ENTER if already taken.
+     * Implements Approach A: shows locked status overlay on the pedestal and dims/disables ENTER if already taken.
      */
     private void updateCharacterDisplay() {
         CharacterClass[] classes = CharacterClass.values();
         CharacterClass cls = classes[currentCharacterIndex];
 
-        // 1. Text labels
+        // 1. Text labels & stat pills
         charNameLabel.setText(cls.getName().toUpperCase());
         charTitleLabel.setText(cls.getTitle());
-        charStatsLabel.setText("HP " + cls.getBaseHealth() + "   |   ATK " + cls.getBaseAttack() + "   |   DEF " + cls.getBaseDefense());
+        if (charHpValLabel != null)  charHpValLabel.setText(String.valueOf(cls.getBaseHealth()));
+        if (charAtkValLabel != null) charAtkValLabel.setText(String.valueOf(cls.getBaseAttack()));
+        if (charDefValLabel != null) charDefValLabel.setText(String.valueOf(cls.getBaseDefense()));
 
-        // Keep perk description concise, readable, and split onto two lines so it stays inside the flat parchment
-        String perk = cls.getPerkDescription();
-        if (perk.contains(":")) {
-            perk = perk.split(":")[0];
+        io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill skill = cls.createSkill();
+        String skillName = (skill != null) ? skill.getSkillName() : "Class Trait";
+        String skillDesc = (skill != null) ? skill.getDescription() : cls.getPerkDescription();
+        if (charSkillTitleLabel != null) {
+            charSkillTitleLabel.setText("Skill: " + skillName);
         }
-        String skillName = (cls.createSkill() != null) ? cls.createSkill().getSkillName() : "Class Trait";
-        charPerkLabel.setText("Skill: " + skillName + " (4-Turn Cooldown)\n" + perk);
+        String startItem = cls.getStartingItemName();
+        charPerkLabel.setText(skillDesc + (startItem != null ? "\nItem: " + startItem : ""));
 
-        // 2. Character sprite texture & initial frame
+        // 2. Refresh clickable roster pips
+        if (rosterPipsRow != null) {
+            rosterPipsRow.clear();
+            for (int i = 0; i < classes.length; i++) {
+                final int idx = i;
+                boolean isSelected = (i == currentCharacterIndex);
+                boolean isTaken = chosenClasses.contains(classes[i]);
+                Color pipFill = isSelected ? Color.valueOf("#854b25")
+                    : (isTaken ? Color.valueOf("#8a2424") : Color.valueOf("#bfa17a"));
+                Color pipBorder = isSelected ? Color.valueOf("#ffd54f") : Color.valueOf("#6d3b17");
+                int pipW = isSelected ? 28 : 12;
+                Button.ButtonStyle pipStyle = new Button.ButtonStyle();
+                pipStyle.up = UIUtils.createRoundedDrawable(pipW, 10, 5, pipFill, pipBorder, 2);
+                Button pipBtn = new Button(pipStyle);
+                pipBtn.addListener(new ChangeListener() {
+                    @Override public void changed(ChangeEvent event, Actor actor) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP, 0.7f, 0.1f);
+                        currentCharacterIndex = idx;
+                        updateCharacterDisplay();
+                    }
+                });
+                rosterPipsRow.add(pipBtn).size(pipW, 10).pad(0, 4, 0, 4);
+            }
+        }
+
+        // 3. Character sprite texture & initial frame
         charAnimTimer = 0f;
         Animation<TextureRegion> anim = charAnimations.get(cls);
         if (anim != null) {
@@ -739,29 +832,25 @@ public class MainMenuScreen implements Screen {
             characterImage.setDrawable(new TextureRegionDrawable(new TextureRegion(charTex)));
         }
 
-        // 3. Top badge title: indicates which player is choosing
+        // 4. Top badge title: indicates which player is choosing
         if (totalSelectingPlayers == 1) {
             characterBadge.setText("CHOOSE YOUR HERO");
         } else {
             characterBadge.setText("PLAYER " + (selectingPlayerIndex + 1) + ": SELECT HERO");
         }
 
-        // 4. Approach A (Locking mechanism):
-        // If this character is already chosen by a previous player, show LOCKED and disable ENTER
+        // 5. Approach A (Locking mechanism via overlay stamp - zero layout shift):
         if (chosenClasses.contains(cls)) {
             int takenBy = chosenClasses.indexOf(cls) + 1;
-            lockBanner.setText("LOCKED BY PLAYER " + takenBy);
-            lockBanner.setVisible(true);
+            lockBanner.setText("LOCKED BY P" + takenBy);
+            if (lockOverlayTable != null) lockOverlayTable.setVisible(true);
 
-            // Dim sprite slightly
             characterImage.setColor(0.35f, 0.35f, 0.35f, 0.5f);
-
-            // Disable Enter button
             enterButton.setDisabled(true);
             enterButton.setText("TAKEN");
             enterButton.setColor(Color.valueOf("#7a6356"));
         } else {
-            lockBanner.setVisible(false);
+            if (lockOverlayTable != null) lockOverlayTable.setVisible(false);
             characterImage.setColor(Color.WHITE);
 
             enterButton.setDisabled(false);
@@ -942,6 +1031,10 @@ public class MainMenuScreen implements Screen {
         if (modeSubtitleFont != null) modeSubtitleFont.dispose();
         if (instructionFont != null) instructionFont.dispose();
         if (statFont != null) statFont.dispose();
+        if (statLabelFont != null) statLabelFont.dispose();
+        if (statValueFont != null) statValueFont.dispose();
+        if (skillTitleFont != null) skillTitleFont.dispose();
+        if (skillTagFont != null) skillTagFont.dispose();
         if (perkFont != null) perkFont.dispose();
         if (countNumFont != null) countNumFont.dispose();
     }

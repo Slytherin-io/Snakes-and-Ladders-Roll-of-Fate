@@ -133,4 +133,85 @@ public class UIUtils {
         style.knob = knob;
         return style;
     }
+
+    /**
+     * Procedurally generates a crisp icosahedron D20 emblem texture with faceted mahogany fill and gold trim.
+     */
+    public static Texture createD20EmblemTexture(int size) {
+        Pixmap pm = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pm.setBlending(Pixmap.Blending.SourceOver);
+        pm.setColor(Color.CLEAR);
+        pm.fill();
+
+        float cx = size * 0.5f;
+        float cy = size * 0.5f;
+        float rOuter = size * 0.44f;
+        float rInner = size * 0.28f;
+
+        // 6 outer hexagon vertices (point-up)
+        int[] ox = new int[6];
+        int[] oy = new int[6];
+        for (int i = 0; i < 6; i++) {
+            double rad = Math.toRadians(-90 + i * 60);
+            ox[i] = Math.round(cx + (float) Math.cos(rad) * rOuter);
+            oy[i] = Math.round(cy + (float) Math.sin(rad) * rOuter);
+        }
+
+        // Outer mahogany body fill
+        pm.setColor(Color.valueOf("#6e3817"));
+        for (int i = 0; i < 6; i++) {
+            int next = (i + 1) % 6;
+            pm.fillTriangle(Math.round(cx), Math.round(cy), ox[i], oy[i], ox[next], oy[next]);
+        }
+
+        // Inner pentagon-like lighter facet for 3D depth
+        int[] ix = new int[5];
+        int[] iy = new int[5];
+        for (int i = 0; i < 5; i++) {
+            double rad = Math.toRadians(-90 + i * 72);
+            ix[i] = Math.round(cx + (float) Math.cos(rad) * rInner);
+            iy[i] = Math.round(cy + (float) Math.sin(rad) * rInner);
+        }
+        pm.setColor(Color.valueOf("#924f24"));
+        for (int i = 0; i < 5; i++) {
+            int next = (i + 1) % 5;
+            pm.fillTriangle(Math.round(cx), Math.round(cy), ix[i], iy[i], ix[next], iy[next]);
+        }
+
+        // Subtle warm highlight facets
+        pm.setColor(Color.valueOf("#b0683488"));
+        pm.fillTriangle(Math.round(cx), Math.round(cy), ix[0], iy[0], ix[1], iy[1]);
+
+        // Inner facet lines
+        pm.setColor(Color.valueOf("#e4b76e"));
+        for (int i = 0; i < 5; i++) {
+            int next = (i + 1) % 5;
+            pm.drawLine(ix[i], iy[i], ix[next], iy[next]);
+        }
+
+        // Struts connecting outer vertices to inner facet corners
+        pm.setColor(Color.valueOf("#ffd54f"));
+        pm.drawLine(ox[0], oy[0], ix[0], iy[0]);
+        pm.drawLine(ox[1], oy[1], ix[1], iy[1]);
+        pm.drawLine(ox[2], oy[2], ix[2], iy[2]);
+        pm.drawLine(ox[3], oy[3], ix[2], iy[2]);
+        pm.drawLine(ox[3], oy[3], ix[3], iy[3]);
+        pm.drawLine(ox[4], oy[4], ix[3], iy[3]);
+        pm.drawLine(ox[5], oy[5], ix[4], iy[4]);
+
+        // Bold outer hexagon outline (3px thick via center + 1px offsets)
+        for (int i = 0; i < 6; i++) {
+            int next = (i + 1) % 6;
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    pm.drawLine(ox[i] + dx, oy[i] + dy, ox[next] + dx, oy[next] + dy);
+                }
+            }
+        }
+
+        Texture tex = new Texture(pm);
+        tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pm.dispose();
+        return tex;
+    }
 }

@@ -2,6 +2,7 @@ package io.github.snakes_and_ladders_roll_of_fate.screens;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.assets.AssetDescriptor;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -236,8 +237,12 @@ public class BattleScreen implements Screen {
     private Label introDialogueLabel;
     private Table introActionsRow;
     private TextButton introAdvanceBtn;
+    private TextButton introSkipBtn;
     private boolean isIntroDialogueActive = false;
     private int introBeatIndex = 0;
+    private boolean isEpilogueDialogueActive = false;
+    private boolean isEpilogueVictory = false;
+    private int epilogueBeatIndex = 0;
     private boolean scrambleAnnounced = false;
     private TextButton btnAttack, btnDefend, btnItem, btnEscape, continueBtn;
     private Cell<TextButton> continueBtnCell;
@@ -255,9 +260,26 @@ public class BattleScreen implements Screen {
     private Animation<TextureRegion> playerIdleAnim;
     private Animation<TextureRegion> enemyIdleAnim;
     private Animation<TextureRegion> enemyAttackAnim;
+    private int currentSnakeAct = 1;
     private float stateTime = 0f;
     private boolean outcomeResolved = false;
     private String outcomeMessage = "";
+
+    private int resolveSnakeAct() {
+        if (snakeTile != null) {
+            return (snakeTile.getPosition() <= 30) ? 1 : ((snakeTile.getPosition() <= 70) ? 2 : 3);
+        } else if (player != null && player.getPosition() > 0) {
+            return (player.getPosition() <= 30) ? 1 : ((player.getPosition() <= 70) ? 2 : 3);
+        } else if (enemy != null && enemy.getEnemyType() != null) {
+            String eType = enemy.getEnemyType();
+            if (eType.contains("Obsidian") || eType.contains("Crag") || eType.contains("Rattler")) {
+                return 2;
+            } else if (eType.contains("Magma") || eType.contains("Abyssal") || eType.contains("Celestial")) {
+                return 3;
+            }
+        }
+        return 1;
+    }
 
     public BattleScreen(RollOfFateGame game, Player player, SnakeTile snakeTile) {
         this(game, player, snakeTile != null ? snakeTile.createSnakeEnemy() : null, snakeTile);
@@ -497,16 +519,28 @@ public class BattleScreen implements Screen {
         pauseTipFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#54280e"));
         sliderFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, darkBrown);
 
+        currentSnakeAct = resolveSnakeAct();
+
         // Register Battle Listeners for Dynamic FX
         battleSystem.setBattleListener((attacker, defender, damage, isCrit, isMiss) -> {
             if (attacker == player) {
                 if (game.getRunTracker() != null) {
                     game.getRunTracker().recordSnakeCombat(player, damage, false, isCrit);
                 }
-                spawnSlash(ENEMY_X, ENEMY_DRAW_Y + 70f, false, isCrit);
-                spawnHitSparks(ENEMY_X, ENEMY_DRAW_Y + 70f, false, isCrit ? 26 : 16, isCrit);
+                float enemyHitY;
+                if (isBossBattle()) {
+                    enemyHitY = ENEMY_DRAW_Y + 70f;
+                } else if (currentSnakeAct == 1) {
+                    enemyHitY = 282f + 53f; // Centered on ~107px tall Forest Green Snake
+                } else if (currentSnakeAct == 2) {
+                    enemyHitY = 282f + 70f; // Centered on ~139px tall Sapphire Horned Serpent
+                } else {
+                    enemyHitY = 282f + 76f; // Centered on ~152px tall Crimson Magma Wyrm
+                }
+                spawnSlash(ENEMY_X, enemyHitY, false, isCrit);
+                spawnHitSparks(ENEMY_X, enemyHitY, false, isCrit ? 26 : 16, isCrit);
                 enemyFlinchTimer = FLINCH_DURATION;
-                spawnDamageNumber(ENEMY_X, ENEMY_DRAW_Y + 140f, damage, isCrit, isMiss);
+                spawnDamageNumber(ENEMY_X, enemyHitY + 65f, damage, isCrit, isMiss);
                 triggerScreenShake(isCrit ? 15f : 8f, isCrit ? 0.28f : 0.18f);
             } else {
                 if (game.getRunTracker() != null) {
@@ -560,15 +594,25 @@ public class BattleScreen implements Screen {
             enemyAttackAnim = new Animation<>(0.18f, bossGrid[1]);
             enemyAttackAnim.setPlayMode(Animation.PlayMode.NORMAL);
         } else {
-            Texture snakeSheet = game.getAssetManager().get(Assets.ENEMY_SNAKE);
-            TextureRegion[][] snakeGrid = TextureRegion.split(snakeSheet, 32, 32);
-            for (TextureRegion frame : snakeGrid[0]) {
-                if (!frame.isFlipX()) {
-                    frame.flip(true, false);
+            // Act-stratified serpent combat: Act I (Green Snake), Act II (Sapphire), Act III (Crimson Magma)
+            int act = currentSnakeAct;
+
+            AssetDescriptor<Texture> snakeAsset = Assets.getSnakeTextureForAct(act);
+            Texture snakeSheet = game.getAssetManager().get(snakeAsset);
+            TextureRegion[][] snakeGrid = TextureRegion.split(snakeSheet, 128, 128);
+            TextureRegion[] frames = snakeGrid[0];
+            for (TextureRegion frame : frames) {
+                if (frame.isFlipX()) {
+                    frame.flip(true, false); // Ensure facing left towards hero
                 }
             }
-            enemyIdleAnim = new Animation<>(0.15f, snakeGrid[0]);
-            enemyAttackAnim = enemyIdleAnim;
+            // Idle animation: coiled breathing ready stance (frames 0 & 1)
+            enemyIdleAnim = new Animation<>(0.26f, new TextureRegion[]{frames[0], frames[1]});
+            enemyIdleAnim.setPlayMode(Animation.PlayMode.LOOP);
+
+            // Attack animation: strike & fangs/venom sequence (frames 2, 3, 4, 5)
+            enemyAttackAnim = new Animation<>(0.13f, new TextureRegion[]{frames[2], frames[3], frames[4], frames[5]});
+            enemyAttackAnim.setPlayMode(Animation.PlayMode.NORMAL);
         }
 
         // Start Battle
@@ -855,12 +899,12 @@ public class BattleScreen implements Screen {
         Table card = new Table();
         if (isPaleShepherdBattle()) {
             card.setBackground(UIUtils.createRoundedDrawable(
-                960, 190, 18, Color.valueOf("#180609f6"), Color.valueOf("#a62828"), 3));
+                1660, 190, 18, Color.valueOf("#180609f6"), Color.valueOf("#a62828"), 3));
         } else {
             card.setBackground(UIUtils.createRoundedDrawable(
-                960, 190, 18, Color.valueOf("#261105f4"), Color.valueOf("#c89259"), 3));
+                1660, 190, 18, Color.valueOf("#261105f4"), Color.valueOf("#c89259"), 3));
         }
-        card.pad(14, 28, 16, 28);
+        card.pad(14, 38, 16, 38);
 
         // Header Row: Speaker Label + Skip
         Table headerRow = new Table();
@@ -878,13 +922,15 @@ public class BattleScreen implements Screen {
         skipStyle.font = miniFont;
         skipStyle.fontColor = isPaleShepherdBattle() ? Color.valueOf("#cf9696") : Color.valueOf("#cfb896");
         skipStyle.overFontColor = Color.WHITE;
-        TextButton skipBtn = new TextButton("SKIP INTRO", skipStyle);
-        skipBtn.addListener(new ChangeListener() {
+        introSkipBtn = new TextButton("SKIP INTRO", skipStyle);
+        introSkipBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, Actor actor) {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
-                if (isPaleShepherdBattle()) {
+                if (isEpilogueDialogueActive) {
+                    finishDawnWardenEpilogue();
+                } else if (isPaleShepherdBattle()) {
                     finishPaleShepherdIntro(0, 0, "The Pale Shepherd raises his crook in quiet contemplation.");
                 } else {
                     finishDawnWardenIntro(0, 0, "The Dawn Warden descends before you to test your spirit!");
@@ -893,26 +939,26 @@ public class BattleScreen implements Screen {
         });
 
         headerRow.add(speakerLbl).left().expandX();
-        headerRow.add(skipBtn).right();
-        card.add(headerRow).width(900).padBottom(6).row();
+        headerRow.add(introSkipBtn).right();
+        card.add(headerRow).width(1580).padBottom(6).row();
 
         // Dialogue Body
         introDialogueLabel = new Label("", new Label.LabelStyle(introBodyFont, Color.valueOf("#fff8ea")));
         introDialogueLabel.setAlignment(Align.center);
         introDialogueLabel.setWrap(true);
-        card.add(introDialogueLabel).width(900).minHeight(64).center().padBottom(10).row();
+        card.add(introDialogueLabel).width(1580).minHeight(64).center().padBottom(10).row();
 
         // Action Row (dynamically populated per beat)
         introActionsRow = new Table();
-        card.add(introActionsRow).width(900).center();
+        card.add(introActionsRow).width(1580).center();
 
         TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
         if (isPaleShepherdBattle()) {
-            advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#691515"), Color.valueOf("#b32b2b"), 2);
-            advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#8f1d1d"), Color.valueOf("#ff5252"), 2);
+            advStyle.up = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#691515"), Color.valueOf("#b32b2b"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#8f1d1d"), Color.valueOf("#ff5252"), 2);
         } else {
-            advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#854b25"), Color.valueOf("#c89259"), 2);
-            advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#a66032"), Color.valueOf("#ffd54f"), 2);
+            advStyle.up = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#854b25"), Color.valueOf("#c89259"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#a66032"), Color.valueOf("#ffd54f"), 2);
         }
         advStyle.font = introBtnFont;
         advStyle.fontColor = Color.WHITE;
@@ -923,16 +969,21 @@ public class BattleScreen implements Screen {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
-                introBeatIndex++;
-                if (isDawnWardenBattle()) {
-                    refreshDawnWardenIntroBeat();
-                } else if (isPaleShepherdBattle()) {
-                    refreshPaleShepherdIntroBeat();
+                if (isEpilogueDialogueActive) {
+                    epilogueBeatIndex++;
+                    refreshDawnWardenEpilogueBeat();
+                } else {
+                    introBeatIndex++;
+                    if (isDawnWardenBattle()) {
+                        refreshDawnWardenIntroBeat();
+                    } else if (isPaleShepherdBattle()) {
+                        refreshPaleShepherdIntroBeat();
+                    }
                 }
             }
         });
 
-        bossIntroTable.add(card).width(960).minHeight(186).center();
+        bossIntroTable.add(card).width(1660).minHeight(186).center();
         hudStage.addActor(bossIntroTable);
         if (isDawnWardenBattle()) {
             refreshDawnWardenIntroBeat();
@@ -978,14 +1029,14 @@ public class BattleScreen implements Screen {
             introDialogueLabel.setText("The golden scythe hums with mortal finality. How do you meet the inevitable?");
 
             TextButton.TextButtonStyle atkChoiceStyle = new TextButton.TextButtonStyle();
-            atkChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#7a1a1a"), Color.valueOf("#d45d5d"), 2);
-            atkChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#9e2424"), Color.valueOf("#ff7b7b"), 2);
+            atkChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#7a1a1a"), Color.valueOf("#d45d5d"), 2);
+            atkChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#9e2424"), Color.valueOf("#ff7b7b"), 2);
             atkChoiceStyle.font = introBtnFont;
             atkChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
             TextButton.TextButtonStyle defChoiceStyle = new TextButton.TextButtonStyle();
-            defChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#261c3b"), Color.valueOf("#6e559e"), 2);
-            defChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#3b2a5c"), Color.valueOf("#9174cb"), 2);
+            defChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#261c3b"), Color.valueOf("#6e559e"), 2);
+            defChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#3b2a5c"), Color.valueOf("#9174cb"), 2);
             defChoiceStyle.font = introBtnFont;
             defChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
@@ -1015,8 +1066,8 @@ public class BattleScreen implements Screen {
                 }
             });
 
-            introActionsRow.add(atkChoiceBtn).size(430, 50).padRight(18);
-            introActionsRow.add(defChoiceBtn).size(430, 50);
+            introActionsRow.add(atkChoiceBtn).size(580, 50).padRight(28);
+            introActionsRow.add(defChoiceBtn).size(580, 50);
         }
     }
 
@@ -1063,7 +1114,7 @@ public class BattleScreen implements Screen {
 
         if (introBeatIndex == 0) {
             introDialogueLabel.setText(
-                "So far you have climbed, little soul - past fang, abyss, and frost. " + getClassReflectiveLine());
+                "So far you have climbed, little soul - past fang, frost, and abyss. " + getClassReflectiveLine());
             introAdvanceBtn.setText("CONTINUE  (1/3)");
             introActionsRow.add(introAdvanceBtn).size(260, 46).center();
         } else if (introBeatIndex == 1) {
@@ -1075,14 +1126,14 @@ public class BattleScreen implements Screen {
             introDialogueLabel.setText("Speak your resolve before the golden gates ignite:");
 
             TextButton.TextButtonStyle atkChoiceStyle = new TextButton.TextButtonStyle();
-            atkChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#8c2a24"), Color.valueOf("#d46e66"), 2);
-            atkChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#a8342d"), Color.valueOf("#f08a82"), 2);
+            atkChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#8c2a24"), Color.valueOf("#d46e66"), 2);
+            atkChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#a8342d"), Color.valueOf("#f08a82"), 2);
             atkChoiceStyle.font = introBtnFont;
             atkChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
             TextButton.TextButtonStyle defChoiceStyle = new TextButton.TextButtonStyle();
-            defChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#2f5778"), Color.valueOf("#759ec2"), 2);
-            defChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#3b6b94"), Color.valueOf("#96bfe3"), 2);
+            defChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#2f5778"), Color.valueOf("#759ec2"), 2);
+            defChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#3b6b94"), Color.valueOf("#96bfe3"), 2);
             defChoiceStyle.font = introBtnFont;
             defChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
@@ -1112,8 +1163,8 @@ public class BattleScreen implements Screen {
                 }
             });
 
-            introActionsRow.add(atkChoiceBtn).size(430, 50).padRight(18);
-            introActionsRow.add(defChoiceBtn).size(430, 50);
+            introActionsRow.add(atkChoiceBtn).size(580, 50).padRight(28);
+            introActionsRow.add(defChoiceBtn).size(580, 50);
         }
     }
 
@@ -1133,6 +1184,152 @@ public class BattleScreen implements Screen {
         }
         battleSystem.setBattleLog(startLog);
         syncUi();
+    }
+
+    private void startDawnWardenEpilogue(boolean victory) {
+        isEpilogueDialogueActive = true;
+        isEpilogueVictory = victory;
+        epilogueBeatIndex = 0;
+
+        if (victory) {
+            bossEnraged = false;
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("THE DAWN WARDEN BOWS BEFORE YOU");
+            }
+            if (topBannerBox != null) {
+                topBannerBox.setBackground(UIUtils.createRoundedDrawable(
+                    920, 70, 20, Color.valueOf("#8f5916"), Color.valueOf("#ffd54f"), 3));
+            }
+        } else {
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("THE DAWN WARDEN STEADIES YOUR FALL");
+            }
+        }
+
+        if (introSkipBtn != null) {
+            introSkipBtn.setText("SKIP");
+        }
+        refreshDawnWardenEpilogueBeat();
+        if (bossIntroTable != null) {
+            bossIntroTable.setVisible(true);
+        }
+    }
+
+    private String getWardenVictoryRecognizeLine() {
+        CharacterClass cls = (player != null) ? player.getCharacterClass() : null;
+        if (cls == null) {
+            return "\"Enough, brave soul... You shattered even the second sun. Not out of blind defiance - your heart still burns for those waiting beyond the gate.\"";
+        }
+        switch (cls) {
+            case CAT:
+                return "\"Enough, little prowler... Even with nine scars upon your fur, you refused to stay asleep. Someone still waits for you beyond this gate.\"";
+            case TURTLE:
+                return "\"Enough, iron guardian... Your shell cracked, yet your resolve outlasted stone and flame. Not even death could make you lay down what you chose to protect.\"";
+            case FOX:
+                return "\"Enough, clever trickster... No bargain or sleight won this trial - only a heart that refused to trade away tomorrow.\"";
+            case RACCOON:
+                return "\"Enough, weary scavenger... Every relic in your satchel weighed far less than the breath you fought so hard to reclaim.\"";
+            default:
+                return "\"Enough, brave soul... You shattered even the second sun. Your heart still burns for those waiting beyond the gate.\"";
+        }
+    }
+
+    private void refreshDawnWardenEpilogueBeat() {
+        if (introDialogueLabel == null || introActionsRow == null) return;
+        introActionsRow.clear();
+
+        if (isEpilogueVictory) {
+            if (epilogueBeatIndex == 0) {
+                introDialogueLabel.setText(getWardenVictoryRecognizeLine());
+                introAdvanceBtn.setText("CONTINUE  (1/2)");
+                introActionsRow.add(introAdvanceBtn).size(280, 46).center();
+            } else {
+                introDialogueLabel.setText(
+                    "\"Go now. The Pale Shepherd will understand. Claim the morning the mountain owed you - and step back into the living dawn.\"");
+
+                TextButton.TextButtonStyle gateStyle = new TextButton.TextButtonStyle();
+                gateStyle.up = UIUtils.createRoundedDrawable(380, 50, 12, Color.valueOf("#2e7d32"), Color.valueOf("#ffd54f"), 2);
+                gateStyle.over = UIUtils.createRoundedDrawable(380, 50, 12, Color.valueOf("#388e3c"), Color.WHITE, 2);
+                gateStyle.font = introBtnFont;
+                gateStyle.fontColor = Color.WHITE;
+
+                TextButton gateBtn = new TextButton("STEP THROUGH THE GATE", gateStyle);
+                UIUtils.addScaleHoverEffect(gateBtn);
+                gateBtn.addListener(new ChangeListener() {
+                    @Override public void changed(ChangeEvent event, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
+                        finishDawnWardenEpilogue();
+                    }
+                });
+                introActionsRow.add(gateBtn).size(380, 50).center();
+            }
+        } else {
+            if (epilogueBeatIndex == 0) {
+                introDialogueLabel.setText(
+                    "\"Be still, wanderer... Your steps have grown heavy, and your spirit is running cold. Even a flame this fierce was never meant to burn alone forever.\"");
+                introAdvanceBtn.setText("CONTINUE  (1/2)");
+                introActionsRow.add(introAdvanceBtn).size(280, 46).center();
+            } else {
+                boolean hasSurvivors = game.getPlayers().size() > 1 && !game.isPartyWiped();
+                if (hasSurvivors) {
+                    introDialogueLabel.setText(
+                        "\"Rest gently at the summit. Your companions still walk the stones below - let your lantern keep their path warm until dawn.\"");
+                } else {
+                    introDialogueLabel.setText(
+                        "\"The climb does not have to hurt anymore. Rest beneath the golden eaves - there is no shame in finally laying down the weight you carried so far.\"");
+                }
+
+                TextButton.TextButtonStyle restStyle = new TextButton.TextButtonStyle();
+                restStyle.up = UIUtils.createRoundedDrawable(360, 50, 12, Color.valueOf("#5c3518"), Color.valueOf("#c89259"), 2);
+                restStyle.over = UIUtils.createRoundedDrawable(360, 50, 12, Color.valueOf("#7a4823"), Color.valueOf("#ffd54f"), 2);
+                restStyle.font = introBtnFont;
+                restStyle.fontColor = Color.valueOf("#fff8ea");
+
+                TextButton restBtn = new TextButton(hasSurvivors ? "REST AT THE SUMMIT" : "CLOSE YOUR EYES", restStyle);
+                UIUtils.addScaleHoverEffect(restBtn);
+                restBtn.addListener(new ChangeListener() {
+                    @Override public void changed(ChangeEvent event, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
+                        finishDawnWardenEpilogue();
+                    }
+                });
+                introActionsRow.add(restBtn).size(360, 50).center();
+            }
+        }
+    }
+
+    private void finishDawnWardenEpilogue() {
+        isEpilogueDialogueActive = false;
+        if (bossIntroTable != null) {
+            bossIntroTable.setVisible(false);
+        }
+        if (pauseBtn != null) {
+            pauseBtn.setVisible(false);
+        }
+        if (isEpilogueVictory) {
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("SUMMIT CONQUERED!");
+            }
+            spawnShockwave(ENEMY_X, ENEMY_DRAW_Y + 120f, 70f, 310f, Color.valueOf("#ffd54f"), Color.WHITE, 0.70f);
+            spawnCelebrationSparks(960f, 540f);
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.DAWN_REBIRTH);
+            }
+        } else {
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("REST AT THE SUMMIT");
+            }
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.PLAYER_HURT, 0.45f);
+            }
+        }
+        if (continueTable != null) {
+            continueTable.setVisible(true);
+        }
     }
 
     private void buildContinueOverlay() {
@@ -1206,13 +1403,25 @@ public class BattleScreen implements Screen {
                 if (isDawnWardenBattle()) {
                     BattleOutcome outcome = battleSystem.getFinalOutcome();
                     boolean won = (outcome == BattleOutcome.VICTORY);
-                    if (game.getRunTracker() != null && won) {
-                        game.getRunTracker().recordThroneClaimed(player);
+                    if (won) {
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordThroneClaimed(player);
+                        }
+                        game.setScreen(new EndingStoryScreen(
+                            game, player,
+                            io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.REBIRTH_TRIUMPH));
+                        return;
                     }
-                    game.setScreen(new GameSummaryScreen(
-                        game, won, player,
-                        won ? io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.REBIRTH_TRIUMPH
-                            : io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.PEACEFUL_REST));
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordPlayerFallen(player);
+                    }
+                    if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                        game.setScreen(new EndingStoryScreen(
+                            game, player,
+                            io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.PEACEFUL_REST));
+                        return;
+                    }
+                    game.setScreen(new BoardScreen(game, BattleOutcome.DEFEAT, enemy));
                     return;
                 }
                 if (isPaleShepherdBattle()) {
@@ -1543,26 +1752,28 @@ public class BattleScreen implements Screen {
     private void syncUi() {
         BattleState state = battleSystem.getCurrentState();
         boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f);
-        boolean playerTurn = (!bossEntranceActive && !isIntroDialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
+        boolean dialogueActive = isIntroDialogueActive || isEpilogueDialogueActive;
+        boolean playerTurn = (!bossEntranceActive && !dialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
         boolean ended = (state == BattleState.BATTLE_END);
 
         if (topBannerWrap != null) {
             topBannerWrap.setVisible(bossLanded);
         }
+        boolean showHpPills = bossLanded && !ended && !bossEntranceActive && !dialogueActive;
         if (playerHpWrap != null) {
-            playerHpWrap.setVisible(bossLanded && !ended);
+            playerHpWrap.setVisible(showHpPills);
         }
         if (enemyHpWrap != null) {
-            enemyHpWrap.setVisible(bossLanded && !ended);
+            enemyHpWrap.setVisible(showHpPills);
         }
         if (bossIntroTable != null) {
-            bossIntroTable.setVisible(!bossEntranceActive && isIntroDialogueActive && !ended);
+            bossIntroTable.setVisible(!bossEntranceActive && (isIntroDialogueActive || (isEpilogueDialogueActive && ended)));
         }
         if (bottomBar != null) {
-            bottomBar.setVisible(!bossEntranceActive && !isIntroDialogueActive && !ended);
+            bottomBar.setVisible(!bossEntranceActive && !dialogueActive && !ended);
         }
         if (battleLogContainer != null && !ended) {
-            battleLogContainer.setVisible(!bossEntranceActive && !isIntroDialogueActive);
+            battleLogContainer.setVisible(!bossEntranceActive && !dialogueActive);
         }
 
         // True Phase 2 Transition when Phase 1 HP reaches 0
@@ -1653,8 +1864,8 @@ public class BattleScreen implements Screen {
             btnEscape.setColor(1, 1, 1, alpha);
         }
 
-        // Handle End State
-        if (ended && !outcomeResolved) {
+        // Handle End State (wait for lunge return animation to finish cleanly first)
+        if (ended && !outcomeResolved && !isAnimating) {
             outcomeResolved = true;
             BattleOutcome o = battleSystem.getFinalOutcome();
             if (isPaleShepherdBattle()) {
@@ -1737,10 +1948,17 @@ public class BattleScreen implements Screen {
                     rewardStatusLabel.setText("Hero Status: Fallen (0 / " + maxHp + " HP)");
                     rewardStatusLabel.setColor(Color.valueOf("#cfd8dc"));
 
-                    continueBtn.setText("VIEW EXPEDITION SUMMARY");
-                    continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
-                    continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
-                    if (continueBtnCell != null) continueBtnCell.width(460);
+                    if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                        continueBtn.setText("VIEW EXPEDITION SUMMARY");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(460);
+                    } else {
+                        continueBtn.setText("RETURN TO BOARD");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(340);
+                    }
                 }
                 victoryCard.invalidateHierarchy();
                 continueTable.setVisible(true);
@@ -1770,12 +1988,6 @@ public class BattleScreen implements Screen {
                     continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#2e7d32"), Color.valueOf("#1b5e20"), 2);
                     continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#388e3c"), Color.valueOf("#2e7d32"), 2);
                     if (continueBtnCell != null) continueBtnCell.width(340);
-
-                    spawnShockwave(ENEMY_X, ENEMY_DRAW_Y + 120f, 70f, 310f, Color.valueOf("#ffd54f"), Color.WHITE, 0.70f);
-                    spawnCelebrationSparks(960f, 540f);
-                    if (game.getAudioManager() != null) {
-                        game.getAudioManager().playSound(AudioManager.SoundEffect.DAWN_REBIRTH);
-                    }
                 } else {
                     topBannerLabel.setText("REST AT THE SUMMIT");
                     modalTitleLabel.setText("PEACEFUL SLEEP");
@@ -1791,13 +2003,20 @@ public class BattleScreen implements Screen {
                     rewardStatusLabel.setText("Hero Status: At Peace (0 / " + maxHp + " HP)");
                     rewardStatusLabel.setColor(Color.valueOf("#cfd8dc"));
 
-                    continueBtn.setText("VIEW EXPEDITION SUMMARY");
-                    continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
-                    continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
-                    if (continueBtnCell != null) continueBtnCell.width(460);
+                    if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                        continueBtn.setText("VIEW EXPEDITION SUMMARY");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(460);
+                    } else {
+                        continueBtn.setText("RETURN TO BOARD");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(340);
+                    }
                 }
                 victoryCard.invalidateHierarchy();
-                continueTable.setVisible(true);
+                startDawnWardenEpilogue(o == BattleOutcome.VICTORY);
                 return;
             }
 
@@ -2251,14 +2470,16 @@ public class BattleScreen implements Screen {
 
         // Draw Enemy
         TextureRegion eFrame;
-        if (isBossBattle() && enemyLungeTimer > 0f && enemyAttackAnim != null) {
-            eFrame = enemyAttackAnim.getKeyFrame(stateTime, true);
+        if (enemyLungeTimer > 0f && enemyAttackAnim != null) {
+            float lungeProgress = 1.0f - (enemyLungeTimer / ENEMY_LUNGE_DURATION);
+            float animTime = lungeProgress * enemyAttackAnim.getAnimationDuration();
+            eFrame = enemyAttackAnim.getKeyFrame(animTime, true);
         } else if (isDawnWardenBattle() && bossEntranceActive && !bossLanded && enemyAttackAnim != null) {
             eFrame = enemyAttackAnim.getKeyFrame(stateTime, true);
         } else {
             eFrame = enemyIdleAnim != null ? enemyIdleAnim.getKeyFrame(stateTime, true) : null;
         }
-        float eBob = isBossBattle() ? 0f : (MathUtils.sin(stateTime * 3f + 1f) * 4f);
+        float eBob = isBossBattle() ? 0f : (MathUtils.sin(stateTime * 3f + 1f) * 2.5f);
         float descentOffsetY = 0f;
         float entranceScale = 1.0f;
         float entranceAlphaScale = 1.0f;
@@ -2278,9 +2499,48 @@ public class BattleScreen implements Screen {
             float enemyAlpha = ((enemy.getHealth() <= 0) ? 0.35f : 1.0f) * entranceAlphaScale;
             float hover = isPaleShepherdBattle() ? ((float) Math.sin(stateTime * 2.2f) * 8f) : 0f;
             float drawEX = ENEMY_X + eLungeX + eFlinchX;
-            float drawEY = ENEMY_DRAW_Y + (isPaleShepherdBattle() ? (16f + hover) : (enemy.getHealth() <= 0 ? -12f : eBob)) + eLungeY + descentOffsetY;
-            float enemyW = (isPaleShepherdBattle() ? 280f : (isBossBattle() ? 320f : CHAR_DISPLAY_SIZE)) * entranceScale;
-            float enemyH = (isPaleShepherdBattle() ? ((enemy.getHealth() <= 0) ? 220f : 280f) : (isBossBattle() ? (enemy.getHealth() <= 0 ? 250f : 350f) : ((enemy.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE))) * entranceScale;
+
+            float enemyW;
+            float enemyH;
+            float bottomPadPx;
+            if (isPaleShepherdBattle()) {
+                enemyW = 280f;
+                enemyH = (enemy.getHealth() <= 0) ? 220f : 280f;
+                bottomPadPx = 0f;
+            } else if (isBossBattle()) {
+                enemyW = 320f;
+                enemyH = (enemy.getHealth() <= 0) ? 250f : 350f;
+                bottomPadPx = 0f;
+            } else {
+                // Act-stratified serpent combat sizing: visible body scaled to match hero's stature (~150-180px wide, ~110-150px tall)
+                if (currentSnakeAct == 1) {
+                    enemyW = 440f;
+                    enemyH = 440f;
+                    bottomPadPx = 17f;
+                } else if (currentSnakeAct == 2) {
+                    enemyW = 270f;
+                    enemyH = 270f;
+                    bottomPadPx = 17f;
+                } else {
+                    enemyW = 290f;
+                    enemyH = 290f;
+                    bottomPadPx = 18f;
+                }
+                if (enemy.getHealth() <= 0) {
+                    enemyH *= 0.72f;
+                }
+            }
+            enemyW *= entranceScale;
+            enemyH *= entranceScale;
+
+            float enemyBaseY;
+            if (isPaleShepherdBattle() || isBossBattle()) {
+                enemyBaseY = ENEMY_DRAW_Y;
+            } else {
+                float padOffset = (bottomPadPx / 128f) * enemyH;
+                enemyBaseY = 282f - padOffset;
+            }
+            float drawEY = enemyBaseY + (isPaleShepherdBattle() ? (16f + hover) : (enemy.getHealth() <= 0 ? -12f : eBob)) + eLungeY + descentOffsetY;
 
             // Smooth circular radial solar aura behind The Dawn Warden (zero square edges)
             if (isDawnWardenBattle() && enemy.getHealth() > 0 && bossLanded && radialGlowTex != null) {
@@ -2314,10 +2574,9 @@ public class BattleScreen implements Screen {
                     batch.setColor(1.0f, 0.95f, 0.80f, enemyAlpha); // Radiant Golden Dawn Light
                 }
             } else {
-                int tilePos = (snakeTile != null) ? snakeTile.getPosition() : 1;
-                if (tilePos <= 30) {
+                if (currentSnakeAct == 1) {
                     batch.setColor(0.85f, 1.0f, 0.88f, enemyAlpha); // Act 1: Verdant Moss / Emerald Hue
-                } else if (tilePos <= 70) {
+                } else if (currentSnakeAct == 2) {
                     batch.setColor(0.80f, 0.88f, 1.0f, enemyAlpha); // Act 2: Deep Cavern Sapphire / Indigo Hue
                 } else {
                     batch.setColor(1.0f, 0.78f, 0.72f, enemyAlpha); // Act 3: Scorched Magma / Crimson Ember Hue
