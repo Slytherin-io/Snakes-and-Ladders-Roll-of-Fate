@@ -85,6 +85,10 @@ public class Board {
         protectedSafeTiles.add(boardSize);
 
         int lastSpecialPos = -999;
+        int totalLadders = 0;
+        int act1Ladders = 0;
+        int act2Ladders = 0;
+        int act3Ladders = 0;
 
         for (int pos = 4; pos <= boardSize - 3; pos++) {
             if (protectedSafeTiles.contains(pos)) {
@@ -96,24 +100,31 @@ public class Board {
                 continue;
             }
 
-            // Act-based probability weighting shaped by the Run Fate Modifier
+            // Act-based probability weighting with Option A Escalating Danger:
+            // - Act I: 22% ladder, 8% snake (max 5 ladders)
+            // - Act II: 12% ladder, 22% snake (max 3 ladders)
+            // - Act III: 5% ladder, 38% snake (max 2 ladders, purely chance-based up to cap)
+            // Global cap: at most 10 ladders across the entire board.
+            int act = (pos <= 30) ? 1 : ((pos <= 70) ? 2 : 3);
             int roll = random.nextInt(100);
             PlannedType chosen = PlannedType.NORMAL;
 
             int baseLadderPct;
             int baseSnakePct;
-            if (pos <= 30) {
-                baseLadderPct = 20;
-                baseSnakePct = 10;
-            } else if (pos <= 70) {
-                baseLadderPct = 14;
-                baseSnakePct = 18;
+            if (act == 1) {
+                baseLadderPct = (act1Ladders < 5 && totalLadders < 10) ? 22 : 0;
+                baseSnakePct = 8;
+            } else if (act == 2) {
+                baseLadderPct = (act2Ladders < 3 && totalLadders < 10) ? 12 : 0;
+                baseSnakePct = 22;
             } else {
-                baseLadderPct = 8;
-                baseSnakePct = 24;
+                baseLadderPct = (act3Ladders < 2 && totalLadders < 10) ? 5 : 0;
+                baseSnakePct = 38;
             }
 
-            int ladderPct = Math.max(4, baseLadderPct + activeModifier.getLadderChanceDelta());
+            int ladderPct = (baseLadderPct > 0)
+                ? Math.max(1, baseLadderPct + activeModifier.getLadderChanceDelta())
+                : 0;
             int snakePct = Math.max(5, baseSnakePct + activeModifier.getSnakeChanceDelta());
 
             if (roll < ladderPct) {
@@ -127,6 +138,10 @@ public class Board {
                 if (pos + activeModifier.getMinLadderJump() <= boardSize - 1) {
                     planned[pos] = PlannedType.LADDER;
                     lastSpecialPos = pos;
+                    totalLadders++;
+                    if (act == 1) act1Ladders++;
+                    else if (act == 2) act2Ladders++;
+                    else act3Ladders++;
                 }
             } else if (chosen == PlannedType.SNAKE) {
                 if (pos - activeModifier.getMinSnakeDrop() >= 1) {
@@ -163,6 +178,10 @@ public class Board {
             } else {
                 // If no safe forward landing exists, revert to a normal tile
                 planned[pos] = PlannedType.NORMAL;
+                totalLadders--;
+                if (pos <= 30) act1Ladders--;
+                else if (pos <= 70) act2Ladders--;
+                else act3Ladders--;
             }
         }
 
@@ -388,6 +407,26 @@ public class Board {
         int count = 0;
         for (Tile t : tiles) {
             if (t instanceof NormalTile) count++;
+        }
+        return count;
+    }
+
+    public int getLaddersInAct(int act) {
+        int start = (act == 1) ? 1 : ((act == 2) ? 31 : 71);
+        int end = (act == 1) ? 30 : ((act == 2) ? 70 : boardSize);
+        int count = 0;
+        for (int i = start; i <= end && i <= tiles.size(); i++) {
+            if (tiles.get(i - 1) instanceof LadderTile) count++;
+        }
+        return count;
+    }
+
+    public int getSnakesInAct(int act) {
+        int start = (act == 1) ? 1 : ((act == 2) ? 31 : 71);
+        int end = (act == 1) ? 30 : ((act == 2) ? 70 : boardSize);
+        int count = 0;
+        for (int i = start; i <= end && i <= tiles.size(); i++) {
+            if (tiles.get(i - 1) instanceof SnakeTile) count++;
         }
         return count;
     }

@@ -87,11 +87,11 @@ public class ShepherdModalCaptureLauncher {
             boardScreen = new BoardScreen(this);
             setScreen(boardScreen);
 
-            // Trigger the modal
+            // Trigger gentle board dialogue with player and shepherd both at Tile 22
             try {
-                java.lang.reflect.Method m = BoardScreen.class.getDeclaredMethod("triggerPaleShepherdEncounter", Player.class);
-                m.setAccessible(true);
-                m.invoke(boardScreen, p1);
+                java.lang.reflect.Method mDialogue = BoardScreen.class.getDeclaredMethod("showPaleShepherdBoardDialogue", Player.class);
+                mDialogue.setAccessible(true);
+                mDialogue.invoke(boardScreen, p1);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -102,12 +102,49 @@ public class ShepherdModalCaptureLauncher {
             super.render();
             frameCount++;
 
-            if (frameCount >= 15) {
-                saveScreenshot("screenshots/shepherd_modal_full.png", null);
-                // Center crop around modal (modal is ~940x690 in center of 1920x1080)
-                // Center X: 1920/2 = 960 -> x = 960 - 520 = 440, width 1040
-                // Center Y: 1080/2 = 540 -> y = 540 - 400 = 140, height 800
-                saveScreenshot("screenshots/shepherd_modal_crop.png", new int[]{440, 140, 1040, 800});
+            if (frameCount == 15) {
+                saveScreenshot("screenshots/shepherd_board_dialogue_beat1.png", null);
+                try {
+                    java.lang.reflect.Field fBeat = BoardScreen.class.getDeclaredField("shepherdBoardDialogueBeat");
+                    fBeat.setAccessible(true);
+                    fBeat.set(boardScreen, 2);
+                    java.lang.reflect.Method mRefresh = BoardScreen.class.getDeclaredMethod("refreshShepherdBoardDialogueBeat", Player.class);
+                    mRefresh.setAccessible(true);
+                    mRefresh.invoke(boardScreen, mockParty.get(0));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else if (frameCount == 25) {
+                saveScreenshot("screenshots/shepherd_board_dialogue_beat3.png", null);
+                try {
+                    java.lang.reflect.Method mComplete = BoardScreen.class.getDeclaredMethod("triggerPaleShepherdEncounter", Player.class);
+                    mComplete.setAccessible(true);
+                    mComplete.invoke(boardScreen, mockParty.get(0));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else if (frameCount == 35) {
+                saveScreenshot("screenshots/shepherd_gentle_battle_turn1.png", null);
+                if (getScreen() instanceof io.github.snakes_and_ladders_roll_of_fate.screens.BattleScreen) {
+                    io.github.snakes_and_ladders_roll_of_fate.screens.BattleScreen bs =
+                        (io.github.snakes_and_ladders_roll_of_fate.screens.BattleScreen) getScreen();
+                    try {
+                        java.lang.reflect.Field fSys = io.github.snakes_and_ladders_roll_of_fate.screens.BattleScreen.class.getDeclaredField("battleSystem");
+                        fSys.setAccessible(true);
+                        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem sys =
+                            (io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem) fSys.get(bs);
+                        java.lang.reflect.Field fRound = io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.class.getDeclaredField("combatRound");
+                        fRound.setAccessible(true);
+                        fRound.set(sys, 3);
+                        java.lang.reflect.Method mSync = io.github.snakes_and_ladders_roll_of_fate.screens.BattleScreen.class.getDeclaredMethod("syncUi");
+                        mSync.setAccessible(true);
+                        mSync.invoke(bs);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            } else if (frameCount >= 45) {
+                saveScreenshot("screenshots/shepherd_gentle_battle_scramble.png", null);
                 Gdx.app.exit();
             }
         }

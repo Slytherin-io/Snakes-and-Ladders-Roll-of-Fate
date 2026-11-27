@@ -726,7 +726,8 @@ public class MainMenuScreen implements Screen {
         if (perk.contains(":")) {
             perk = perk.split(":")[0];
         }
-        charPerkLabel.setText("Perk: " + perk + "\n(" + cls.getStartingItemName() + ")");
+        String skillName = (cls.createSkill() != null) ? cls.createSkill().getSkillName() : "Class Trait";
+        charPerkLabel.setText("Skill: " + skillName + " (4-Turn Cooldown)\n" + perk);
 
         // 2. Character sprite texture & initial frame
         charAnimTimer = 0f;

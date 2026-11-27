@@ -218,6 +218,7 @@ public class EventEffect {
 
     // Getters
     public EventEffectType getType() { return type; }
+    public Item getItem() { return itemReward; }
     public int getMinValue() { return minValue; }
     public int getMaxValue() { return maxValue; }
     public boolean isCurseDrop() { return isCurseDrop; }

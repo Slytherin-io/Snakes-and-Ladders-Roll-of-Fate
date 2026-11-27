@@ -25,8 +25,8 @@ public class BoardMiniMapCaptureLauncher {
 
     public static void main(String[] args) {
         Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
-        config.setTitle("Capture Board MiniMap and Reaper Effect");
-        config.setWindowedMode(2200, 1080); // Wide aspect ratio testing to verify full-viewport coverage
+        config.setTitle("Capture Board HUD and Skills");
+        config.setWindowedMode(1920, 1080);
         config.setDecorated(false);
         config.useVsync(false);
 
@@ -110,54 +110,95 @@ public class BoardMiniMapCaptureLauncher {
             super.render();
             frameCount++;
 
-            if (capturePhase == 0 && frameCount == 1) {
-                // Trigger Pale Shepherd awakening to capture wide-screen burnout effect
-                boardScreen.triggerPaleShepherdAwakening();
-                try {
-                    java.lang.reflect.Field f = BoardScreen.class.getDeclaredField("reaperAwakenTimer");
-                    f.setAccessible(true);
-                    f.set(boardScreen, 1.8f); // 2.0s elapsed (Stage 3 spectral cold void + vignette)
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            } else if (capturePhase == 0 && frameCount >= 10) {
-                capturePhase = 1;
-                // Capture wide-screen reaper effect (2200x1080)
-                saveScreenshot("screenshots/board_reaper_wide_effect.png", null);
+            if (frameCount < 5) return; // Allow frames to render
 
-                // Reset reaper timer for clean mini-map captures
-                try {
-                    java.lang.reflect.Field f = BoardScreen.class.getDeclaredField("reaperAwakenTimer");
-                    f.setAccessible(true);
-                    f.set(boardScreen, 0f);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                frameCount = 0;
-            } else if (capturePhase == 1 && frameCount >= 10) {
-                capturePhase = 2;
-                saveScreenshot("screenshots/board_minimap_full.png", null);
-                // Save crop of the top-left mini-map HUD: [30, 20, 410, 100]
-                saveScreenshot("screenshots/board_minimap_crop.png", new int[]{25, 15, 415, 105});
+            switch (capturePhase) {
+                case 0:
+                    // Cat (P1) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_cat_inactive.png", new int[]{290, 930, 200, 130});
+                    // Make Ready
+                    mockParty.get(0).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 1;
+                    frameCount = 0;
+                    break;
+                case 1:
+                    // Cat (P1) Ready
+                    saveScreenshot("screenshots/board_hud_skill_cat_ready.png", new int[]{290, 930, 200, 130});
+                    // Switch to Fox (P2)
+                    setTurn(1);
+                    capturePhase = 2;
+                    frameCount = 0;
+                    break;
+                case 2:
+                    // Fox (P2) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_fox_inactive.png", new int[]{290, 930, 200, 130});
+                    mockParty.get(1).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 3;
+                    frameCount = 0;
+                    break;
+                case 3:
+                    // Fox (P2) Ready
+                    saveScreenshot("screenshots/board_hud_skill_fox_ready.png", new int[]{290, 930, 200, 130});
+                    // Switch to Turtle (P3)
+                    setTurn(2);
+                    capturePhase = 4;
+                    frameCount = 0;
+                    break;
+                case 4:
+                    // Turtle (P3) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_turtle_inactive.png", new int[]{290, 930, 200, 130});
+                    mockParty.get(2).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 5;
+                    frameCount = 0;
+                    break;
+                case 5:
+                    // Turtle (P3) Ready
+                    saveScreenshot("screenshots/board_hud_skill_turtle_ready.png", new int[]{290, 930, 200, 130});
+                    // Switch to Raccoon (P4)
+                    setTurn(3);
+                    capturePhase = 6;
+                    frameCount = 0;
+                    break;
+                case 6:
+                    // Raccoon (P4) Inactive
+                    saveScreenshot("screenshots/board_hud_skill_raccoon_inactive.png", new int[]{290, 930, 200, 130});
+                    mockParty.get(3).setSkillCooldown(0);
+                    updateDisplay();
+                    capturePhase = 7;
+                    frameCount = 0;
+                    break;
+                case 7:
+                    // Raccoon (P4) Ready
+                    saveScreenshot("screenshots/board_hud_skill_raccoon_ready.png", new int[]{290, 930, 200, 130});
+                    // Final full captures
+                    saveScreenshot("screenshots/board_hud_bottom_ready.png", new int[]{20, 915, 1880, 160});
+                    saveScreenshot("screenshots/board_hud_skill_full.png", null);
+                    Gdx.app.exit();
+                    break;
+            }
+        }
 
-                // Phase 3: Test Clustered overlap (e.g. all 4 players at Tile 20)
-                mockParty.get(0).setPosition(20);
-                mockParty.get(1).setPosition(20);
-                mockParty.get(2).setPosition(20);
-                mockParty.get(3).setPosition(20);
+        private void setTurn(int turn) {
+            try {
+                java.lang.reflect.Field tField = RollOfFateGame.class.getDeclaredField("currentTurn");
+                tField.setAccessible(true);
+                tField.set(this, turn);
+                updateDisplay();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
 
-                try {
-                    java.lang.reflect.Method m = BoardScreen.class.getDeclaredMethod("updateMiniMapProgress");
-                    m.setAccessible(true);
-                    m.invoke(boardScreen);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                frameCount = 0;
-            } else if (capturePhase == 2 && frameCount >= 10) {
-                capturePhase = 3;
-                saveScreenshot("screenshots/board_minimap_clustered_crop.png", new int[]{25, 15, 415, 105});
-                Gdx.app.exit();
+        private void updateDisplay() {
+            try {
+                java.lang.reflect.Method m = BoardScreen.class.getDeclaredMethod("updateHudDisplay");
+                m.setAccessible(true);
+                m.invoke(boardScreen);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
 

@@ -82,6 +82,21 @@ public enum CharacterClass {
     public String getStartingItemName() { return startingItemName; }
     public String getStartingItemDescription() { return startingItemDescription; }
 
+    public io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill createSkill() {
+        switch (this) {
+            case CAT:
+                return new io.github.snakes_and_ladders_roll_of_fate.skills.CatAgilitySkill();
+            case TURTLE:
+                return new io.github.snakes_and_ladders_roll_of_fate.skills.TurtleShellSkill();
+            case FOX:
+                return new io.github.snakes_and_ladders_roll_of_fate.skills.FoxCunningSkill();
+            case RACCOON:
+                return new io.github.snakes_and_ladders_roll_of_fate.skills.RaccoonScavengeSkill();
+            default:
+                return null;
+        }
+    }
+
     public Item getStartingItem() {
         switch (this) {
             case CAT:

@@ -1,6 +1,7 @@
 package io.github.snakes_and_ladders_roll_of_fate.systems;
 
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.items.BarterCategory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ public class EventChoice {
     private ChoiceRequirementType requirementType = ChoiceRequirementType.NONE;
     private int requirementValue = 0;
     private ItemType requiredItemType = null;
+    private BarterCategory barterCategory = BarterCategory.ELIXIR;
     private boolean lastCheckSucceeded = true;
     private boolean skipsSpecialMove = false;
     private boolean triggersCombat = false;
@@ -86,6 +88,22 @@ public class EventChoice {
             choice.onSuccess(rewardItem);
         }
         return choice;
+    }
+
+    // Factory method: Equal-Level Barter (Cost: Trade 1 item for equal-tier item in category)
+    public static EventChoice createEqualBarterChoice(String text, BarterCategory category) {
+        EventChoice choice = new EventChoice(text);
+        choice.requirementType = ChoiceRequirementType.CONSUME_ANY_ITEM;
+        choice.barterCategory = (category != null) ? category : BarterCategory.ELIXIR;
+        return choice;
+    }
+
+    public BarterCategory getBarterCategory() {
+        return barterCategory;
+    }
+
+    public void setBarterCategory(BarterCategory barterCategory) {
+        this.barterCategory = barterCategory;
     }
 
     // Factory method: Equipment-Assisted Choice (Expends single-use relic to deflect hazard safely)
@@ -278,7 +296,27 @@ public class EventChoice {
                 if (traded != null) {
                     result.tradedItem = traded;
                     System.out.println("  [BARTER] Traded away " + traded.getName() + " in exchange.");
-                    result.consequences.add("Traded away: " + traded.getName());
+                    result.consequences.add("Traded away: [" + traded.getTierName() + "] " + traded.getName());
+
+                    boolean hasExplicitItemReward = false;
+                    for (EventEffect eff : successEffects) {
+                        if (eff.getItem() != null) {
+                            hasExplicitItemReward = true;
+                            break;
+                        }
+                    }
+                    if (!hasExplicitItemReward) {
+                        Item reward;
+                        if (traded.isCurse()) {
+                            reward = io.github.snakes_and_ladders_roll_of_fate.items.ItemGenerator.generateCurseCleansingReward();
+                            player.gainExperience(20);
+                            result.consequences.add("Curse Purified: +20 Lore EXP");
+                        } else {
+                            reward = io.github.snakes_and_ladders_roll_of_fate.items.ItemGenerator.generateEqualBarterReward(traded.getTier(), barterCategory);
+                        }
+                        player.addItem(reward);
+                        result.consequences.add("Received: [" + reward.getTierName() + "] " + reward.getName());
+                    }
                 }
                 break;
             case EQUIPMENT_DURABILITY:

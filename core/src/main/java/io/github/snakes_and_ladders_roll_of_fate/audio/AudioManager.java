@@ -33,6 +33,7 @@ public class AudioManager {
         ACT2("music_act2", "act2", "act_2", "music_act_2"),
         ACT3("music_act3", "act3", "act_3", "music_act_3"),
         BATTLE("music_battle", "battle", "combat", "music_combat"),
+        BOSS("music_boss", "boss", "music_dawn_warden", "dawn_warden"),
         VICTORY("music_victory", "victory", "win", "music_win"),
         DEFEAT("music_defeat", "defeat", "gameover", "music_gameover", "loss");
 
@@ -67,7 +68,10 @@ public class AudioManager {
         PLAYER_HURT("audio/sfx/sfx_hit_player.ogg"),
         SANCTUARY_HEAL("audio/sfx/sfx_sanctuary.ogg"),
         LEVEL_UP("audio/sfx/sfx_level_up.ogg"),
-        REAPER_APPEAR("audio/sfx/sfx_reaper_appear.ogg");
+        REAPER_APPEAR("audio/sfx/sfx_reaper_appear.ogg"),
+        BOSS_APPEAR("audio/sfx/sfx_boss_appear.ogg"),
+        BOSS_ROAR("audio/sfx/sfx_boss_roar.ogg"),
+        DAWN_REBIRTH("audio/sfx/sfx_dawn_rebirth.ogg");
 
         private final String filePath;
         SoundEffect(String filePath) {

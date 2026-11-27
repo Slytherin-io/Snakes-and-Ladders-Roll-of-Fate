@@ -6,6 +6,7 @@ import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventCategory;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import java.util.Random;
 import java.util.Scanner;
 
@@ -95,6 +96,23 @@ public class SnakeTile extends Tile {
         System.out.println(msg);
     }
 
+    public Item createSnakeSlayerLoot(int pos) {
+        int act = (pos <= 30) ? 1 : ((pos <= 70) ? 2 : 3);
+        if (act == 1) {
+            return (random.nextBoolean())
+                ? Item.createConsumable("Venom Coating Vial", EventEffectType.ATTACK, 4, "+4 ATK (Serpent venom for 1 combat)")
+                : Item.createEquipment("Serpent Scale Buckler", EventEffectType.DEFENSE, 2, 2, 4, "+2 DEF (Tough viper hide shield)");
+        } else if (act == 2) {
+            return (random.nextBoolean())
+                ? Item.createEquipment("Shed Serpent Skin", EventEffectType.HEALTH, 30, 2, 4, "+30 Max HP Ward & Camouflage")
+                : Item.createEquipment("Crag Carapace Plate", EventEffectType.DEFENSE, 3, 2, 5, "+3 DEF (Crag serpent forged plate)");
+        } else {
+            return (random.nextBoolean())
+                ? Item.createEquipment("Apex Serpent Fang", EventEffectType.ATTACK, 6, 3, 5, "+6 ATK (Apex celestial serpent venom blade)")
+                : Item.createConsumable("Heart of Magma", EventEffectType.HEALTH, 60, "Restores 60 HP and stokes fierce inner fire");
+        }
+    }
+
     /**
      * Called by BattleScreen (or console combat) when the battle reaches BATTLE_END.
      * Applies EXP / loot / slide and returns a message for the UI/console.
@@ -102,11 +120,16 @@ public class SnakeTile extends Tile {
     public String resolveOutcome(Player player, Enemy snake, BattleOutcome outcome) {
         switch (outcome) {
             case VICTORY: {
-                int expGained = 15 + (getPosition() / 2);
+                int expGained = 20 + (getPosition() / 2);
                 player.gainExperience(expGained);
-                Item loot = Item.createRandomLoot(player.getLevel()); // tier-scaled loot
+
+                // Slayer Stat Mastery: Permanent stat increase on serpent kill!
+                player.setAttack(player.getBaseAttack() + 1);
+                player.modifyMaxHealth(5);
+
+                Item loot = createSnakeSlayerLoot(getPosition());
                 boolean added = player.addItem(loot);
-                String msg = "VICTORY! +" + expGained + " EXP";
+                String msg = "VICTORY! Slayed " + snake.getEnemyType() + "! +" + expGained + " EXP | Perm +1 ATK & +5 Max HP!";
                 msg += added ? " | Loot: " + loot.getName() : " | Satchel full - loot lost!";
                 return msg;
             }

@@ -36,9 +36,19 @@ public class RollOfFateGame extends Game {
 
     // The Pale Shepherd (The Pursuer of the Ascending Trail)
     private int paleShepherdTile = 0;
-    private int shepherdDormantTurns = 3;
+    private int shepherdDormantTurns = com.badlogic.gdx.math.MathUtils.random(4, 7);
     private int totalRounds = 0;
     private int shepherdPauseRounds = 0;
+    private boolean roundCompleted = false;
+
+    public static int calculateDormantTurns(int playerCount) {
+        if (playerCount <= 1) {
+            return com.badlogic.gdx.math.MathUtils.random(4, 7);
+        } else {
+            // For multiplayer (2-4 players), scale dormancy so that awakening occurs after 4-8 party turns
+            return Math.max(1, Math.round((float) com.badlogic.gdx.math.MathUtils.random(4, 7) / playerCount));
+        }
+    }
 
     @Override
     public void create() {
@@ -64,6 +74,8 @@ public class RollOfFateGame extends Game {
         paleShepherdTile = 0;
         totalRounds = 0;
         shepherdPauseRounds = 0;
+        shepherdDormantTurns = calculateDormantTurns(totalPlayers);
+        roundCompleted = false;
         createPlayer();
 
         currentTurn = 0; // Player 1
@@ -91,6 +103,8 @@ public class RollOfFateGame extends Game {
         this.paleShepherdTile = 0;
         this.totalRounds = 0;
         this.shepherdPauseRounds = 0;
+        this.shepherdDormantTurns = calculateDormantTurns(this.totalPlayers);
+        this.roundCompleted = false;
 
         for (int i = 0; i < chosenClasses.size(); i++) {
             Player player = new Player("Player " + (i + 1), chosenClasses.get(i));
@@ -136,11 +150,18 @@ public class RollOfFateGame extends Game {
         }
         if (livingCount == 0) return; // All dead
 
+        int oldTurn = currentTurn;
         for (int i = 0; i < players.size(); i++) {
             currentTurn = (currentTurn + 1) % players.size();
             if (players.get(currentTurn).getHealth() > 0) {
                 break;
             }
+        }
+
+        // Round completion: if turn wrapped around to a lower/equal turn index, or single player
+        if (currentTurn <= oldTurn || livingCount <= 1) {
+            incrementTotalRounds();
+            roundCompleted = true;
         }
     }
 
@@ -222,6 +243,7 @@ public class RollOfFateGame extends Game {
     public Screen getCurrentScreen() { return currentScreen; }
     public Board getBoard() { return board; }
     public List<Player> getPlayers() { return players; }
+    public void setPlayers(List<Player> players) { this.players = players; }
     public int getCurrentTurn() { return currentTurn; }
     public Player getCurrentPlayer() {
         return players.isEmpty() ? null : players.get(currentTurn);
@@ -255,7 +277,14 @@ public class RollOfFateGame extends Game {
     public int getTotalRounds() { return totalRounds; }
     public void incrementTotalRounds() { this.totalRounds++; }
     public int getShepherdDormantTurns() { return shepherdDormantTurns; }
+    public void setShepherdDormantTurns(int turns) { this.shepherdDormantTurns = turns; }
     public int getShepherdPauseRounds() { return shepherdPauseRounds; }
     public void setShepherdPauseRounds(int rounds) { this.shepherdPauseRounds = rounds; }
     public void decrementShepherdPauseRounds() { if (this.shepherdPauseRounds > 0) this.shepherdPauseRounds--; }
+    public boolean isRoundCompleted() { return roundCompleted; }
+    public boolean consumeRoundCompleted() {
+        boolean res = roundCompleted;
+        roundCompleted = false;
+        return res;
+    }
 }
