@@ -51,6 +51,7 @@ public class BattleSystem {
     private boolean justEnteredPhase2 = false;
     private String battleLog = "";
     private String battleState = "IDLE";
+    private boolean turtleFortressActive = false;
     private int combatRound = 1;
 
     public BattleSystem() {
@@ -100,6 +101,8 @@ public class BattleSystem {
         this.finalOutcome = null;
         this.currentState = BattleState.PLAYER_TURN;
         this.battleState = "IN_PROGRESS";
+        this.turtleFortressActive = false;
+        if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().startsWith("The ")) {
         if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Pale Shepherd")) {
             this.battleLog = "The Pale Shepherd raises his crook in quiet contemplation.";
         } else if (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().startsWith("The ")) {
@@ -107,6 +110,7 @@ public class BattleSystem {
         } else {
             this.battleLog = "A wild " + (enemy != null ? enemy.getEnemyType() : "serpent") + " blocks your path!";
         }
+    }
     }
 
     private boolean tryTriggerDawnWardenPhase2() {
@@ -220,7 +224,8 @@ public class BattleSystem {
         if (currentState != BattleState.PLAYER_TURN) return;
         isPlayerGuarding = true;
         playerTempDef += 5;
-        battleLog = "You raise your guard! (Damage halved, crits negated, riposte readied!)";
+        // Removed "riposte readied" from the text
+        battleLog = "You raise your guard! (Damage halved and crits negated!)";
         triggerEnemyTurn();
     }
 
@@ -281,6 +286,66 @@ public class BattleSystem {
             battleLog = "You fumbled and cannot use " + item.getName() + "!";
         }
     }
+    public void onPlayerUseSkill() {
+        if (currentState != BattleState.PLAYER_TURN) return;
+        if (!player.canUseSkill()) {
+            battleLog = "Skill on cooldown! (" + player.getSkillCooldown() + " turns left)";
+            return;
+        }
+
+        CharacterClass cc = player.getCharacterClass();
+        if (cc == null) { battleLog = "No class selected!"; return; }
+
+        switch (cc) {
+            case CAT: // Double Strike
+                int dmg1 = calculateDamage(player, enemy);
+                enemy.setHealth(Math.max(0, enemy.getHealth() - dmg1));
+                int dmg2 = 0;
+                if (enemy.getHealth() > 0) {
+                    dmg2 = calculateDamage(player, enemy);
+                    enemy.setHealth(Math.max(0, enemy.getHealth() - dmg2));
+                }
+                battleLog = "DOUBLE STRIKE! You hit for " + dmg1 + " and " + dmg2 + " damage!";
+                break;
+
+            case TURTLE: // Iron Fortress (The ONLY source of Riposte)
+                turtleFortressActive = true;
+                battleLog = "IRON FORTRESS! You brace for impact and prepare to riposte!";
+                break;
+
+            case FOX: // Guaranteed Crit
+                int baseDmg = Math.max(1, player.getAttack() - enemy.getDefense());
+                int foxDmg = baseDmg * 2;
+                enemy.setHealth(Math.max(0, enemy.getHealth() - foxDmg));
+                battleLog = " GUARANTEED CRIT! You strike a vital weak point for " + foxDmg + " damage!";
+                break;
+
+            case RACCOON: // Scavenge Strike (Mapped to your Bird enum)
+                int scavDmg = calculateDamage(player, enemy);
+                enemy.setHealth(Math.max(0, enemy.getHealth() - scavDmg));
+                if (enemy.getHealth() <= 0) {
+                    Item loot = Item.createConsumable("Scavenged Rations", EventEffectType.HEALTH, 25, "Restores 25 HP");
+                    player.addItem(loot);
+                    battleLog = "SCAVENGE STRIKE! " + scavDmg + " damage! You loot " + loot.getName() + "!";
+                } else {
+                    battleLog = "Scavenge Strike deals " + scavDmg + " damage! (Loot on kill)";
+                }
+                break;
+
+            default:
+                battleLog = "This class has no active skill.";
+                return;
+        }
+
+        player.useSkill(); // Trigger the 4-turn cooldown
+
+        if (enemy.getHealth() <= 0) {
+            battleLog += " The " + enemy.getEnemyType() + " collapses!";
+            endBattle(BattleOutcome.VICTORY);
+        } else {
+            triggerEnemyTurn();
+        }
+    }
 
     // --- ENEMY TURN (delayed so the player can read the log) ---
     private void triggerEnemyTurn() {
@@ -305,10 +370,31 @@ public class BattleSystem {
     }
 
     public void executeEnemyAttack() {
+
         if (currentState != BattleState.ENEMY_TURN) return;
 
         StringBuilder log = new StringBuilder();
         SerpentArchetype archetype = resolveSerpentArchetype(enemy);
+        if (turtleFortressActive) {
+            log.append("🛡️ IRON FORTRESS! You take 0 damage! ");
+            int riposteDmg = player.getBaseDefense() * 3; // Heavy riposte based on Base DEF
+            enemy.setHealth(Math.max(0, enemy.getHealth() - riposteDmg));
+            log.append("Riposte deals ").append(riposteDmg).append(" damage! ");
+            turtleFortressActive = false;
+
+            if (enemy.getHealth() <= 0) {
+                log.append("The ").append(enemy.getEnemyType()).append(" collapses from the riposte!");
+                battleLog = log.toString();
+                endBattle(BattleOutcome.VICTORY);
+                player.tickSkillCooldown();
+                return;
+            }
+
+            battleLog = log.toString();
+            currentState = BattleState.PLAYER_TURN;
+            player.tickSkillCooldown();
+            return; // Skip the normal enemy attack logic
+        }
 
         // Regenerative Tanks recover +5 HP at turn start (capped at their starting max HP)
         if (archetype == SerpentArchetype.REGEN_TANK) {
@@ -367,29 +453,10 @@ public class BattleSystem {
         player.setHealth(newHealth);
 
         // Riposte counter-strike if the player guarded and survived
+// Replace the old "if (isPlayerGuarding) { ... riposte ... } else { ... }" block with this:
         if (isPlayerGuarding) {
             isPlayerGuarding = false;
-            int riposteRoll = combatDice.roll();
-            int riposteDamage = rollRiposteDamage(riposteRoll);
-            int newEnemyHp = Math.max(0, enemy.getHealth() - riposteDamage);
-            enemy.setHealth(newEnemyHp);
-
-            if (battleListener != null) {
-                battleListener.onDamageDealt(player, enemy, riposteDamage, riposteRoll == 20, false);
-            }
-
-            if (newEnemyHp <= 0) {
-                if (tryTriggerDawnWardenPhase2()) {
-                    player.clearTemporaryBuffs();
-                    currentState = BattleState.PLAYER_TURN;
-                    return;
-                }
-                battleLog = "🛡️ Blocked! Took " + damage + " dmg and riposted for " + riposteDamage + " dmg! "
-                    + enemy.getEnemyType() + " collapses!";
-                endBattle(BattleOutcome.VICTORY);
-                return;
-            }
-            log.append("🛡️ Blocked! Took ").append(damage).append(" dmg and riposted for ").append(riposteDamage).append(" dmg! ");
+            log.append("🛡️ Blocked! Took ").append(damage).append(" reduced damage! ");
         } else {
             log.append(enemy.getEnemyType()).append(" deals ").append(damage).append(" damage! ");
         }
@@ -425,6 +492,7 @@ public class BattleSystem {
         combatRound++;
         battleLog = log.toString();
         currentState = BattleState.PLAYER_TURN;
+        player.tickSkillCooldown();
     }
 
     public void endBattle() {
