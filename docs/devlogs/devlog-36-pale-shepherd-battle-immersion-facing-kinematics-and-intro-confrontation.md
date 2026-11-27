@@ -1,65 +1,89 @@
-# Devlog 36: Pale Shepherd Top Dialogue Refactor, Arrival Kinematics, High-Contrast Typography & Victory Rewards
+# Devlog 36: Pale Shepherd Overhaul: Gentle Redesign, Battle Immersion, Facing Kinematics, Top Dialogue & Victory Rewards
 
 * **Date:** November 27, 2026
 * **Author:** John Calvin D. Samson (Project Leader)
-* **Sprint / Milestone:** Week 6 – Atmospheric Narrative, Gentle Pursuer Redesign & Board Dialogue Ergonomics
+* **Sprint / Milestone:** Week 6 – Atmospheric Narrative, Gentle Pursuer Redesign, Board Dialogue Ergonomics & Immersion
 * **Branch:** `feat/board-adventure-screen`
 
 ---
 
 ## Objectives
-- **Top-Anchored Board Dialogue Card**: Reposition the pre-battle dialogue card from the bottom of the screen to the top (`top().padTop(20)`), ensuring the stepping stones, player characters, The Pale Shepherd sprite, and bottom HUD cards remain completely visible and unobstructed.
-- **Arrival-Only Dialogue Trigger**: Ensure the player character slides smoothly along the full snake descent trajectory directly to the reaper's designated tile (`shepherdPos`). Remove mid-flight halts so the dialogue triggers only after touchdown when the character and the reaper are standing together at the exact same tile.
-- **High-Contrast Readability & Dedicated Typography**: Fix baked dark brown font colors by declaring and initializing dedicated white-base fonts (`shepherdDialogueTitleFont` at 26pt and `shepherdDialogueFont` at 22pt). Render bright, crystal-clear `#ffffff` body dialogue, `#ffd54f` glowing amber titles, and `#e0d4fc` lavender subtitles over the dark dusk card backdrop.
-- **Substantial Victory Rewards**: Provide game-changing rewards for players who choose to fight and triumph over The Pale Shepherd rather than escaping:
-  - `+100 EXP`
-  - Full HP restoration to maximum (`player.setHealth(player.getMaxHealth())`)
-  - Permanent `+10 Max HP` (`player.modifyMaxHealth(10)`)
-  - Permanent `+1 ATK` (`player.setAttack(player.getBaseAttack() + 1)`)
-  - Legendary Relic: `"Pale Shepherd's Crook"` (+4 DEF, 3 uses) added to inventory with full-satchel interactive item swap fallback.
+- **Transform The Pale Shepherd into a Gentle, Sorrowful Pursuer**: Shift the pursuer from an aggressive raid boss ("Harvester of Souls", "MORTAL CLASH") into a melancholic, quiet wanderer testing the resolve of travelers on the mountain path.
+- **In-Battle Facing Kinematics & Visual Immersion**: Ensure The Pale Shepherd's battle sprite faces left directly toward the player character rather than gazing right away from combat, creating an intimate confrontation.
+- **Top-Anchored Board Dialogue Architecture**: Reposition the pre-battle dialogue card from the bottom of the screen to the top (`top().padTop(20)`), keeping the board tiles, player character, The Pale Shepherd sprite, and bottom HUD elements completely visible and unobstructed.
+- **Arrival-Only Dialogue Trigger**: Ensure the player character slides smoothly along the full descent trajectory directly to the shepherd's tile (`shepherdPos`). Remove premature midair halts so the dialogue triggers only after touchdown when both the character and the reaper are standing together at the exact same tile.
+- **High-Contrast Readability & Dedicated Typography**: Eliminate baked dark brown vertex colors by creating dedicated white-base fonts (`shepherdDialogueTitleFont` at 26pt and `shepherdDialogueFont` at 22pt). Render bright, crystal-clear `#ffffff` body dialogue, `#ffd54f` glowing amber titles, and `#e0d4fc` lavender subtitles over the dark dusk card backdrop.
+- **Gentle Combat Balancing & Tuned Scramble Toll**: Rebalance combat stats from 80 HP / 12 ATK to 45 HP / 5 ATK / 2 DEF (dealing ~3-5 damage, mitigated by guard to ~2 damage). Implement an escape gate (Turn 1 & 2 locked) and tune the Turn 3+ scramble penalty from -20 HP to -5 HP.
+- **Substantial Rewards for Overcoming Death**: Provide game-changing rewards for players who stand their ground and defeat The Pale Shepherd in combat rather than escaping:
+  - `+100 EXP` (advancing level progression).
+  - Full HP restoration to maximum (`player.setHealth(player.getMaxHealth())`).
+  - Permanent `+10 Max HP` (`player.modifyMaxHealth(10)`).
+  - Permanent `+1 ATK` (`player.setAttack(player.getBaseAttack() + 1)`).
+  - Legendary Relic: `"Pale Shepherd's Crook"` (+4 DEF, 3 uses) added to satchel with interactive item swap fallback.
   - Reaper banishment: 15 tiles back and 3 contemplation rounds pause.
-- **Gentle Pursuer Redesign & Spoiler Removal**: Remove all aggressive titles and spoilers ("Harvester of Souls", "MORTAL CLASH"). Standardize titles to "THE PALE SHEPHERD", behavior to "A Quiet Watcher", and intro dialogue to contemplative reflections.
 
 ---
 
 ## Work Completed
 
-### 1. Top-Anchored Dialogue Card Architecture ([BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java))
-- In `buildShepherdDialogueUI()`:
-  - Repositioned the container table from `bottom().padBottom(36)` to `top().padTop(20)`.
-  - Scaled the card dimensions to 960x225 px with an 18px rounded corner radius and 2px border.
-  - Card background styled with rich dark dusk violet: `Color.valueOf("#150c1ef8")` with crisp amethyst border `Color.valueOf("#a779c2")`.
-  - Added temporary hiding of `bannerTable` (`bannerTable.setVisible(false)`) while the dialogue card is active, restoring it cleanly (`bannerTable.setVisible(true)`) upon dialogue dismissal or combat launch.
-  - Designed the top-right `[SKIP INTRO]` button as an elegant rounded pill (`#371f45` background, `#b382c4` border, `#ffd54f` amber text) that allows immediate transition without dilemmas or stat traps.
+### 1. In-Battle Immersion, Facing Kinematics & Stat Rebalance ([BattleScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BattleScreen.java), [BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java))
+- **Sprite Inversion Facing Player**:
+  - In `BattleScreen.java`, the enemy render pass detects when the combatant is The Pale Shepherd (`isPaleShepherdBattle()`) and flips the sprite horizontally, ensuring the hooded figure and crook face left toward the player character.
+- **Gentle Stat Tuning**:
+  - Health: Reduced from 80 HP to 45 HP.
+  - Attack: Reduced from 12 to 5 (deals ~3-5 damage on normal hit, ~1-2 damage when guarded).
+  - Defense: Set to 2.
+  - Behavior: Designator updated to `"A Quiet Watcher"` (purging all references to `"Harvester of Souls"`).
+  - Initial Contemplation Log: `"The Pale Shepherd raises his crook in quiet contemplation."`.
+- **Decoupled In-Battle Intro Popup**:
+  - `isIntroDialogueActive = isDawnWardenBattle()`. Since the encounter dialogue now occurs organically on the board screen, `BattleScreen` immediately presents interactive combat buttons (`ATTACK`, `DEFEND`, `ITEM`, `LOCKED`).
+- **Tuned Scramble Toll & Escape Gating**:
+  - Turn 1: `LOCKED (2)`
+  - Turn 2: `LOCKED (1)`
+  - Turn 3+: `SCRAMBLE (-5 HP)` in terracotta leather with floating alert `"MIST CLEARS: SCRAMBLE UNLOCKED!"`.
+  - Escaping inflicts a light parting wound of -5 HP (reduced from -20 HP) and propels the hero 3 tiles ahead, while pausing the pursuer for 1 round.
+- **Defeat Outcome**:
+  - Title: `QUIET REST`
+  - Subtitle: `"THE PALE SHEPHERD GENTLY CARRIES YOUR SPIRIT"`
+  - Message: `"REST, WEARY WANDERER"`
 
 ### 2. Snake Slide Trajectory & Arrival-Only Trigger ([BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java))
 - **Trajectory Retargeting on Void Descent**:
-  - In `handleChoiceSelected()`, when a snake slide enters the void (`entersVoid = (shepherdPos > 0 && dest <= shepherdPos)`), `specialSlideTarget` is set directly to `shepherdPos`.
-  - The tumble damage is halved (20 -> 0, 10-19 -> 5, 1-9 -> 10 HP) and registered in the outcome log.
+  - In `handleChoiceSelected()`, when a snake slide leads into the void past the reaper (`entersVoid = (shepherdPos > 0 && dest <= shepherdPos)`), `specialSlideTarget` is set directly to `shepherdPos`.
+  - Tumble damage is halved (20 -> 0, 10-19 -> 5, 1-9 -> 10 HP) and logged in the outcome card (`"Caught upon descent by The Pale Shepherd at Tile " + shepherdPos + "!"`).
 - **Removed Premature Mid-Flight Halts**:
-  - Removed `SpecialMovePhase.INTERCEPTED_MIDAIR` and `SpecialMovePhase.INTERCEPTED_DESCENT`.
-  - The character completes the entire flight arc until `progress >= 1.0f`, landing directly on Tile `shepherdPos`.
-- **Arrival Trigger**:
-  - In `case LANDED:`, after the touchdown recovery animation completes on Tile `shepherdPos`:
+  - Eliminated `SpecialMovePhase.INTERCEPTED_MIDAIR` and `SpecialMovePhase.INTERCEPTED_DESCENT`.
+  - The character slides along the full descent arc until `progress >= 1.0f`, landing directly on Tile `shepherdPos`.
+- **Arrival Trigger on Reaper's Tile**:
+  - In `case LANDED:`, after the touchdown recovery animation finishes on Tile `shepherdPos`:
     - Checks `if (game.getPaleShepherdTile() > 0 && finalPos == game.getPaleShepherdTile())`.
     - Triggers `showPaleShepherdBoardDialogue(player)` with both the player character and The Pale Shepherd standing together on the tile.
 
-### 3. Font Contrast & Typography Overhaul ([BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java))
-- **Dedicated White-Base BitmapFonts**:
-  - Declared `shepherdDialogueTitleFont` and `shepherdDialogueFont`.
-  - Initialized in `initAssets()` via `UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE)` and `UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.WHITE)`.
-  - Registered proper resource disposal in `dispose()`.
-- **High-Contrast Text Hierarchy**:
-  - Speaker Name: `THE PALE SHEPHERD` rendered in warm golden amber (`#ffd54f`) using `shepherdDialogueTitleFont`.
-  - Subtitle: `A Soft Whisper In The Mist` rendered in bright ethereal lavender (`#e0d4fc`) using `miniFont`.
-  - Body Text: Rendered in crisp pure white (`#ffffff`) using `shepherdDialogueFont`, completely eliminating the muddy brown tint from the old `eventDescFont`.
-  - Interactive Action Buttons:
-    - Continue Buttons (Beats 1 & 2): Amethyst pill (`#512d61` fill, `#b583c7` border) with white text.
-    - Confrontation Button (Beat 3): Terracotta pill (`#8a472c` fill, `#e59368` border) with white text (`STAND UP & FACE HIM`).
+### 3. Top-Anchored Dialogue Card Architecture ([BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java))
+- In `buildShepherdDialogueUI()`:
+  - Container table positioned at `top().padTop(20)`.
+  - Card dimensions set to 960x225 px with an 18px rounded corner radius and 2px border.
+  - Background styled in dark dusk violet: `Color.valueOf("#150c1ef8")` with crisp amethyst border `Color.valueOf("#a779c2")`.
+  - Temporarily hides the top ribbon banner (`bannerTable.setVisible(false)`) while dialogue is active, restoring it cleanly (`bannerTable.setVisible(true)`) upon transition to battle or dialogue conclusion.
+  - Integrated a top-right rounded pill button `[SKIP INTRO]` (`#371f45` fill, `#b382c4` border, `#ffd54f` text) that allows immediate transition directly to combat without stat dilemmas or traps.
 
-### 4. Rewarding Reaper Defeat & Victory Card Overhaul ([BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java), [BattleScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BattleScreen.java))
+### 4. High-Contrast Typography & Dedicated Fonts ([BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java))
+- **Dedicated White-Base BitmapFonts**:
+  - Declared `shepherdDialogueTitleFont` (26pt) and `shepherdDialogueFont` (22pt).
+  - Initialized with `Color.WHITE` in `initAssets()`, completely eliminating the dark brown vertex tint inherited from `eventDescFont`.
+  - Properly disposed in `dispose()`.
+- **High-Contrast Palette**:
+  - Speaker Name: `THE PALE SHEPHERD` in glowing warm amber (`#ffd54f`).
+  - Subtitle: `A Soft Whisper In The Mist` in soft lavender (`#e0d4fc`).
+  - Dialogue Body: Pure, crisp white (`#ffffff`) for maximum legibility.
+  - Multi-Beat Narrative:
+    - **Beat 1**: *"Softly now, little wanderer. You were falling so fast."* | Button: `[CONTINUE (1/3)]` (Amethyst pill `#512d61` / `#b583c7`).
+    - **Beat 2**: *"The stones on this mountain are sharp, and your paws are bruised. Do you stumble because you are weary... or because you are rushing toward the end?"* | Button: `[CONTINUE (2/3)]`.
+    - **Beat 3**: *"If your heart still yearns to reach the summit, show me the warmth left in your spirit."* | Button: `[STAND UP & FACE HIM]` (Terracotta pill `#8a472c` / `#e59368`).
+
+### 5. Substantial Rewards for Defeating The Pale Shepherd ([BoardScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BoardScreen.java), [BattleScreen.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/screens/BattleScreen.java))
 - In `BoardScreen.java` (`pendingBattleOutcome == BattleOutcome.VICTORY`):
-  - Awards `+100 EXP` (triggering player level up progression).
+  - Awards `+100 EXP` (advancing player level progression).
   - Permanent stat upgrades: `+10 Max HP` via `player.modifyMaxHealth(10)` and `+1 ATK` via `player.setAttack(player.getBaseAttack() + 1)`.
   - Full heal: `player.setHealth(player.getMaxHealth())`.
   - Bestows Legendary Relic: `"Pale Shepherd's Crook"` (+4 DEF, 3 uses) created via `Item.createEquipment(...)`.
@@ -73,7 +97,7 @@
   - Loot Text: `Acquired: Pale Shepherd's Crook (+4 DEF)  |  Reaper Paused 3 Rounds` (`#ffd54f`)
   - Status Text: `Hero Health: [Full HP] / [Full HP] HP (Fully Restored & Empowered)` (`#ffe0b2`)
 
-### 5. Automated Verification & Visual Capture ([BoardAdventureBugFixTest.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/board/BoardAdventureBugFixTest.java), [ShepherdModalCaptureLauncher.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/lwjgl3/src/main/java/io/github/snakes_and_ladders_roll_of_fate/lwjgl3/ShepherdModalCaptureLauncher.java))
+### 6. Automated Verification & Visual Capture ([BoardAdventureBugFixTest.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/core/src/main/java/io/github/snakes_and_ladders_roll_of_fate/board/BoardAdventureBugFixTest.java), [ShepherdModalCaptureLauncher.java](file:///c:/Users/John%20Calvin/Documents/DevJourn/Snakes-and-Ladders-Roll-of-Fate/lwjgl3/src/main/java/io/github/snakes_and_ladders_roll_of_fate/lwjgl3/ShepherdModalCaptureLauncher.java))
 - Updated `testPaleShepherdMortalDuelResolution()` in `BoardAdventureBugFixTest.java` to verify:
   - 100 EXP gain advancing player level.
   - +10 Max HP increase.
