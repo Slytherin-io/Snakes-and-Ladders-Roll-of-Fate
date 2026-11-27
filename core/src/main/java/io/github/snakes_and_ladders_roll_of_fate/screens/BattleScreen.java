@@ -52,20 +52,26 @@ import java.util.Map;
 
 public class BattleScreen implements Screen {
     // Dynamic Attack Effects & Particle System Data Structures
+    public enum SlashStyle {
+        PLAYER_SWORD,
+        SNAKE_FANGS,
+        DAWN_SOLAR_CLAW,
+        SHEPHERD_SCYTHE
+    }
+
     public static class HitSpark {
-        float x, y;
-        float vx, vy;
-        float timer;
-        float maxDuration;
-        float size;
+        float x, y, vx, vy;
+        float timer, maxDuration, size, gravity;
         Color color;
 
         public HitSpark(float x, float y, float vx, float vy, float duration, float size, Color color) {
-            this.x = x; this.y = y;
-            this.vx = vx; this.vy = vy;
-            this.timer = duration;
-            this.maxDuration = duration;
-            this.size = size;
+            this(x, y, vx, vy, duration, size, 750f, color);
+        }
+
+        public HitSpark(float x, float y, float vx, float vy, float duration, float size, float gravity, Color color) {
+            this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+            this.timer = duration; this.maxDuration = duration; this.size = size;
+            this.gravity = gravity;
             this.color = color;
         }
     }
@@ -74,15 +80,15 @@ public class BattleScreen implements Screen {
         float x, y;
         float timer;
         float maxDuration;
-        boolean isSnakeBite;
+        SlashStyle style;
         boolean isCrit;
         float angle;
 
-        public SlashEffect(float x, float y, float duration, boolean isSnakeBite, boolean isCrit, float angle) {
+        public SlashEffect(float x, float y, float duration, SlashStyle style, boolean isCrit, float angle) {
             this.x = x; this.y = y;
             this.timer = duration;
             this.maxDuration = duration;
-            this.isSnakeBite = isSnakeBite;
+            this.style = style;
             this.isCrit = isCrit;
             this.angle = angle;
         }
@@ -92,11 +98,23 @@ public class BattleScreen implements Screen {
         float x, y;
         float timer;
         float maxDuration;
+        float startRadius;
+        float expandDistance;
+        Color outerColor;
+        Color innerColor;
 
         public ShieldPulse(float x, float y, float duration) {
+            this(x, y, duration, 50f, 90f, new Color(0.3f, 0.85f, 1.0f, 1f), new Color(1.0f, 0.9f, 0.4f, 1f));
+        }
+
+        public ShieldPulse(float x, float y, float duration, float startRadius, float expandDistance, Color outerColor, Color innerColor) {
             this.x = x; this.y = y;
             this.timer = duration;
             this.maxDuration = duration;
+            this.startRadius = startRadius;
+            this.expandDistance = expandDistance;
+            this.outerColor = outerColor;
+            this.innerColor = innerColor;
         }
     }
 
@@ -123,7 +141,7 @@ public class BattleScreen implements Screen {
     private final Player player;
     private final SnakeTile snakeTile;
     private final Enemy enemy;
-    private final int enemyMaxHp;
+    private int enemyMaxHp;
     private final BattleSystem battleSystem;
 
     // Combat FX Lists & Kinematics
@@ -148,12 +166,25 @@ public class BattleScreen implements Screen {
     private float screenShakeDuration = 0f;
     private float screenShakeIntensity = 0f;
 
+    // Cinematic Dawn Warden Entrance, Enrage & Solar FX State
+    private static final float BOSS_ENTRANCE_DURATION = 1.90f;
+    private static final float BOSS_DESCENT_START = 0.45f;
+    private static final float BOSS_LAND_TIME = 1.25f;
+    private boolean bossEntranceActive = false;
+    private float bossEntranceTimer = 0f;
+    private boolean bossLanded = true;
+    private boolean bossEnraged = false;
+    private float bossVeilAlpha = 0f;
+    private float bossFlashAlpha = 0f;
+    private float bossEmberSpawnTimer = 0f;
+
     // Rendering
     private SpriteBatch batch;
     private OrthographicCamera worldCamera;
     private ExtendViewport worldViewport;
     private Stage hudStage;
     private Texture whitePixelTex;
+    private Texture radialGlowTex;
 
     // Parallax Slices
     private TextureRegion act1Far, act1Mid, act1Ground;
@@ -197,7 +228,8 @@ public class BattleScreen implements Screen {
     private Table leaveConfirmModalTable;
 
     // UI Elements
-    private Label topBannerLabel, battleLogLabel, playerHpLabel, enemyHpLabel;
+    private Label topBannerLabel, battleLogLabel, playerHpLabel, enemyHpLabel, enemyNameLabel;
+    private Table topBannerWrap, topBannerBox, playerHpWrap, enemyHpWrap;
     private Table battleLogContainer;
     private Table bottomBar;
     private Table bossIntroTable;
@@ -261,17 +293,35 @@ public class BattleScreen implements Screen {
         this.screenShakeTimer = duration;
     }
 
-    private void spawnSlash(float x, float y, boolean isSnakeBite, boolean isCrit) {
-        float angle = isSnakeBite ? 0f : -32f;
-        slashEffects.add(new SlashEffect(x, y, isSnakeBite ? 0.32f : 0.30f, isSnakeBite, isCrit, angle));
+    private void spawnSlash(float x, float y, boolean isEnemyAttack, boolean isCrit) {
+        if (!isEnemyAttack) {
+            slashEffects.add(new SlashEffect(x, y, 0.30f, SlashStyle.PLAYER_SWORD, isCrit, -32f));
+        } else if (isDawnWardenBattle()) {
+            slashEffects.add(new SlashEffect(x, y + 10f, 0.36f, SlashStyle.DAWN_SOLAR_CLAW, isCrit, -28f));
+        } else if (isPaleShepherdBattle()) {
+            slashEffects.add(new SlashEffect(x, y + 10f, 0.34f, SlashStyle.SHEPHERD_SCYTHE, isCrit, 25f));
+        } else {
+            slashEffects.add(new SlashEffect(x, y, 0.32f, SlashStyle.SNAKE_FANGS, isCrit, 0f));
+        }
     }
 
-    private void spawnHitSparks(float x, float y, boolean isSnakeBite, int count, boolean isCrit) {
+    private void spawnHitSparks(float x, float y, boolean isEnemyAttack, int count, boolean isCrit) {
         Color[] playerColors = new Color[]{
             new Color(1f, 1f, 1f, 1f),
             new Color(1f, 0.9f, 0.2f, 1f),
             new Color(1f, 0.55f, 0.1f, 1f),
             new Color(1f, 0.2f, 0.2f, 1f)
+        };
+        Color[] solarColors = new Color[]{
+            new Color(1f, 0.96f, 0.72f, 1f),
+            new Color(1f, 0.80f, 0.22f, 1f),
+            new Color(1f, 0.45f, 0.12f, 1f),
+            new Color(1f, 0.22f, 0.08f, 1f)
+        };
+        Color[] shepherdColors = new Color[]{
+            new Color(1f, 0.28f, 0.32f, 1f),
+            new Color(0.95f, 0.85f, 0.45f, 1f),
+            new Color(0.55f, 0.85f, 1f, 1f)
         };
         Color[] snakeColors = new Color[]{
             new Color(0.85f, 1f, 0.85f, 1f),
@@ -279,7 +329,17 @@ public class BattleScreen implements Screen {
             new Color(0.1f, 0.85f, 0.3f, 1f),
             new Color(0.75f, 0.2f, 1f, 1f)
         };
-        Color[] palette = isSnakeBite ? snakeColors : playerColors;
+
+        Color[] palette;
+        if (!isEnemyAttack) {
+            palette = playerColors;
+        } else if (isDawnWardenBattle()) {
+            palette = solarColors;
+        } else if (isPaleShepherdBattle()) {
+            palette = shepherdColors;
+        } else {
+            palette = snakeColors;
+        }
 
         for (int i = 0; i < count; i++) {
             float angle = MathUtils.random(0f, 360f) * MathUtils.degRad;
@@ -291,6 +351,40 @@ public class BattleScreen implements Screen {
             Color c = palette[MathUtils.random(palette.length - 1)];
             hitSparks.add(new HitSpark(x, y, vx, vy, duration, size, c));
         }
+    }
+
+    private void spawnShockwave(float x, float y, float startRadius, float expandDistance, Color outerColor, Color innerColor, float duration) {
+        shieldPulses.add(new ShieldPulse(x, y, duration, startRadius, expandDistance, outerColor, innerColor));
+    }
+
+    private void spawnSolarBurst(float x, float y, int count) {
+        Color[] solarPalette = new Color[]{
+            Color.valueOf("#fff3c4"),
+            Color.valueOf("#ffd54f"),
+            Color.valueOf("#ff9100"),
+            Color.valueOf("#ff5252")
+        };
+        for (int i = 0; i < count; i++) {
+            float angle = MathUtils.random(-15f, 195f) * MathUtils.degRad;
+            float speed = MathUtils.random(180f, 640f);
+            float vx = MathUtils.cos(angle) * speed;
+            float vy = MathUtils.sin(angle) * speed + MathUtils.random(40f, 160f);
+            float duration = MathUtils.random(0.40f, 0.80f);
+            float size = MathUtils.random(4.0f, 7.5f);
+            Color c = solarPalette[MathUtils.random(solarPalette.length - 1)];
+            hitSparks.add(new HitSpark(x + MathUtils.random(-50f, 50f), y, vx, vy, duration, size, 520f, c));
+        }
+    }
+
+    private void spawnRisingEmber(float cx, float cy) {
+        Color c = bossEnraged
+            ? (MathUtils.randomBoolean() ? Color.valueOf("#ff6e40") : Color.valueOf("#ffd54f"))
+            : (MathUtils.randomBoolean() ? Color.valueOf("#ffe082") : Color.valueOf("#ffab40"));
+        float vx = MathUtils.random(-36f, 36f);
+        float vy = MathUtils.random(75f, 160f);
+        float dur = MathUtils.random(0.75f, 1.35f);
+        float size = MathUtils.random(3.5f, 6.0f);
+        hitSparks.add(new HitSpark(cx + MathUtils.random(-125f, 125f), cy + MathUtils.random(0f, 95f), vx, vy, dur, size, -45f, c));
     }
 
     private void spawnHealSparks(float x, float y) {
@@ -352,7 +446,11 @@ public class BattleScreen implements Screen {
     @Override
     public void show() {
         if (game.getAudioManager() != null) {
-            game.getAudioManager().playMusic(AudioManager.MusicTrack.BATTLE);
+            game.getAudioManager().playMusic(
+                isBossBattle() ? AudioManager.MusicTrack.BOSS : AudioManager.MusicTrack.BATTLE);
+            if (isDawnWardenBattle()) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.BOSS_APPEAR);
+            }
         }
         batch = new SpriteBatch();
         worldCamera = new OrthographicCamera();
@@ -362,10 +460,12 @@ public class BattleScreen implements Screen {
         hudStage = new Stage(new ExtendViewport(1920, 1080));
         Gdx.input.setInputProcessor(hudStage);
 
-        // 1x1 White Texture
+        // 1x1 White Texture & Soft Radial Glow Circle Texture
         Pixmap px = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         px.setColor(Color.WHITE); px.fill();
         whitePixelTex = new Texture(px); px.dispose();
+
+        radialGlowTex = createRadialGlowTexture(128);
 
         // Load Fredoka Fonts (Option 1 pairing matching BoardScreen)
         titleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
@@ -467,6 +567,12 @@ public class BattleScreen implements Screen {
         battleSystem.startBattle(player, enemy);
         isIntroDialogueActive = isDawnWardenBattle();
         introBeatIndex = 0;
+        bossEntranceActive = isDawnWardenBattle();
+        bossEntranceTimer = 0f;
+        bossLanded = !isDawnWardenBattle();
+        bossEnraged = false;
+        bossVeilAlpha = isDawnWardenBattle() ? 0.65f : 0f;
+        bossFlashAlpha = 0f;
 
         // Build UI
         buildTopBanner();
@@ -497,6 +603,27 @@ public class BattleScreen implements Screen {
         act3Ground = new TextureRegion(bg3, 6, 464, 1008, 110);
     }
 
+    private Texture createRadialGlowTexture(int size) {
+        Pixmap glow = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        glow.setBlending(Pixmap.Blending.None);
+        float half = size * 0.5f;
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                float dx = (x + 0.5f - half) / half;
+                float dy = (y + 0.5f - half) / half;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                float falloff = Math.max(0f, 1f - dist);
+                float alpha = falloff * falloff * falloff; // Smooth cubic feathering, zero box edges
+                glow.setColor(1f, 1f, 1f, alpha);
+                glow.drawPixel(x, y);
+            }
+        }
+        Texture tex = new Texture(glow);
+        tex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        glow.dispose();
+        return tex;
+    }
+
     private void buildTopBanner() {
         int act;
         String bannerText;
@@ -518,14 +645,14 @@ public class BattleScreen implements Screen {
         topBannerLabel = new Label(bannerText,
             new Label.LabelStyle(topBannerFont, Color.valueOf("#fffdfa")));
         topBannerLabel.setAlignment(Align.center);
-        Table banner = new Table();
-        banner.setBackground(UIUtils.createRoundedDrawable(920, 70, 20, bannerBgColor));
-        banner.add(topBannerLabel).pad(8, 36, 8, 36);
-        Table outer = new Table();
-        outer.setFillParent(true);
-        outer.top().padTop(22);
-        outer.add(banner).center();
-        hudStage.addActor(outer);
+        topBannerBox = new Table();
+        topBannerBox.setBackground(UIUtils.createRoundedDrawable(920, 70, 20, bannerBgColor));
+        topBannerBox.add(topBannerLabel).pad(8, 36, 8, 36);
+        topBannerWrap = new Table();
+        topBannerWrap.setFillParent(true);
+        topBannerWrap.top().padTop(22);
+        topBannerWrap.add(topBannerBox).center();
+        hudStage.addActor(topBannerWrap);
     }
 
     /**
@@ -586,7 +713,7 @@ public class BattleScreen implements Screen {
         Color pillBorder  = Color.valueOf("#854b25");
 
         // Player HP (Bottom Left)
-        int maxHp = player.getCharacterClass() != null ? player.getCharacterClass().getBaseHealth() : 100;
+        int maxHp = player.getMaxHealth();
         playerHpLabel = new Label("HP: " + player.getHealth() + " / " + maxHp, new Label.LabelStyle(hudHpFont, Color.valueOf("#a81717")));
         Table pPill = new Table();
         pPill.setBackground(UIUtils.createRoundedDrawable(340, 75, 12, pillLeather, pillBorder, 3));
@@ -596,27 +723,27 @@ public class BattleScreen implements Screen {
         pBox.add(playerHpLabel).left();
         pPill.add(pBox).pad(8, 20, 8, 20);
 
-        Table pWrap = new Table();
-        pWrap.setFillParent(true);
-        pWrap.bottom().left().padBottom(160).padLeft(50);
-        pWrap.add(pPill).size(340, 75);
-        hudStage.addActor(pWrap);
+        playerHpWrap = new Table();
+        playerHpWrap.setFillParent(true);
+        playerHpWrap.bottom().left().padBottom(160).padLeft(50);
+        playerHpWrap.add(pPill).size(340, 75);
+        hudStage.addActor(playerHpWrap);
 
         // Enemy HP (Bottom Right - Mirroring Player HP)
         enemyHpLabel = new Label("HP: " + enemy.getHealth() + " / " + enemyMaxHp, new Label.LabelStyle(hudHpFont, Color.valueOf("#a81717")));
         Table ePill = new Table();
         ePill.setBackground(UIUtils.createRoundedDrawable(340, 75, 12, pillLeather, pillBorder, 3));
         Table eBox = new Table();
-        Label eName = new Label(enemy.getEnemyType().toUpperCase(), new Label.LabelStyle(playerTagFont, Color.valueOf("#361704")));
-        eBox.add(eName).right().row();
+        enemyNameLabel = new Label(enemy.getEnemyType().toUpperCase(), new Label.LabelStyle(playerTagFont, Color.valueOf("#361704")));
+        eBox.add(enemyNameLabel).right().row();
         eBox.add(enemyHpLabel).right();
         ePill.add(eBox).pad(8, 20, 8, 20);
 
-        Table eWrap = new Table();
-        eWrap.setFillParent(true);
-        eWrap.bottom().right().padBottom(160).padRight(50);
-        eWrap.add(ePill).size(340, 75);
-        hudStage.addActor(eWrap);
+        enemyHpWrap = new Table();
+        enemyHpWrap.setFillParent(true);
+        enemyHpWrap.bottom().right().padBottom(160).padRight(50);
+        enemyHpWrap.add(ePill).size(340, 75);
+        hudStage.addActor(enemyHpWrap);
     }
 
     private void buildActionButtons() {
@@ -940,7 +1067,10 @@ public class BattleScreen implements Screen {
                     if (game.getRunTracker() != null && won) {
                         game.getRunTracker().recordThroneClaimed(player);
                     }
-                    game.setScreen(new GameSummaryScreen(game, won, player));
+                    game.setScreen(new GameSummaryScreen(
+                        game, won, player,
+                        won ? io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.REBIRTH_TRIUMPH
+                            : io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.PEACEFUL_REST));
                     return;
                 }
                 if (isPaleShepherdBattle()) {
@@ -953,7 +1083,9 @@ public class BattleScreen implements Screen {
                             game.getRunTracker().recordPlayerFallen(player);
                         }
                         if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                            game.setScreen(new GameSummaryScreen(game, false, player));
+                            game.setScreen(new GameSummaryScreen(
+                                game, false, player,
+                                io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.HARVESTED_BY_SHEPHERD));
                             return;
                         }
                     }
@@ -965,7 +1097,9 @@ public class BattleScreen implements Screen {
                         game.getRunTracker().recordPlayerFallen(player);
                     }
                     if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                        game.setScreen(new GameSummaryScreen(game, false, player));
+                        game.setScreen(new GameSummaryScreen(
+                            game, false, player,
+                            io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.FALLEN_ON_TRAIL));
                         return;
                     }
                 }
@@ -1267,23 +1401,57 @@ public class BattleScreen implements Screen {
     private void syncUi() {
         BattleState state = battleSystem.getCurrentState();
         boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f);
-        boolean playerTurn = (!isIntroDialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
+        boolean playerTurn = (!bossEntranceActive && !isIntroDialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
         boolean ended = (state == BattleState.BATTLE_END);
 
+        if (topBannerWrap != null) {
+            topBannerWrap.setVisible(bossLanded);
+        }
+        if (playerHpWrap != null) {
+            playerHpWrap.setVisible(bossLanded && !ended);
+        }
+        if (enemyHpWrap != null) {
+            enemyHpWrap.setVisible(bossLanded && !ended);
+        }
         if (bossIntroTable != null) {
-            bossIntroTable.setVisible(isIntroDialogueActive && !ended);
+            bossIntroTable.setVisible(!bossEntranceActive && isIntroDialogueActive && !ended);
         }
         if (bottomBar != null) {
-            bottomBar.setVisible(!isIntroDialogueActive && !ended);
+            bottomBar.setVisible(!bossEntranceActive && !isIntroDialogueActive && !ended);
         }
         if (battleLogContainer != null && !ended) {
-            battleLogContainer.setVisible(!isIntroDialogueActive);
+            battleLogContainer.setVisible(!bossEntranceActive && !isIntroDialogueActive);
+        }
+
+        // True Phase 2 Transition when Phase 1 HP reaches 0
+        if (battleSystem.consumeJustEnteredPhase2()) {
+            bossEnraged = true;
+            enemyMaxHp = battleSystem.getPhase2MaxHp();
+            bossFlashAlpha = 0.58f;
+            triggerScreenShake(22f, 0.50f);
+            spawnShockwave(ENEMY_X, ENEMY_DRAW_Y + 140f, 65f, 320f, Color.valueOf("#ff6d00"), Color.valueOf("#ffd54f"), 0.65f);
+            spawnSolarBurst(ENEMY_X, ENEMY_DRAW_Y + 130f, 44);
+            spawnFloatingText(ENEMY_X, ENEMY_DRAW_Y + 290f, "PHASE II: SOLAR ASCENSION!", Color.valueOf("#ffd54f"), true);
+
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("PHASE II: AWAKENED DAWN WARDEN!");
+            }
+            if (topBannerBox != null) {
+                topBannerBox.setBackground(UIUtils.createRoundedDrawable(
+                    920, 70, 20, Color.valueOf("#8c1d18"), Color.valueOf("#ffd54f"), 3));
+            }
+            if (enemyNameLabel != null) {
+                enemyNameLabel.setText("DAWN WARDEN (PHASE II)");
+            }
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.BOSS_ROAR);
+            }
         }
 
         // Update Text
         battleLogLabel.setText(ended ? outcomeMessage : battleSystem.getBattleLog());
 
-        int maxHp = player.getCharacterClass() != null ? player.getCharacterClass().getBaseHealth() : 100;
+        int maxHp = player.getMaxHealth();
         playerHpLabel.setText("HP: " + Math.max(0, player.getHealth()) + " / " + maxHp);
         enemyHpLabel.setText("HP: " + Math.max(0, enemy.getHealth()) + " / " + enemyMaxHp);
 
@@ -1432,9 +1600,10 @@ public class BattleScreen implements Screen {
                     continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#388e3c"), Color.valueOf("#2e7d32"), 2);
                     if (continueBtnCell != null) continueBtnCell.width(340);
 
+                    spawnShockwave(ENEMY_X, ENEMY_DRAW_Y + 120f, 70f, 310f, Color.valueOf("#ffd54f"), Color.WHITE, 0.70f);
                     spawnCelebrationSparks(960f, 540f);
                     if (game.getAudioManager() != null) {
-                        game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.DAWN_REBIRTH);
                     }
                 } else {
                     topBannerLabel.setText("REST AT THE SUMMIT");
@@ -1698,6 +1867,52 @@ public class BattleScreen implements Screen {
         stateTime += delta;
         int tile = (snakeTile != null) ? snakeTile.getPosition() : 100;
 
+        // Cinematic Dawn Warden Entrance Sequence
+        if (bossEntranceActive && !isPaused) {
+            if (Gdx.input.justTouched() || Gdx.input.isKeyJustPressed(Input.Keys.SPACE) || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                completeBossEntrance();
+            } else {
+                bossEntranceTimer += delta;
+                if (bossEntranceTimer < BOSS_DESCENT_START) {
+                    bossVeilAlpha = 0.65f - (bossEntranceTimer / BOSS_DESCENT_START) * 0.15f;
+                    bossEmberSpawnTimer -= delta;
+                    if (bossEmberSpawnTimer <= 0f) {
+                        bossEmberSpawnTimer = 0.08f;
+                        spawnRisingEmber(ENEMY_X, ENEMY_DRAW_Y + 260f);
+                    }
+                } else if (!bossLanded && bossEntranceTimer >= BOSS_LAND_TIME) {
+                    bossLanded = true;
+                    bossFlashAlpha = 0.55f;
+                    bossVeilAlpha = 0.42f;
+                    triggerScreenShake(22f, 0.45f);
+                    spawnShockwave(ENEMY_X, ENEMY_DRAW_Y + 35f, 65f, 290f, Color.valueOf("#ffd54f"), Color.valueOf("#fff8e1"), 0.65f);
+                    spawnSolarBurst(ENEMY_X, ENEMY_DRAW_Y + 45f, 44);
+                } else if (bossLanded) {
+                    float post = (bossEntranceTimer - BOSS_LAND_TIME) / Math.max(0.1f, BOSS_ENTRANCE_DURATION - BOSS_LAND_TIME);
+                    bossVeilAlpha = Math.max(0f, 0.42f * (1f - post));
+                }
+
+                if (bossEntranceTimer >= BOSS_ENTRANCE_DURATION) {
+                    completeBossEntrance();
+                }
+            }
+        } else if (bossVeilAlpha > 0f && !isPaused) {
+            bossVeilAlpha = Math.max(0f, bossVeilAlpha - delta * 1.4f);
+        }
+
+        if (bossFlashAlpha > 0f && !isPaused) {
+            bossFlashAlpha = Math.max(0f, bossFlashAlpha - delta * 1.55f);
+        }
+
+        // Ambient floating solar embers behind Dawn Warden during combat
+        if (isDawnWardenBattle() && bossLanded && enemy != null && enemy.getHealth() > 0 && !isPaused) {
+            bossEmberSpawnTimer -= delta;
+            if (bossEmberSpawnTimer <= 0f) {
+                bossEmberSpawnTimer = bossEnraged ? 0.09f : 0.18f;
+                spawnRisingEmber(ENEMY_X, ENEMY_DRAW_Y + 40f);
+            }
+        }
+
         // Update Timers & Kinematics
         if (playerLungeTimer > 0f) {
             playerLungeTimer -= delta;
@@ -1721,6 +1936,9 @@ public class BattleScreen implements Screen {
             if (progress >= 0.48f && !enemyAttackLanded) {
                 enemyAttackLanded = true;
                 if (game.getAudioManager() != null) {
+                    if (isDawnWardenBattle()) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.BOSS_ROAR);
+                    }
                     game.getAudioManager().playSound(AudioManager.SoundEffect.PLAYER_HURT);
                 }
                 battleSystem.executeEnemyAttack();
@@ -1757,8 +1975,20 @@ public class BattleScreen implements Screen {
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
         renderParallaxBackground(tile);
+        if (bossVeilAlpha > 0f) {
+            batch.setColor(0.08f, 0.03f, 0.06f, bossVeilAlpha);
+            batch.draw(whitePixelTex, worldCamera.position.x - worldViewport.getWorldWidth() / 2f - 200f, 0f,
+                worldViewport.getWorldWidth() + 400f, worldViewport.getWorldHeight() + 200f);
+            batch.setColor(Color.WHITE);
+        }
         renderArena(delta);
         renderEffects(delta);
+        if (bossFlashAlpha > 0f) {
+            batch.setColor(1f, 0.90f, 0.55f, bossFlashAlpha);
+            batch.draw(whitePixelTex, worldCamera.position.x - worldViewport.getWorldWidth() / 2f - 200f, 0f,
+                worldViewport.getWorldWidth() + 400f, worldViewport.getWorldHeight() + 200f);
+            batch.setColor(Color.WHITE);
+        }
         batch.end();
 
         // HUD Render
@@ -1791,9 +2021,9 @@ public class BattleScreen implements Screen {
                 pRotation = 4f;
             } else {
                 float s = (p - 0.15f) / 0.85f;
-                pLungeX = MathUtils.sin(s * MathUtils.PI) * 260f;
-                pLungeY = MathUtils.sin(s * MathUtils.PI) * 15f;
-                pRotation = -MathUtils.sin(s * MathUtils.PI) * 10f;
+                pLungeX = MathUtils.sin(s * MathUtils.PI) * 520f;
+                pLungeY = MathUtils.sin(s * MathUtils.PI) * 28f;
+                pRotation = -MathUtils.sin(s * MathUtils.PI) * 12f;
             }
         }
         float pFlinchX = 0f;
@@ -1837,8 +2067,8 @@ public class BattleScreen implements Screen {
                 eRotation = -6f;
             } else {
                 float s = (p - 0.18f) / 0.82f;
-                eLungeX = -MathUtils.sin(s * MathUtils.PI) * 300f;
-                eLungeY = MathUtils.sin(s * MathUtils.PI) * 20f;
+                eLungeX = -MathUtils.sin(s * MathUtils.PI) * 520f;
+                eLungeY = MathUtils.sin(s * MathUtils.PI) * 26f;
                 eRotation = MathUtils.sin(s * MathUtils.PI) * 12f;
             }
         }
@@ -1852,18 +2082,57 @@ public class BattleScreen implements Screen {
         TextureRegion eFrame;
         if (isBossBattle() && enemyLungeTimer > 0f && enemyAttackAnim != null) {
             eFrame = enemyAttackAnim.getKeyFrame(stateTime, true);
+        } else if (isDawnWardenBattle() && bossEntranceActive && !bossLanded && enemyAttackAnim != null) {
+            eFrame = enemyAttackAnim.getKeyFrame(stateTime, true);
         } else {
             eFrame = enemyIdleAnim != null ? enemyIdleAnim.getKeyFrame(stateTime, true) : null;
         }
         float eBob = isBossBattle() ? 0f : (MathUtils.sin(stateTime * 3f + 1f) * 4f);
-        if (eFrame != null) {
-            float enemyAlpha = (enemy.getHealth() <= 0) ? 0.35f : 1.0f;
+        float descentOffsetY = 0f;
+        float entranceScale = 1.0f;
+        float entranceAlphaScale = 1.0f;
+        if (isDawnWardenBattle() && bossEntranceActive) {
+            if (bossEntranceTimer < BOSS_DESCENT_START) {
+                entranceAlphaScale = 0f;
+            } else if (!bossLanded) {
+                float p = Math.min(1f, (bossEntranceTimer - BOSS_DESCENT_START) / Math.max(0.05f, BOSS_LAND_TIME - BOSS_DESCENT_START));
+                float eased = 1f - (1f - p) * (1f - p);
+                descentOffsetY = (1f - eased) * 520f;
+                entranceScale = 0.86f + eased * 0.14f;
+                entranceAlphaScale = Math.min(1f, p * 2.2f);
+            }
+        }
+
+        if (eFrame != null && entranceAlphaScale > 0f) {
+            float enemyAlpha = ((enemy.getHealth() <= 0) ? 0.35f : 1.0f) * entranceAlphaScale;
+            float hover = isPaleShepherdBattle() ? ((float) Math.sin(stateTime * 2.2f) * 8f) : 0f;
+            float drawEX = ENEMY_X + eLungeX + eFlinchX;
+            float drawEY = ENEMY_DRAW_Y + (isPaleShepherdBattle() ? (16f + hover) : (enemy.getHealth() <= 0 ? -12f : eBob)) + eLungeY + descentOffsetY;
+            float enemyW = (isPaleShepherdBattle() ? 280f : (isBossBattle() ? 320f : CHAR_DISPLAY_SIZE)) * entranceScale;
+            float enemyH = (isPaleShepherdBattle() ? ((enemy.getHealth() <= 0) ? 220f : 280f) : (isBossBattle() ? (enemy.getHealth() <= 0 ? 250f : 350f) : ((enemy.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE))) * entranceScale;
+
+            // Smooth circular radial solar aura behind The Dawn Warden (zero square edges)
+            if (isDawnWardenBattle() && enemy.getHealth() > 0 && bossLanded && radialGlowTex != null) {
+                float pulse = 0.5f + 0.5f * MathUtils.sin(stateTime * (bossEnraged ? 6f : 3.2f));
+                Color haloOuter = bossEnraged ? new Color(1f, 0.35f, 0.10f, 0.28f + pulse * 0.16f) : new Color(1f, 0.78f, 0.25f, 0.22f + pulse * 0.14f);
+                Color haloInner = bossEnraged ? new Color(1f, 0.78f, 0.30f, 0.30f + pulse * 0.16f) : new Color(1f, 0.94f, 0.58f, 0.24f + pulse * 0.14f);
+                float centerY = drawEY + enemyH * 0.48f;
+                batch.setColor(haloOuter);
+                batch.draw(radialGlowTex, drawEX - 190f, centerY - 190f, 380f, 380f);
+                batch.setColor(haloInner);
+                batch.draw(radialGlowTex, drawEX - 125f, centerY - 125f, 250f, 250f);
+            }
+
             if (enemyFlinchTimer > 0.12f) {
                 batch.setColor(1f, 0.25f, 0.25f, enemyAlpha); // Red hurt flash
             } else if (isPaleShepherdBattle()) {
                 batch.setColor(1.0f, 0.88f, 0.88f, enemyAlpha); // Spectral Pale Crimson Light
             } else if (isDawnWardenBattle() || isBossBattle()) {
-                batch.setColor(1.0f, 0.95f, 0.80f, enemyAlpha); // Radiant Golden Dawn Light
+                if (bossEnraged) {
+                    batch.setColor(1.0f, 0.82f, 0.62f, enemyAlpha); // Intense Solar Fury glow
+                } else {
+                    batch.setColor(1.0f, 0.95f, 0.80f, enemyAlpha); // Radiant Golden Dawn Light
+                }
             } else {
                 int tilePos = (snakeTile != null) ? snakeTile.getPosition() : 1;
                 if (tilePos <= 30) {
@@ -1874,11 +2143,7 @@ public class BattleScreen implements Screen {
                     batch.setColor(1.0f, 0.78f, 0.72f, enemyAlpha); // Act 3: Scorched Magma / Crimson Ember Hue
                 }
             }
-            float hover = isPaleShepherdBattle() ? ((float) Math.sin(stateTime * 2.2f) * 8f) : 0f;
-            float drawEX = ENEMY_X + eLungeX + eFlinchX;
-            float drawEY = ENEMY_DRAW_Y + (isPaleShepherdBattle() ? (16f + hover) : (enemy.getHealth() <= 0 ? -12f : eBob)) + eLungeY;
-            float enemyW = isPaleShepherdBattle() ? 280f : (isBossBattle() ? 320f : CHAR_DISPLAY_SIZE);
-            float enemyH = isPaleShepherdBattle() ? ((enemy.getHealth() <= 0) ? 220f : 280f) : (isBossBattle() ? (enemy.getHealth() <= 0 ? 250f : 350f) : ((enemy.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE));
+
             batch.draw(eFrame,
                 drawEX - enemyW / 2, drawEY,
                 enemyW / 2, enemyH / 2,
@@ -1888,8 +2153,15 @@ public class BattleScreen implements Screen {
         }
     }
 
+    private void completeBossEntrance() {
+        bossEntranceActive = false;
+        bossLanded = true;
+        bossVeilAlpha = 0f;
+        syncUi();
+    }
+
     private void renderEffects(float delta) {
-        // 1. Shield Pulses (Defend barrier)
+        // 1. Shield Pulses & Radial Shockwaves
         for (int i = shieldPulses.size - 1; i >= 0; i--) {
             ShieldPulse pulse = shieldPulses.get(i);
             pulse.timer -= delta;
@@ -1899,9 +2171,9 @@ public class BattleScreen implements Screen {
             }
             float t = 1.0f - (pulse.timer / pulse.maxDuration);
             float alpha = pulse.timer / pulse.maxDuration;
-            float radius = 50f + t * 90f;
-            float segThick = Math.max(2f, (1.0f - t) * 12f);
-            int sides = 10;
+            float radius = pulse.startRadius + t * pulse.expandDistance;
+            float segThick = Math.max(2f, (1.0f - t) * 14f);
+            int sides = 14;
             for (int s = 0; s < sides; s++) {
                 float a1 = (s * 360f / sides) * MathUtils.degRad;
                 float a2 = ((s + 1) * 360f / sides) * MathUtils.degRad;
@@ -1914,14 +2186,14 @@ public class BattleScreen implements Screen {
                 float dLen = (float) Math.sqrt(dx * dx + dy * dy);
                 float angle = MathUtils.radDeg * MathUtils.atan2(dy, dx);
 
-                batch.setColor(0.3f, 0.85f, 1.0f, alpha * 0.7f);
+                batch.setColor(pulse.outerColor.r, pulse.outerColor.g, pulse.outerColor.b, alpha * 0.72f);
                 batch.draw(whitePixelTex, x1, y1 - segThick / 2, 0f, segThick / 2, dLen, segThick, 1f, 1f, angle, 0, 0, 1, 1, false, false);
-                batch.setColor(1.0f, 0.9f, 0.4f, alpha * 0.9f);
+                batch.setColor(pulse.innerColor.r, pulse.innerColor.g, pulse.innerColor.b, alpha * 0.92f);
                 batch.draw(whitePixelTex, x1, y1 - (segThick * 0.4f) / 2, 0f, (segThick * 0.4f) / 2, dLen, segThick * 0.4f, 1f, 1f, angle, 0, 0, 1, 1, false, false);
             }
         }
 
-        // 2. Slashes (Player sword arcs & Snake venom bite fangs)
+        // 2. Slashes (Player Sword, Snake Fangs, Dawn Warden Solar Claws, Pale Shepherd Scythe)
         for (int i = slashEffects.size - 1; i >= 0; i--) {
             SlashEffect slash = slashEffects.get(i);
             slash.timer -= delta;
@@ -1932,12 +2204,10 @@ public class BattleScreen implements Screen {
             float t = 1.0f - (slash.timer / slash.maxDuration);
             float alpha = slash.timer / slash.maxDuration;
 
-            if (slash.isSnakeBite) {
-                // Venom Fang Slashes (Dual inward-snapping toxic fangs)
+            if (slash.style == SlashStyle.SNAKE_FANGS) {
                 float fangLen = Math.min(230f, (t / 0.3f) * 230f);
                 float fangThick = Math.max(2f, (1.0f - t) * 22f);
 
-                // Left fang:
                 float lx = slash.x - 35f;
                 float ly = slash.y;
                 float la = -65f;
@@ -1948,7 +2218,6 @@ public class BattleScreen implements Screen {
                 batch.setColor(0.9f, 1.0f, 0.85f, alpha);
                 batch.draw(whitePixelTex, lx - fangLen / 2, ly - (fangThick * 0.35f) / 2, fangLen / 2, (fangThick * 0.35f) / 2, fangLen * 0.9f, fangThick * 0.35f, 1f, 1f, la, 0, 0, 1, 1, false, false);
 
-                // Right fang:
                 float rx = slash.x + 35f;
                 float ry = slash.y;
                 float ra = +65f;
@@ -1958,6 +2227,27 @@ public class BattleScreen implements Screen {
                 batch.draw(whitePixelTex, rx - fangLen / 2, ry - fangThick / 2, fangLen / 2, fangThick / 2, fangLen * 0.95f, fangThick, 1f, 1f, ra, 0, 0, 1, 1, false, false);
                 batch.setColor(0.9f, 1.0f, 0.85f, alpha);
                 batch.draw(whitePixelTex, rx - fangLen / 2, ry - (fangThick * 0.35f) / 2, fangLen / 2, (fangThick * 0.35f) / 2, fangLen * 0.9f, fangThick * 0.35f, 1f, 1f, ra, 0, 0, 1, 1, false, false);
+            } else if (slash.style == SlashStyle.DAWN_SOLAR_CLAW) {
+                float len = Math.min(310f, (t / 0.28f) * 310f);
+                float thickness = Math.max(2.5f, (1.0f - t) * 20f);
+                float[] offsets = { -26f, 0f, 26f };
+                for (float off : offsets) {
+                    float cx = slash.x + off * 0.7f;
+                    float cy = slash.y + off;
+                    batch.setColor(1.0f, 0.38f, 0.08f, alpha * 0.55f);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - (thickness * 1.6f) / 2, len / 2, (thickness * 1.6f) / 2, len, thickness * 1.6f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                    batch.setColor(1.0f, 0.85f, 0.25f, alpha * 0.92f);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - thickness / 2, len / 2, thickness / 2, len * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                    batch.setColor(1.0f, 0.98f, 0.85f, alpha);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - (thickness * 0.35f) / 2, len / 2, (thickness * 0.35f) / 2, len * 0.9f, thickness * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                }
+            } else if (slash.style == SlashStyle.SHEPHERD_SCYTHE) {
+                float len = Math.min(300f, (t / 0.28f) * 300f);
+                float thickness = Math.max(2.5f, (1.0f - t) * 24f);
+                batch.setColor(0.85f, 0.12f, 0.20f, alpha * 0.55f);
+                batch.draw(whitePixelTex, slash.x - len / 2, slash.y - (thickness * 1.7f) / 2, len / 2, (thickness * 1.7f) / 2, len, thickness * 1.7f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.82f, 0.35f, alpha * 0.9f);
+                batch.draw(whitePixelTex, slash.x - len / 2, slash.y - thickness / 2, len / 2, thickness / 2, len * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
             } else {
                 // Radiant Sword Slash Arc
                 float len = Math.min(270f, (t / 0.3f) * 270f);
@@ -2002,7 +2292,7 @@ public class BattleScreen implements Screen {
             }
             s.x += s.vx * delta;
             s.y += s.vy * delta;
-            s.vy -= 750f * delta; // Gravity
+            s.vy -= s.gravity * delta;
             s.vx *= (1.0f - 2.5f * delta); // Drag
 
             float p = s.timer / s.maxDuration;
@@ -2112,6 +2402,7 @@ public class BattleScreen implements Screen {
         if (batch != null) batch.dispose();
         if (hudStage != null) hudStage.dispose();
         if (whitePixelTex != null) whitePixelTex.dispose();
+        if (radialGlowTex != null) radialGlowTex.dispose();
         if (titleFont != null) titleFont.dispose();
         if (topBannerFont != null) topBannerFont.dispose();
         if (hudHpFont != null) hudHpFont.dispose();

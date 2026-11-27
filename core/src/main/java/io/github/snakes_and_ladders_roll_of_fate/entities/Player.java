@@ -3,6 +3,8 @@ package io.github.snakes_and_ladders_roll_of_fate.entities;
 import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
 import io.github.snakes_and_ladders_roll_of_fate.items.ItemType;
+import io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill;
+import io.github.snakes_and_ladders_roll_of_fate.skills.SkillResult;
 
 public class Player extends Entity {
     private String name;
@@ -16,6 +18,10 @@ public class Player extends Entity {
     private int turnsSinceLastEvent = 99; // Starts ready for encounter
     private CharacterClass characterClass;
     private int maxHealthBonus = 0;
+
+    // Polymorphic Class Skill (Starts inactive on full cooldown)
+    private ClassSkill classSkill;
+    private int skillCooldown = 4;
 
     // Active Board Utility Modifiers (Single-Use Item Effects)
     private boolean pendingDiceChoice = false;
@@ -44,10 +50,9 @@ public class Player extends Entity {
             setHealth(characterClass.getBaseHealth());
             setAttack(characterClass.getBaseAttack());
             setDefense(characterClass.getBaseDefense());
-            Item startingItem = characterClass.getStartingItem();
-            if (startingItem != null) {
-                addItem(startingItem);
-            }
+            this.classSkill = characterClass.createSkill();
+            // All players start with their skill inactive on full 4-turn cooldown
+            this.skillCooldown = (this.classSkill != null) ? this.classSkill.getMaxCooldown() : 4;
         }
     }
 
@@ -242,9 +247,9 @@ public class Player extends Entity {
 
     public void levelUp() {
         this.level++;
-        setAttack(getBaseAttack() + 3);   // +2 Attack every level
+        setAttack(getBaseAttack() + 1);   // +1 Attack every level (prevents endgame snowballing)
         setDefense(getBaseDefense() + 1); // +1 Defense every level
-        setHealth(getHealth() + 20);// Heal up on level up!
+        setHealth(getHealth() + 20);      // Heal up on level up (clamped to maxHealth in setHealth)
         System.out.println("Leveled Up!");//For level up tests
     }
 
@@ -286,4 +291,35 @@ public class Player extends Entity {
 
     public boolean hasSnakeWard() { return hasSnakeWard; }
     public void setHasSnakeWard(boolean hasSnakeWard) { this.hasSnakeWard = hasSnakeWard; }
+
+    // --- Polymorphic Class Skill Helpers ---
+    public ClassSkill getClassSkill() { return classSkill; }
+    public void setClassSkill(ClassSkill classSkill) { this.classSkill = classSkill; }
+
+    public int getSkillCooldown() { return skillCooldown; }
+    public void setSkillCooldown(int skillCooldown) { this.skillCooldown = Math.max(0, skillCooldown); }
+
+    public boolean isSkillReady() {
+        return classSkill != null && skillCooldown <= 0;
+    }
+
+    public void decrementSkillCooldown() {
+        if (skillCooldown > 0) {
+            skillCooldown--;
+        }
+    }
+
+    /**
+     * Polymorphically executes the active ClassSkill and resets cooldown.
+     */
+    public SkillResult useClassSkill(io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame game) {
+        if (!isSkillReady()) {
+            return new SkillResult(false, (classSkill != null ? classSkill.getSkillName() : "Skill") + " is recharging (" + skillCooldown + " turns remaining).");
+        }
+        SkillResult result = classSkill.execute(this, game);
+        if (result != null && result.isSuccess()) {
+            this.skillCooldown = classSkill.getMaxCooldown();
+        }
+        return result;
+    }
 }

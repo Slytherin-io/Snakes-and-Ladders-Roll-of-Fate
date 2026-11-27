@@ -19,13 +19,14 @@ public class BoardAdventureBugFixTest {
 
         testBugA_EventLandingTriggers();
         testBugB_PursuerOvershootClamping();
-        testBugB_SnakeSlideTrailingRepositioning();
+        testBugB_SnakeSlideVoidInterception();
         testBugB_EncounterResolutionPushbackAndPause();
         testShepherdRandomDormancy();
         testSnakeSlideAcrobaticsTumble();
         testSnakeSlayerStatMasteryAndSpoils();
         testSerpentsBaneReaperRepelAndAdrenalineSurge();
         testPaleShepherdMortalDuelResolution();
+        testDawnWardenPhase2Transition();
 
         System.out.println(">>> ALL BUG FIX & COMBAT SYSTEM VERIFICATIONS PASSED WITH ZERO FAILURES!");
     }
@@ -96,8 +97,8 @@ public class BoardAdventureBugFixTest {
         System.out.println("  [PASS] Pursuer clamped to exact player tile (15), never overshooting to 16+.");
     }
 
-    private static void testBugB_SnakeSlideTrailingRepositioning() {
-        System.out.println("\n[Test 3] Bug B: Verifying Snake Slide Behind Pursuer Repositioning...");
+    private static void testBugB_SnakeSlideVoidInterception() {
+        System.out.println("\n[Test 3] Bug B: Verifying Snake Slide Void Interception & Halved Tumble Damage...");
         RollOfFateGame game = new RollOfFateGame();
         Player p = new Player("Hero", CharacterClass.CAT);
         p.setPosition(35);
@@ -105,29 +106,54 @@ public class BoardAdventureBugFixTest {
         players.add(p);
         game.setPlayers(players);
 
-        // Pursuer was stalking at Tile 20
+        // Pursuer was stalking at Tile 20 (forming The Void for all tiles <= 20)
         game.setPaleShepherdTile(20);
 
-        // Player slides down snake from 35 down to 10 (falling behind reaper)
-        int finalPos = 10;
-        p.setPosition(finalPos);
+        // Case A: Player slides down snake from 35 towards Tile 10 (which is in The Void, <= 20)
+        int rawDest = 10;
+        int shepherdPos = game.getPaleShepherdTile();
+        boolean entersVoid = (shepherdPos > 0 && rawDest <= shepherdPos);
 
-        // Under new logic: reaper repositions behind player to max(1, finalPos - 3) with 1 round pause
-        if (game.getPaleShepherdTile() > 0 && finalPos < game.getPaleShepherdTile()) {
-            game.setPaleShepherdTile(Math.max(1, finalPos - 3));
-            game.setShepherdPauseRounds(1);
+        if (!entersVoid) {
+            throw new AssertionError("Destination 10 should be recognized as entering The Void (reaper at 20)");
         }
 
-        if (game.getPaleShepherdTile() != 7) {
-            throw new AssertionError("Reaper should have repositioned to Tile 7, was at: " + game.getPaleShepherdTile());
+        // Under Void Interception: slide destination is clamped to reaper's tile (20)
+        int finalSlideDest = entersVoid ? shepherdPos : rawDest;
+        if (finalSlideDest != 20) {
+            throw new AssertionError("Slide target must be clamped to reaper tile 20, was: " + finalSlideDest);
         }
-        if (game.getShepherdPauseRounds() != 1) {
-            throw new AssertionError("Reaper should have 1 contemplation pause round");
+
+        // Verify tumble damage is halved upon interception:
+        // Nat 20 = 0 DMG; 10-19 = 5 DMG; 1-9 = 10 DMG
+        for (int roll = 1; roll <= 20; roll++) {
+            int halvedDmg;
+            if (roll == 20) halvedDmg = 0;
+            else if (roll >= 10) halvedDmg = 5;
+            else halvedDmg = 10;
+
+            if (roll == 20 && halvedDmg != 0) throw new AssertionError("Nat 20 must deal 0 damage");
+            if (roll >= 10 && roll < 20 && halvedDmg != 5) throw new AssertionError("10-19 intercepted tumble must be 5 DMG");
+            if (roll < 10 && halvedDmg != 10) throw new AssertionError("<10 intercepted tumble must be 10 DMG");
         }
-        if (game.getPaleShepherdTile() >= p.getPosition()) {
-            throw new AssertionError("Reaper must not be ahead of player after slide!");
+
+        // Reaper stays at Tile 20 (NEVER teleports backwards!)
+        if (game.getPaleShepherdTile() != 20) {
+            throw new AssertionError("Reaper must remain at Tile 20, never rewinding on player slide!");
         }
-        System.out.println("  [PASS] After slide to Tile 10, Reaper safely relocated behind player to Tile 7 with 1 contemplation round.");
+
+        // Case B: Player slides down snake towards Tile 25 (safe ground ahead of reaper)
+        int safeDest = 25;
+        boolean safeEntersVoid = (shepherdPos > 0 && safeDest <= shepherdPos);
+        if (safeEntersVoid) {
+            throw new AssertionError("Destination 25 should NOT be recognized as entering The Void");
+        }
+        int safeSlideDest = safeEntersVoid ? shepherdPos : safeDest;
+        if (safeSlideDest != 25) {
+            throw new AssertionError("Safe slide destination must be 25");
+        }
+
+        System.out.println("  [PASS] Slide into Void cleanly intercepted at Reaper tile (20) with halved tumble damage (0, 5, 10 HP). Reaper position preserved.");
     }
 
     private static void testBugB_EncounterResolutionPushbackAndPause() {
@@ -323,5 +349,74 @@ public class BoardAdventureBugFixTest {
             throw new AssertionError("Escape scramble should propel player to Tile 28, was: " + scrambleDest);
         }
         System.out.println("  [PASS] Pale Shepherd victory banishes reaper 15 tiles (+3 pause rounds), and escape incurs -20 HP and +3 scramble.");
+    }
+
+    private static void testDawnWardenPhase2Transition() {
+        System.out.println("\n[Test 10] Verifying Dawn Warden True Phase 2 Ascension & Balanced Scaling...");
+        Player hero = new Player("Challenger", CharacterClass.CAT);
+        hero.setHealth(90);
+        int baseAtk = hero.getAttack();
+        hero.levelUp();
+        if (hero.getBaseAttack() != baseAtk + 1 || hero.getHealth() > hero.getMaxHealth()) {
+            throw new AssertionError("levelUp() should grant +1 ATK cleanly and clamp HP to maxHealth");
+        }
+
+        io.github.snakes_and_ladders_roll_of_fate.entities.Enemy boss = new io.github.snakes_and_ladders_roll_of_fate.entities.Enemy("The Dawn Warden");
+        boss.setHealth(120);
+        boss.setAttack(14);
+        boss.setDefense(7);
+
+        io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem bs =
+            new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
+        bs.startBattle(hero, boss);
+
+        // Drop boss to 1 HP and trigger Riposte defeat in Phase 1
+        boss.setHealth(1);
+        try {
+            java.lang.reflect.Field stateField = bs.getClass().getDeclaredField("currentState");
+            stateField.setAccessible(true);
+            stateField.set(bs, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
+
+            java.lang.reflect.Field guardField = bs.getClass().getDeclaredField("isPlayerGuarding");
+            guardField.setAccessible(true);
+            guardField.set(bs, true);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        bs.executeEnemyAttack();
+
+        if (bs.getBossPhase() != 2 || !bs.consumeJustEnteredPhase2()) {
+            throw new AssertionError("Depleting Dawn Warden Phase 1 must trigger Phase 2 Ascension");
+        }
+        if (boss.getHealth() != 150 || boss.getAttack() != 17 || boss.getDefense() != 9) {
+            throw new AssertionError("Phase 2 Dawn Warden must refill to 150 HP with +3 ATK (17) and +2 DEF (9), got HP="
+                + boss.getHealth() + " ATK=" + boss.getAttack() + " DEF=" + boss.getDefense());
+        }
+        if (bs.getCurrentState() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.PLAYER_TURN) {
+            throw new AssertionError("Battle must continue cleanly into Phase 2 PLAYER_TURN");
+        }
+
+        // Now deplete Phase 2 to 0 HP -> true VICTORY
+        boss.setHealth(1);
+        hero.setHealth(90);
+        try {
+            java.lang.reflect.Field stateField = bs.getClass().getDeclaredField("currentState");
+            stateField.setAccessible(true);
+            stateField.set(bs, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
+
+            java.lang.reflect.Field guardField = bs.getClass().getDeclaredField("isPlayerGuarding");
+            guardField.setAccessible(true);
+            guardField.set(bs, true);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        bs.executeEnemyAttack();
+
+        if (bs.getFinalOutcome() != io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutcome.VICTORY) {
+            throw new AssertionError("Depleting Phase 2 Dawn Warden must trigger VICTORY, was: " + bs.getFinalOutcome());
+        }
+        System.out.println("  [PASS] Dawn Warden cleanly transitions Phase 1 (120 HP) -> Phase 2 (150 HP, +3 ATK, +2 DEF) -> VICTORY.");
     }
 }

@@ -44,6 +44,11 @@ public class BattleSystem {
     private boolean isPlayerGuarding = false;
     private int playerPoisonTurns = 0;
     private int playerPoisonDamage = 0;
+    private String playerDotLabel = "Poison";
+    private boolean isDawnWarden = false;
+    private int bossPhase = 1;
+    private int phase2MaxHp = 150;
+    private boolean justEnteredPhase2 = false;
     private String battleLog = "";
     private String battleState = "IDLE";
 
@@ -59,10 +64,18 @@ public class BattleSystem {
         return baseDamage + ((lastRoll - 1) / 4);
     }
 
-    public int getLastRoll()            { return lastRoll; }
-    public boolean isLastRollCritical() { return lastRoll == 20; }
-    public boolean isLastRollMiss()     { return lastRoll == 1; }
-    public boolean isPlayerGuarding()   { return isPlayerGuarding; }
+    public int getLastRoll()              { return lastRoll; }
+    public boolean isLastRollCritical()   { return lastRoll == 20; }
+    public boolean isLastRollMiss()       { return lastRoll == 1; }
+    public boolean isPlayerGuarding()     { return isPlayerGuarding; }
+    public int getBossPhase()             { return bossPhase; }
+    public int getPhase2MaxHp()           { return phase2MaxHp; }
+
+    public boolean consumeJustEnteredPhase2() {
+        boolean triggered = justEnteredPhase2;
+        justEnteredPhase2 = false;
+        return triggered;
+    }
 
     public void startBattle(Player player, Enemy enemy) {
         this.player = player;
@@ -72,6 +85,11 @@ public class BattleSystem {
         this.isPlayerGuarding = false;
         this.playerPoisonTurns = 0;
         this.playerPoisonDamage = 0;
+        this.playerDotLabel = "Poison";
+        this.isDawnWarden = (enemy != null && enemy.getEnemyType() != null && enemy.getEnemyType().contains("Dawn Warden"));
+        this.bossPhase = 1;
+        this.phase2MaxHp = Math.max(150, this.enemyMaxHp + 30);
+        this.justEnteredPhase2 = false;
         this.finalOutcome = null;
         this.currentState = BattleState.PLAYER_TURN;
         this.battleState = "IN_PROGRESS";
@@ -80,6 +98,21 @@ public class BattleSystem {
         } else {
             this.battleLog = "A wild " + (enemy != null ? enemy.getEnemyType() : "serpent") + " blocks your path!";
         }
+    }
+
+    private boolean tryTriggerDawnWardenPhase2() {
+        if (!isDawnWarden || bossPhase != 1 || enemy == null || enemy.getHealth() > 0) {
+            return false;
+        }
+        bossPhase = 2;
+        justEnteredPhase2 = true;
+        enemyMaxHp = phase2MaxHp;
+        enemy.setHealth(phase2MaxHp);
+        enemy.setAttack(enemy.getAttack() + 3);
+        enemy.setDefense(enemy.getDefense() + 2);
+        enemy.setBehavior("Awakened Solar Chimera");
+        battleLog = "THE DAWN WARDEN SHEDS HIS RESTRAINT - PHASE II: SOLAR ASCENSION!";
+        return true;
     }
 
     public void startBattle(Entity attacker, Entity defender) {
@@ -162,11 +195,15 @@ public class BattleSystem {
         }
 
         if (enemy.getHealth() <= 0) {
+            if (tryTriggerDawnWardenPhase2()) {
+                triggerEnemyTurn(1.50f);
+                return;
+            }
             battleLog = "You strike for " + damage + " damage! The " + enemy.getEnemyType() + " collapses!";
             endBattle(BattleOutcome.VICTORY);
         } else {
             battleLog = "You strike for " + damage + " damage!";
-            triggerEnemyTurn();
+            triggerEnemyTurn(0.8f);
         }
     }
 
@@ -233,6 +270,10 @@ public class BattleSystem {
 
     // --- ENEMY TURN (delayed so the player can read the log) ---
     private void triggerEnemyTurn() {
+        triggerEnemyTurn(0.8f);
+    }
+
+    private void triggerEnemyTurn(float delaySeconds) {
         currentState = BattleState.ENEMY_TURN;
         Timer.schedule(new Timer.Task() {
             @Override public void run() {
@@ -242,7 +283,7 @@ public class BattleSystem {
                     executeEnemyAttack();
                 }
             }
-        }, 0.8f);
+        }, delaySeconds);
     }
 
     public void executeEnemyAttack() {
@@ -282,6 +323,10 @@ public class BattleSystem {
                 raw = baseDamage + ((combatDice.roll() - 1) / 4);
             }
             damage = applyGuardedMitigation(raw);
+            if (isDawnWarden && playerPoisonTurns > 0) {
+                playerPoisonTurns = 0;
+                log.append("Guard extinguishes Solar Burn! ");
+            }
         } else {
             damage = Math.max(0, raw - playerTempDef);
         }
@@ -316,6 +361,11 @@ public class BattleSystem {
             }
 
             if (newEnemyHp <= 0) {
+                if (tryTriggerDawnWardenPhase2()) {
+                    player.clearTemporaryBuffs();
+                    currentState = BattleState.PLAYER_TURN;
+                    return;
+                }
                 battleLog = "🛡️ Blocked! Took " + damage + " dmg and riposted for " + riposteDamage + " dmg! "
                     + enemy.getEnemyType() + " collapses!";
                 endBattle(BattleOutcome.VICTORY);
@@ -326,21 +376,27 @@ public class BattleSystem {
             log.append(enemy.getEnemyType()).append(" deals ").append(damage).append(" damage! ");
         }
 
-        // Venomous Poison Strike (triggered on high roll when unblocked or on direct strike)
+        // Status DoT application: Venomous serpents poison; Dawn Warden Phase 2 inflicts Solar Burn
         if (archetype == SerpentArchetype.VENOMOUS && enemyRoll >= 15 && damage > 0) {
             playerPoisonTurns = 3;
             playerPoisonDamage = 3;
+            playerDotLabel = "Poison";
             log.append("Venomous bite! (Poisoned for 3 turns) ");
+        } else if (isDawnWarden && bossPhase >= 2 && enemyRoll >= 14 && damage > 0) {
+            playerPoisonTurns = 2;
+            playerPoisonDamage = 3;
+            playerDotLabel = "Solar Burn";
+            log.append("Solar flames sear you! (2 turns - Defend to douse) ");
         }
 
-        // Poison tick at end of enemy turn
+        // Status tick at end of enemy turn
         if (playerPoisonTurns > 0) {
             player.setHealth(player.getHealth() - playerPoisonDamage);
             playerPoisonTurns--;
-            log.append("(Poison deals ").append(playerPoisonDamage).append(" damage!) ");
+            log.append("(").append(playerDotLabel).append(" deals ").append(playerPoisonDamage).append(" dmg!) ");
             if (player.getHealth() <= 0) {
                 player.setHealth(0);
-                log.append("The venom was too much...");
+                log.append("You succumb to the affliction...");
                 battleLog = log.toString();
                 endBattle(BattleOutcome.DEFEAT);
                 return;

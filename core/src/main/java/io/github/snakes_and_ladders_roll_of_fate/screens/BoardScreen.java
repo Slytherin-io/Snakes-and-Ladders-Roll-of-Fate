@@ -53,6 +53,8 @@ import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Entity;
 import io.github.snakes_and_ladders_roll_of_fate.items.Inventory;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill;
+import io.github.snakes_and_ladders_roll_of_fate.skills.SkillResult;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
@@ -243,6 +245,8 @@ public class BoardScreen implements Screen {
     private Group miniMapTrackGroup;
     private final Map<Player, Image> playerMiniMapMarkers = new HashMap<>();
     private Image shepherdMiniMapMarker;
+    private Image voidMiniMapOverlay;
+    private boolean isSlideInterceptedByReaper = false;
     private float shepherdDisplayX = -1f;
     private float shepherdDisplayY = -1f;
     private boolean isShepherdGliding = false;
@@ -254,6 +258,16 @@ public class BoardScreen implements Screen {
     private Label inventoryTipLabel;
     private boolean itemUsedThisTurn = false;
     private boolean isItemMovement = false;
+
+    // Class Skill Button UI (Compact, beside Inventory Satchel)
+    private Button skillButton;
+    private Button.ButtonStyle skillReadyStyle;
+    private Button.ButtonStyle skillCooldownStyle;
+    private Image skillIcon;
+    private Label skillNameLabel;
+    private Label skillStatusLabel;
+    private BitmapFont skillTitleFont;
+    private BitmapFont skillSubFont;
 
     // Pause, Settings, & Leave Game Modals
     private boolean isPaused = false;
@@ -402,6 +416,10 @@ public class BoardScreen implements Screen {
         choiceOutcomeBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#5a3616"));
         choiceOutcomeValueFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
         choiceD20Font          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.WHITE);
+
+        // Class Skill Fonts
+        skillTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 18, nameBrown);
+        skillSubFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 13, Color.valueOf("#6d3a17"));
 
         // --- Slice Parallax Act Backgrounds ---
         initParallaxSlices();
@@ -732,6 +750,12 @@ public class BoardScreen implements Screen {
         miniMapTrackGroup.addActor(act2Seg);
         miniMapTrackGroup.addActor(act3Seg);
 
+        // The Pale Void track overlay: dark obsidian-crimson shroud covering tiles <= shepherdTile
+        voidMiniMapOverlay = new Image(UIUtils.createRoundedDrawable(10, 8, 4, Color.valueOf("#260810"), Color.valueOf("#4a0e17"), 1));
+        voidMiniMapOverlay.setBounds(0, 4, 0, 8);
+        voidMiniMapOverlay.setVisible(false);
+        miniMapTrackGroup.addActor(voidMiniMapOverlay);
+
         // Populate player head markers
         initPlayerMiniMapMarkers();
 
@@ -798,6 +822,73 @@ public class BoardScreen implements Screen {
                         refreshInventoryUI();
                     }
                     inventoryPopup.setVisible(willShow);
+                }
+            }
+        });
+
+        // --- 1.5. Compact Active Class Skill Button (Beside Inventory Satchel) ---
+        Color cooldownSolid  = Color.valueOf("#7d5638");
+        Color cooldownHover  = Color.valueOf("#8d6342");
+        Color cooldownBorder = Color.valueOf("#54341e");
+
+        skillReadyStyle = new Button.ButtonStyle();
+        skillReadyStyle.up = UIUtils.createRoundedDrawable(185, 120, 20, leatherSolid, containerBorder, 3);
+        skillReadyStyle.over = UIUtils.createRoundedDrawable(185, 120, 20, leatherHover, containerBorder, 3);
+
+        skillCooldownStyle = new Button.ButtonStyle();
+        skillCooldownStyle.up = UIUtils.createRoundedDrawable(185, 120, 20, cooldownSolid, cooldownBorder, 3);
+        skillCooldownStyle.over = UIUtils.createRoundedDrawable(185, 120, 20, cooldownHover, cooldownBorder, 3);
+
+        skillButton = new Button(skillCooldownStyle);
+        UIUtils.addScaleHoverEffect(skillButton);
+
+        skillIcon = new Image();
+        skillIcon.setScaling(Scaling.fit);
+
+        Table skillTextTable = new Table();
+        skillNameLabel = new Label("SKILL", new Label.LabelStyle(skillTitleFont, nameBrown));
+        skillNameLabel.setAlignment(Align.left);
+        skillStatusLabel = new Label("4 TURNS", new Label.LabelStyle(skillSubFont, Color.valueOf("#fbf2dc")));
+        skillStatusLabel.setAlignment(Align.left);
+
+        skillTextTable.add(skillNameLabel).left().padBottom(2).row();
+        skillTextTable.add(skillStatusLabel).left();
+
+        skillButton.add(skillIcon).size(42, 42).padLeft(12).padRight(10).center();
+        skillButton.add(skillTextTable).left().padRight(12).center();
+
+        skillButton.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                if (turnState != TurnState.WAITING_FOR_ROLL || isEventModalActive || cameraFocusOverrideTimer > 0f) {
+                    return;
+                }
+                Player current = game.getCurrentPlayer();
+                if (current == null) return;
+
+                if (!current.isSkillReady()) {
+                    int cd = current.getSkillCooldown();
+                    String sName = (current.getClassSkill() != null) ? current.getClassSkill().getSkillName().toUpperCase() : "SKILL";
+                    topBannerLabel.setText(sName + " RECHARGING (" + cd + (cd == 1 ? " TURN" : " TURNS") + " REMAINING)!");
+                    return;
+                }
+
+                SkillResult res = current.useClassSkill(game);
+                if (res != null && res.isSuccess()) {
+                    topBannerLabel.setText(res.getMessage().toUpperCase());
+                    updateHudDisplay();
+                    updateMiniMapProgress();
+
+                    if (res.getBonusMovement() > 0) {
+                        hopCurrentTile = current.getPosition();
+                        cameraFocusTile = current.getPosition();
+                        if (current.getPosition() >= 100) {
+                            triggerDawnWardenSummitTrial(current);
+                        }
+                    }
                 }
             }
         });
@@ -884,6 +975,7 @@ public class BoardScreen implements Screen {
         bottomBar.bottom().padBottom(24);
 
         bottomBar.add(inventoryBtn).size(250, 120).padLeft(35);
+        bottomBar.add(skillButton).size(185, 120).padLeft(14);
         bottomBar.add().expandX(); // Push Roll to center
         bottomBar.add(rollButton).size(220, 120);
         bottomBar.add().expandX(); // Push Stats to right
@@ -2021,29 +2113,60 @@ public class BoardScreen implements Screen {
                 return;
             } else {
                 // Tail Slide: Acrobatics D20 Tumble check!
-                // Natural 20 = 0 DMG (flawless); 10-19 = 10 DMG (standard tumble); <10 = 20 DMG (rough crash)
+                int dest = ((SnakeTile) tile).getDestination();
+                int shepherdPos = game.getPaleShepherdTile();
+                boolean entersVoid = (shepherdPos > 0 && dest <= shepherdPos);
+
                 int tumbleRoll = com.badlogic.gdx.math.MathUtils.random(1, 20);
                 int tumbleDmg;
                 String rollDesc;
-                if (tumbleRoll == 20) {
-                    tumbleDmg = 0;
-                    rollDesc = "Fall Damage: None (Roll: 20)";
-                } else if (tumbleRoll >= 10) {
-                    tumbleDmg = 10;
-                    rollDesc = "Fall Damage: -10 HP (Roll: " + tumbleRoll + ")";
+
+                if (entersVoid) {
+                    // Intercepted by The Pale Shepherd mid-slide!
+                    // Halved tumble damage: 20 -> 0, 10-19 -> 5, 1-9 -> 10
+                    if (tumbleRoll == 20) {
+                        tumbleDmg = 0;
+                        rollDesc = "Fall Damage: None (Roll: 20)";
+                    } else if (tumbleRoll >= 10) {
+                        tumbleDmg = 5;
+                        rollDesc = "Fall Damage: -5 HP (Roll: " + tumbleRoll + ", Halved by Interception)";
+                    } else {
+                        tumbleDmg = 10;
+                        rollDesc = "Fall Damage: -10 HP (Roll: " + tumbleRoll + ", Halved by Interception)";
+                    }
+                    if (tumbleDmg > 0) {
+                        player.setHealth(Math.max(1, player.getHealth() - tumbleDmg));
+                    }
+                    res.consequences.clear();
+                    res.consequences.add(rollDesc);
+                    res.consequences.add("Intercepted by The Pale Shepherd at Tile " + shepherdPos + "!");
+                    isSlideInterceptedByReaper = true;
+                    specialSlideTarget = shepherdPos;
+                    showOutcomeView(cleanTitle, res, true);
+                    return;
                 } else {
-                    tumbleDmg = 20;
-                    rollDesc = "Fall Damage: -20 HP (Roll: " + tumbleRoll + ")";
+                    // Safe slide ahead of the reaper
+                    if (tumbleRoll == 20) {
+                        tumbleDmg = 0;
+                        rollDesc = "Fall Damage: None (Roll: 20)";
+                    } else if (tumbleRoll >= 10) {
+                        tumbleDmg = 10;
+                        rollDesc = "Fall Damage: -10 HP (Roll: " + tumbleRoll + ")";
+                    } else {
+                        tumbleDmg = 20;
+                        rollDesc = "Fall Damage: -20 HP (Roll: " + tumbleRoll + ")";
+                    }
+                    if (tumbleDmg > 0) {
+                        player.setHealth(Math.max(1, player.getHealth() - tumbleDmg));
+                    }
+                    res.consequences.clear();
+                    res.consequences.add(rollDesc);
+                    res.consequences.add("Slid down to Tile " + dest + ".");
+                    isSlideInterceptedByReaper = false;
+                    specialSlideTarget = dest;
+                    showOutcomeView(cleanTitle, res, true);
+                    return;
                 }
-                if (tumbleDmg > 0) {
-                    player.setHealth(Math.max(1, player.getHealth() - tumbleDmg));
-                }
-                res.consequences.clear();
-                res.consequences.add(rollDesc);
-                res.consequences.add("Slid down to Tile " + ((SnakeTile) tile).getDestination() + ".");
-                specialSlideTarget = ((SnakeTile) tile).getDestination();
-                showOutcomeView(cleanTitle, res, true);
-                return;
             }
         }
 
@@ -2473,7 +2596,9 @@ public class BoardScreen implements Screen {
                 game.getRunTracker().recordPlayerFallen(player);
             }
             if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                game.setScreen(new GameSummaryScreen(game, false, player));
+                game.setScreen(new GameSummaryScreen(
+                    game, false, player,
+                    io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.FALLEN_ON_TRAIL));
                 return;
             }
             topBannerLabel.setText(player.getName().toUpperCase() + " DIED! NEXT TRAVELER'S TURN...");
@@ -2866,19 +2991,14 @@ public class BoardScreen implements Screen {
                                     return;
                                 }
 
-                                // Check if player landed directly on the pursuer's tile
+                                // Check if player was intercepted by the reaper or landed directly on the pursuer's tile
                                 if (game.getPaleShepherdTile() > 0 && finalPos == game.getPaleShepherdTile()) {
+                                    if (isSlideInterceptedByReaper) {
+                                        isSlideInterceptedByReaper = false;
+                                        topBannerLabel.setText("INTERCEPTED BY DEATH! MORTAL CLASH IN THE VOID!");
+                                    }
                                     triggerPaleShepherdEncounter(player);
                                     return;
-                                }
-
-                                // If player slid down behind the reaper, reaper relocates to trail behind
-                                if (game.getPaleShepherdTile() > 0 && finalPos < game.getPaleShepherdTile()) {
-                                    game.setPaleShepherdTile(Math.max(1, finalPos - 3));
-                                    shepherdDisplayX = getTileCenterX(game.getPaleShepherdTile());
-                                    shepherdDisplayY = getCharacterDrawY(game.getPaleShepherdTile());
-                                    game.setShepherdPauseRounds(1);
-                                    updateMiniMapProgress();
                                 }
 
                                 // Check if destination tile triggers a ladder, snake, or landmark (Fix Bug A)
@@ -2930,7 +3050,9 @@ public class BoardScreen implements Screen {
                             game.getRunTracker().recordPlayerFallen(player);
                         }
                         if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                            game.setScreen(new GameSummaryScreen(game, false, player));
+                            game.setScreen(new GameSummaryScreen(
+                                game, false, player,
+                                io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.FALLEN_ON_TRAIL));
                             return;
                         }
                     }
@@ -2940,6 +3062,10 @@ public class BoardScreen implements Screen {
                     }
                     player.clearTemporaryBuffs();
                     game.nextTurn();
+                    Player nextPlayer = game.getCurrentPlayer();
+                    if (nextPlayer != null) {
+                        nextPlayer.decrementSkillCooldown();
+                    }
                     itemUsedThisTurn = false;
                     updateHudDisplay();
                     refreshInventoryUI();
@@ -2958,7 +3084,7 @@ public class BoardScreen implements Screen {
                         }
                     }
 
-                    Player nextPlayer = game.getCurrentPlayer();
+                    nextPlayer = game.getCurrentPlayer();
                     if (nextPlayer != null && nextPlayer.hasPendingDiceChoice()) {
                         diceLabel.setText("PICK 1-6");
                     } else if (nextPlayer != null && nextPlayer.getMaxDiceRollCap() > 0) {
@@ -3258,7 +3384,7 @@ public class BoardScreen implements Screen {
         Enemy dawnWarden = new Enemy("The Dawn Warden");
         dawnWarden.setHealth(120);
         dawnWarden.setAttack(14);
-        dawnWarden.setDefense(6);
+        dawnWarden.setDefense(7);
         dawnWarden.setBehavior("Celestial Guardian");
         dawnWarden.setReward("Dawn's Blessing (Rebirth)");
 
@@ -3634,7 +3760,11 @@ public class BoardScreen implements Screen {
             // =========================================================================
             // Translucent Atmospheric Color Grading (Smooth Biome Transition Gradient)
             // =========================================================================
-            if (isRevealed && tile instanceof LadderTile) {
+            boolean isVoidTile = (game.getPaleShepherdTile() > 0 && i <= game.getPaleShepherdTile());
+            if (isVoidTile) {
+                // Swallowed by The Pale Void: desaturated dark obsidian with spectral crimson undertone
+                batch.setColor(0.24f, 0.12f, 0.16f, 0.88f);
+            } else if (isRevealed && tile instanceof LadderTile) {
                 batch.setColor(1.0f, 0.92f, 0.70f, 0.85f);
             } else if (isRevealed && tile instanceof SnakeTile) {
                 batch.setColor(0.98f, 0.70f, 0.74f, 0.85f);
@@ -3673,8 +3803,13 @@ public class BoardScreen implements Screen {
             batch.draw(slabTex, tileLeft, tileY, TILE_WIDTH + 1f, TILE_HEIGHT);
             batch.setColor(Color.WHITE);
 
-            // Fog of War mist veil across unrevealed flagstones
-            if (!isRevealed) {
+            // Creeping Void mist veil across consumed tiles, or Fog of War on unrevealed tiles
+            if (isVoidTile) {
+                float voidMistPulse = 0.28f + 0.10f * MathUtils.sinDeg(stateTime * 90f + (i * 30f));
+                batch.setColor(0.18f, 0.05f, 0.08f, voidMistPulse);
+                batch.draw(whitePixelTex, tileLeft, tileY, TILE_WIDTH + 1f, TILE_HEIGHT + 12f);
+                batch.setColor(Color.WHITE);
+            } else if (!isRevealed) {
                 float fogPulse = 0.22f + 0.08f * MathUtils.sinDeg(stateTime * 120f + (i * 25f));
                 batch.setColor(0.78f, 0.88f, 0.98f, fogPulse);
                 batch.draw(whitePixelTex, tileLeft, tileY + 3f, TILE_WIDTH, TILE_HEIGHT - 5f);
@@ -4110,9 +4245,40 @@ public class BoardScreen implements Screen {
 
         updateMiniMapProgress();
         updateInventoryButtonCount();
+        updateSkillButtonDisplay(player);
 
         if (inventoryPopup != null && inventoryPopup.isVisible()) {
             refreshInventoryUI();
+        }
+    }
+
+    private void updateSkillButtonDisplay(Player player) {
+        if (skillButton == null || player == null) return;
+        ClassSkill skill = player.getClassSkill();
+        if (skill == null) {
+            skillButton.setVisible(false);
+            return;
+        }
+        skillButton.setVisible(true);
+
+        if (player.getCharacterClass() != null && game.getAssetManager().isLoaded(Assets.getCharacterHeadTexture(player.getCharacterClass()))) {
+            Texture headTex = game.getAssetManager().get(Assets.getCharacterHeadTexture(player.getCharacterClass()));
+            skillIcon.setDrawable(new TextureRegionDrawable(new TextureRegion(headTex)));
+        }
+
+        skillNameLabel.setText(skill.getSkillName().toUpperCase());
+
+        if (player.isSkillReady()) {
+            skillButton.setStyle(skillReadyStyle);
+            skillStatusLabel.setText("READY (USE)");
+            skillStatusLabel.setColor(Color.valueOf("#206a24")); // Vibrant active green
+            skillNameLabel.setColor(Color.valueOf("#361704"));
+        } else {
+            skillButton.setStyle(skillCooldownStyle);
+            int cd = player.getSkillCooldown();
+            skillStatusLabel.setText(cd + (cd == 1 ? " TURN" : " TURNS"));
+            skillStatusLabel.setColor(Color.valueOf("#fbf2dc")); // Readable cream on cooldown leather
+            skillNameLabel.setColor(Color.valueOf("#fff3dd"));
         }
     }
 
@@ -4328,8 +4494,17 @@ public class BoardScreen implements Screen {
                     shepherdMiniMapMarker.setPosition(targetX, targetY);
                 }
                 shepherdMiniMapMarker.toFront();
+
+                if (voidMiniMapOverlay != null) {
+                    float targetVoidW = Math.max(0, getMiniMapTileX(shepherdTile, 0));
+                    voidMiniMapOverlay.setWidth(targetVoidW);
+                    voidMiniMapOverlay.setVisible(targetVoidW > 0);
+                }
             } else {
                 shepherdMiniMapMarker.setVisible(false);
+                if (voidMiniMapOverlay != null) {
+                    voidMiniMapOverlay.setVisible(false);
+                }
             }
         }
 
@@ -4464,5 +4639,7 @@ public class BoardScreen implements Screen {
         if (choiceOutcomeBodyFont != null) choiceOutcomeBodyFont.dispose();
         if (choiceOutcomeValueFont != null) choiceOutcomeValueFont.dispose();
         if (choiceD20Font != null) choiceD20Font.dispose();
+        if (skillTitleFont != null) skillTitleFont.dispose();
+        if (skillSubFont != null) skillSubFont.dispose();
     }
 }

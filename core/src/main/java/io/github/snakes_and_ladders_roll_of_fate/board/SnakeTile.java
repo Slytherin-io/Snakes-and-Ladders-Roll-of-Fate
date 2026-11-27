@@ -124,7 +124,7 @@ public class SnakeTile extends Tile {
                 player.gainExperience(expGained);
 
                 // Slayer Stat Mastery: Permanent stat increase on serpent kill!
-                player.setAttack(player.getAttack() + 1);
+                player.setAttack(player.getBaseAttack() + 1);
                 player.modifyMaxHealth(5);
 
                 Item loot = createSnakeSlayerLoot(getPosition());

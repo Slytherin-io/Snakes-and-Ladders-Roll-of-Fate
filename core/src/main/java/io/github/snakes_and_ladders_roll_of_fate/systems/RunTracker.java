@@ -226,68 +226,92 @@ public class RunTracker {
         }
     }
 
+    public enum EndingType {
+        REBIRTH_TRIUMPH,
+        PEACEFUL_REST,
+        HARVESTED_BY_SHEPHERD,
+        FALLEN_ON_TRAIL
+    }
+
     /**
      * Generates a poetic, engaging bardic narrative paragraph summarizing the expedition.
      */
     public synchronized String generateBardicNarrative(boolean isVictory, Player hero, List<Player> players) {
+        return generateBardicNarrative(isVictory ? EndingType.REBIRTH_TRIUMPH : EndingType.FALLEN_ON_TRAIL, hero, players);
+    }
+
+    public synchronized String generateBardicNarrative(EndingType endingType, Player hero, List<Player> players) {
         int totalPartyTurns = 0;
         int totalLadders = 0;
         int totalSlain = 0;
-        int totalEvents = 0;
 
         for (Player p : players) {
             PlayerStats ps = getOrCreateStats(p);
             totalPartyTurns += ps.totalTurns;
             totalLadders += ps.laddersClimbed;
             totalSlain += ps.snakesSlain;
-            totalEvents += ps.eventsResolved;
         }
 
         String heroName = (hero != null) ? hero.getName().toUpperCase() : "THE HERO";
         String heroClass = (hero != null && hero.getCharacterClass() != null) ? hero.getCharacterClass().getTitle() : "Adventurer";
+        String companionPhrase = (players.size() > 1) ? " and their valiant companions" : "";
 
-        if (isVictory) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("The bards of the ancient realm strike their golden lyres! Across ")
-              .append(totalPartyTurns).append(" fateful turns of fortune, ")
-              .append(heroName).append(" the ").append(heroClass);
-
-            if (players.size() > 1) {
-                sb.append(" and their valiant companions");
+        switch (endingType) {
+            case REBIRTH_TRIUMPH: {
+                StringBuilder sb = new StringBuilder();
+                sb.append("Golden horns sound across the Summit! After ")
+                  .append(totalPartyTurns).append(" grueling turns of frost, ambush, and trials of will, ")
+                  .append(heroName).append(" the ").append(heroClass).append(companionPhrase)
+                  .append(" stood atop the hundredth stone and answered The Dawn Warden without fear. ");
+                if (totalSlain > 0) {
+                    sb.append("Through ").append(totalSlain).append(" serpents felled");
+                    if (totalLadders > 0) {
+                        sb.append(" and ").append(totalLadders).append(" soaring ascents");
+                    }
+                    sb.append(", ");
+                }
+                sb.append("they accepted what had passed behind them and defeated the Solar Chimera, stepping through the open golden gate to reclaim morning breath and rebirth!");
+                return sb.toString();
             }
 
-            sb.append(" braved the treacherous wilderness. ");
-
-            if (totalSlain > 0) {
-                sb.append("With blade and instinct, ")
-                  .append(totalSlain).append(" lurking serpents were felled in fierce combat. ");
-            }
-            if (totalLadders > 0) {
-                sb.append("Scaling ancient ladders, the party bypassed deadly crags. ");
-            }
-
-            sb.append("At long last, ").append(heroName)
-              .append(" mounted the hundredth stone and claimed the Throne of Fate, sealing their name in the chronicles of eternity!");
-            return sb.toString();
-        } else {
-            StringBuilder sb = new StringBuilder();
-            sb.append("A solemn mist settles over the winding stones. After ")
-              .append(totalPartyTurns).append(" valiant turns through venomous thickets and shifting terrain, ")
-              .append(heroName).append(" the ").append(heroClass);
-
-            if (players.size() > 1) {
-                sb.append(" and the fellowship");
+            case PEACEFUL_REST: {
+                StringBuilder sb = new StringBuilder();
+                sb.append("A gentle twilight settles quietly over the mountain peaks. Across ")
+                  .append(totalPartyTurns).append(" hard-fought turns, ")
+                  .append(heroName).append(" the ").append(heroClass).append(companionPhrase)
+                  .append(" carried every scar and memory up the shifting stones. ");
+                sb.append("When the final reckoning arrived, the soul ceased fleeing what had already closed - resting beneath the warm solace of The Pale Shepherd and The Dawn Warden. No more cold, no more pain, only quiet slumber beyond the dawn.");
+                return sb.toString();
             }
 
-            sb.append(" succumbed to the perilous hazards of the wild. ");
-
-            if (totalSlain > 0) {
-                sb.append("Even in defeat, their courage was unyielding - felling ")
-                  .append(totalSlain).append(" beasts along the way. ");
+            case HARVESTED_BY_SHEPHERD: {
+                StringBuilder sb = new StringBuilder();
+                sb.append("Lantern-frost hangs heavy over the stones. After ")
+                  .append(totalPartyTurns).append(" unyielding turns of ascent, ")
+                  .append(heroName).append(" the ").append(heroClass).append(companionPhrase)
+                  .append(" turned to face Death's golden scythe in open combat. ");
+                if (totalSlain > 0) {
+                    sb.append("Even having vanquished ").append(totalSlain).append(" beasts along the climb, ");
+                }
+                sb.append("the Pale Shepherd claimed their fading flame at last - leaving only silver ash and the memory of fierce defiance.");
+                return sb.toString();
             }
 
-            sb.append("Though the Throne of Fate eludes them today, their epic tale of endurance shall inspire wanderers for generations to come.");
-            return sb.toString();
+            case FALLEN_ON_TRAIL:
+            default: {
+                StringBuilder sb = new StringBuilder();
+                sb.append("A solemn mist settles over the winding stones. After ")
+                  .append(totalPartyTurns).append(" valiant turns through venomous thickets and shifting terrain, ")
+                  .append(heroName).append(" the ").append(heroClass)
+                  .append(players.size() > 1 ? " and the fellowship" : "")
+                  .append(" succumbed to the perilous hazards of the wild. ");
+                if (totalSlain > 0) {
+                    sb.append("Even in defeat, their courage was unyielding - felling ")
+                      .append(totalSlain).append(" beasts along the way. ");
+                }
+                sb.append("Though the summit eluded them, their tale of endurance remains carved into the trail.");
+                return sb.toString();
+            }
         }
     }
 }

@@ -31,6 +31,7 @@ import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
 import io.github.snakes_and_ladders_roll_of_fate.audio.AudioManager;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType;
 import io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.PlayerStats;
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 import io.github.snakes_and_ladders_roll_of_fate.ui.UIUtils;
@@ -49,6 +50,7 @@ public class GameSummaryScreen implements Screen {
 
     private final RollOfFateGame game;
     private final boolean isVictory;
+    private final EndingType endingType;
     private final Player hero;
     private final List<Player> party;
 
@@ -94,8 +96,13 @@ public class GameSummaryScreen implements Screen {
     private float animTimer = 0f;
 
     public GameSummaryScreen(RollOfFateGame game, boolean isVictory, Player hero) {
+        this(game, isVictory, hero, isVictory ? EndingType.REBIRTH_TRIUMPH : EndingType.FALLEN_ON_TRAIL);
+    }
+
+    public GameSummaryScreen(RollOfFateGame game, boolean isVictory, Player hero, EndingType endingType) {
         this.game = game;
         this.isVictory = isVictory;
+        this.endingType = (endingType != null) ? endingType : (isVictory ? EndingType.REBIRTH_TRIUMPH : EndingType.FALLEN_ON_TRAIL);
         this.party = (game.getPlayers() != null) ? new ArrayList<>(game.getPlayers()) : new ArrayList<>();
 
         if (hero != null) {
@@ -114,6 +121,75 @@ public class GameSummaryScreen implements Screen {
         }
     }
 
+    private Color getThemeCardBg() {
+        switch (endingType) {
+            case REBIRTH_TRIUMPH: return Color.valueOf("#26140cee");
+            case PEACEFUL_REST:   return Color.valueOf("#161e2eee");
+            default:              return Color.valueOf("#261010ee");
+        }
+    }
+
+    private Color getThemeCardBorder() {
+        switch (endingType) {
+            case REBIRTH_TRIUMPH: return Color.valueOf("#854b25");
+            case PEACEFUL_REST:   return Color.valueOf("#6d82a3");
+            default:              return Color.valueOf("#8a2424");
+        }
+    }
+
+    private Color getThemeAccentColor() {
+        switch (endingType) {
+            case REBIRTH_TRIUMPH: return Color.valueOf("#ffd54f");
+            case PEACEFUL_REST:   return Color.valueOf("#ffe0a3");
+            default:              return Color.valueOf("#ff8a80");
+        }
+    }
+
+    private String getOutcomeMainTitle() {
+        switch (endingType) {
+            case REBIRTH_TRIUMPH:      return "GLORIOUS REBIRTH! - THE GOLDEN GATE OPENS ANEW";
+            case PEACEFUL_REST:        return "PEACEFUL SLUMBER - REST BEYOND THE DAWN";
+            case HARVESTED_BY_SHEPHERD: return "THE LANTERN DIMS - CLAIMED BY THE PALE SHEPHERD";
+            case FALLEN_ON_TRAIL:
+            default:                   return "DEFEAT - FALLEN UPON THE MOUNTAIN TRAIL";
+        }
+    }
+
+    private String getOutcomeSubTitle() {
+        switch (endingType) {
+            case REBIRTH_TRIUMPH:
+                return "You answered The Dawn Warden atop the Spire and awakened to sunlit morning once more!";
+            case PEACEFUL_REST:
+                return "You ceased outrunning a life already ended, finding warm stillness beneath twilight skies.";
+            case HARVESTED_BY_SHEPHERD:
+                return "You defied Death's golden scythe across the stones until the final ember gently faded.";
+            case FALLEN_ON_TRAIL:
+            default:
+                return "The perilous wilds claim the fallen, yet echoes of their defiance endure across the stones.";
+        }
+    }
+
+    private String getResolvedHeroAccolade() {
+        switch (endingType) {
+            case REBIRTH_TRIUMPH:      return "BEARER OF THE NEW DAWN";
+            case PEACEFUL_REST:        return "AT PEACE ATOP THE SPIRE";
+            case HARVESTED_BY_SHEPHERD: return "DEFIANT UNTO THE END";
+            case FALLEN_ON_TRAIL:
+            default:                   return (hero != null && hero.getHealth() <= 0) ? "THE FALLEN HERO" : "THE DAUNTLESS VOYAGER";
+        }
+    }
+
+    private String getExpeditionStatusText(PlayerStats stats) {
+        int tile = (hero != null && hero.getPosition() > 0) ? hero.getPosition() : (stats != null ? stats.getHighestTile() : 1);
+        switch (endingType) {
+            case REBIRTH_TRIUMPH:      return "Reborn at Dawn";
+            case PEACEFUL_REST:        return "Peaceful Slumber";
+            case HARVESTED_BY_SHEPHERD: return "Harvested on Tile " + tile;
+            case FALLEN_ON_TRAIL:
+            default:                   return "Fallen on Tile " + tile;
+        }
+    }
+
     @Override
     public void show() {
         if (game.getAudioManager() != null) {
@@ -123,13 +199,19 @@ public class GameSummaryScreen implements Screen {
         stage = new Stage(new ExtendViewport(1920, 1080));
         Gdx.input.setInputProcessor(stage);
 
-        // 1. Background Setup (Parallax sliced layers)
-        bgTexture = game.getAssetManager().get(isVictory ? Assets.ACT1_BG : Assets.ACT3_BG);
-        if (isVictory) {
+        // 1. Background Setup (Parallax sliced layers matched to ending tone)
+        if (endingType == EndingType.REBIRTH_TRIUMPH) {
+            bgTexture   = game.getAssetManager().get(Assets.ACT1_BG);
             farSlice    = new TextureRegion(bgTexture, 7, 0, 1010, 264);
             midSlice    = new TextureRegion(bgTexture, 7, 268, 1010, 188);
             groundSlice = new TextureRegion(bgTexture, 7, 464, 1010, 108);
+        } else if (endingType == EndingType.PEACEFUL_REST) {
+            bgTexture   = game.getAssetManager().get(Assets.ACT2_BG);
+            farSlice    = new TextureRegion(bgTexture, 8, 0, 1004, 264);
+            midSlice    = new TextureRegion(bgTexture, 8, 268, 998, 188);
+            groundSlice = new TextureRegion(bgTexture, 10, 464, 1002, 110);
         } else {
+            bgTexture   = game.getAssetManager().get(Assets.ACT3_BG);
             farSlice    = new TextureRegion(bgTexture, 7, 0, 1006, 264);
             midSlice    = new TextureRegion(bgTexture, 7, 268, 1004, 188);
             groundSlice = new TextureRegion(bgTexture, 6, 464, 1008, 110);
@@ -143,24 +225,26 @@ public class GameSummaryScreen implements Screen {
 
         // 2. Initialize Crisp Fredoka Fonts
         Color goldColor = Color.valueOf("#ffd54f");
-        Color softCrimson = Color.valueOf("#ff8a80");
+        Color warmAmber = Color.valueOf("#ffca80");
+        Color accentTitle = getThemeAccentColor();
+        Color valueTint = (endingType == EndingType.REBIRTH_TRIUMPH) ? goldColor : ((endingType == EndingType.PEACEFUL_REST) ? warmAmber : Color.valueOf("#ffb74d"));
         Color warmIvory = Color.valueOf("#fbf2dc");
         Color dimText = Color.valueOf("#cfd8dc");
 
-        headerTitleFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 38, isVictory ? goldColor : softCrimson);
+        headerTitleFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 38, accentTitle);
         headerSubtitleFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 20, warmIvory);
-        sectionTitleFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, isVictory ? goldColor : softCrimson);
+        sectionTitleFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, accentTitle);
         cardTitleFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, warmIvory);
         heroNameFont       = UIUtils.createFont("ui/Fredoka-Bold.ttf", 30, Color.WHITE);
         accoladeFont       = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, goldColor);
         bodyFont           = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 19, warmIvory);
         statLabelFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 17, dimText);
-        statValueFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, isVictory ? goldColor : Color.valueOf("#ffb74d"));
+        statValueFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, valueTint);
         buttonFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 23, Color.WHITE);
         chipTitleFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 13, Color.valueOf("#b0bec5"));
-        chipValueFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 16, isVictory ? goldColor : Color.valueOf("#ffb74d"));
+        chipValueFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 16, valueTint);
         ledgerKeyFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 17, Color.valueOf("#e0e0e0"));
-        ledgerValFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 17, isVictory ? goldColor : Color.valueOf("#ffb74d"));
+        ledgerValFont      = UIUtils.createFont("ui/Fredoka-Bold.ttf", 17, valueTint);
         pillMetricFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
         pillLabelFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 14, Color.valueOf("#cfd8dc"));
 
@@ -232,16 +316,8 @@ public class GameSummaryScreen implements Screen {
             ribbonTitleLabel.setText("EXPEDITION RECORD & BARDIC CHRONICLE");
             ribbonSubtitleLabel.setText("A comprehensive debriefing of deeds, milestones, and companion accolades across the stones");
         } else {
-            String mainTitle = isVictory
-                ? "VICTORY! - THE THRONE OF FATE IS CLAIMED"
-                : "DEFEAT - THE CYCLE CLAIMS ANOTHER SOUL";
-
-            String subTitle = isVictory
-                ? "The arduous pilgrimage reaches its legendary summit! Honor and songs to the valiant travelers!"
-                : "The perilous wilds claim the fallen, yet songs of their defiance echo through the stones of eternity.";
-
-            ribbonTitleLabel.setText(mainTitle);
-            ribbonSubtitleLabel.setText(subTitle);
+            ribbonTitleLabel.setText(getOutcomeMainTitle());
+            ribbonSubtitleLabel.setText(getOutcomeSubTitle());
         }
     }
 
@@ -249,26 +325,22 @@ public class GameSummaryScreen implements Screen {
      * Builds the top celebratory/solemn header ribbon.
      */
     private Table buildTopRibbon() {
-        Color bannerBg = isVictory ? Color.valueOf("#6b3f11e6") : Color.valueOf("#541616e6");
-        Color bannerBorder = isVictory ? Color.valueOf("#ffd54f") : Color.valueOf("#ff5252");
+        Color bannerBg = (endingType == EndingType.REBIRTH_TRIUMPH)
+            ? Color.valueOf("#6b3f11e6")
+            : ((endingType == EndingType.PEACEFUL_REST) ? Color.valueOf("#1e2a45e6") : Color.valueOf("#541616e6"));
+        Color bannerBorder = (endingType == EndingType.REBIRTH_TRIUMPH)
+            ? Color.valueOf("#ffd54f")
+            : ((endingType == EndingType.PEACEFUL_REST) ? Color.valueOf("#d6a549") : Color.valueOf("#ff5252"));
         Drawable bannerDrawable = UIUtils.createRoundedDrawable(1840, 84, 16, bannerBg, bannerBorder, 3);
 
         Table ribbon = new Table();
         ribbon.setBackground(bannerDrawable);
         ribbon.pad(6, 24, 6, 24);
 
-        String mainTitle = isVictory
-            ? "VICTORY! - THE THRONE OF FATE IS CLAIMED"
-            : "DEFEAT - THE CYCLE CLAIMS ANOTHER SOUL";
-
-        String subTitle = isVictory
-            ? "The arduous pilgrimage reaches its legendary summit! Honor and songs to the valiant travelers!"
-            : "The perilous wilds claim the fallen, yet songs of their defiance echo through the stones of eternity.";
-
-        ribbonTitleLabel = new Label(mainTitle, new Label.LabelStyle(headerTitleFont, headerTitleFont.getColor()));
+        ribbonTitleLabel = new Label(getOutcomeMainTitle(), new Label.LabelStyle(headerTitleFont, headerTitleFont.getColor()));
         ribbonTitleLabel.setAlignment(Align.center);
 
-        ribbonSubtitleLabel = new Label(subTitle, new Label.LabelStyle(headerSubtitleFont, headerSubtitleFont.getColor()));
+        ribbonSubtitleLabel = new Label(getOutcomeSubTitle(), new Label.LabelStyle(headerSubtitleFont, headerSubtitleFont.getColor()));
         ribbonSubtitleLabel.setAlignment(Align.center);
 
         ribbon.add(ribbonTitleLabel).center().row();
@@ -287,8 +359,8 @@ public class GameSummaryScreen implements Screen {
         Table table = new Table();
         table.top().center();
 
-        Color cardBg = isVictory ? Color.valueOf("#26140cee") : Color.valueOf("#261010ee");
-        Color cardBorder = isVictory ? Color.valueOf("#854b25") : Color.valueOf("#8a2424");
+        Color cardBg = getThemeCardBg();
+        Color cardBorder = getThemeCardBorder();
 
         // Compute 3 primary metrics across party or solo
         int displayTurns = 0;
@@ -323,11 +395,7 @@ public class GameSummaryScreen implements Screen {
                 heroAccolade = ps.getAccoladeTitle();
             }
         }
-        if (isVictory) {
-            heroAccolade = "THE FATE CHAMPION";
-        } else if (hero != null && hero.getHealth() <= 0) {
-            heroAccolade = "THE FALLEN HERO";
-        }
+        heroAccolade = getResolvedHeroAccolade();
 
         String hName = (hero != null) ? hero.getName().toUpperCase() : "PLAYER 1";
         String hClass = (hero != null && hero.getCharacterClass() != null) ? hero.getCharacterClass().getTitle() : "Adventurer";
@@ -445,8 +513,8 @@ public class GameSummaryScreen implements Screen {
      * Builds a single highlight metric pill for the clean outcome screen.
      */
     private Table buildHighlightPill(String title, String metric, String subtitle, Color accentColor, float width, float height) {
-        Color cardBg = isVictory ? Color.valueOf("#26140cee") : Color.valueOf("#261010ee");
-        Color cardBorder = isVictory ? Color.valueOf("#854b25") : Color.valueOf("#8a2424");
+        Color cardBg = getThemeCardBg();
+        Color cardBorder = getThemeCardBorder();
         Drawable pillBg = UIUtils.createRoundedDrawable((int) width, (int) height, 12, cardBg, cardBorder, 2);
 
         Table pill = new Table();
@@ -474,8 +542,8 @@ public class GameSummaryScreen implements Screen {
      * Completely free of long paragraphs and 16 stat chips.
      */
     private Table buildCompactCompanionCard(Player p, float width, float height) {
-        Color cardBg = isVictory ? Color.valueOf("#26140cee") : Color.valueOf("#261010ee");
-        Color cardBorder = isVictory ? Color.valueOf("#854b25") : Color.valueOf("#8a2424");
+        Color cardBg = getThemeCardBg();
+        Color cardBorder = getThemeCardBorder();
         Drawable cardBgDrawable = UIUtils.createRoundedDrawable((int) width, (int) height, 12, cardBg, cardBorder, 2);
 
         Table card = new Table();
@@ -537,8 +605,8 @@ public class GameSummaryScreen implements Screen {
      */
     private Table buildLeftColumn() {
         Table col = new Table();
-        Color cardBg = isVictory ? Color.valueOf("#26140cee") : Color.valueOf("#261010ee");
-        Color cardBorder = isVictory ? Color.valueOf("#854b25") : Color.valueOf("#8a2424");
+        Color cardBg = getThemeCardBg();
+        Color cardBorder = getThemeCardBorder();
 
         // 1. Hero Pedestal Card
         Drawable pedestalDrawable = UIUtils.createRoundedDrawable(570, 340, 14, cardBg, cardBorder, 2);
@@ -553,11 +621,7 @@ public class GameSummaryScreen implements Screen {
                 heroAccolade = ps.getAccoladeTitle();
             }
         }
-        if (isVictory) {
-            heroAccolade = "THE FATE CHAMPION";
-        } else if (hero != null && hero.getHealth() <= 0) {
-            heroAccolade = "THE FALLEN HERO";
-        }
+        heroAccolade = getResolvedHeroAccolade();
 
         Drawable pillBg = UIUtils.createRoundedDrawable(340, 34, 10, Color.valueOf("#854b25"), Color.valueOf("#ffd54f"), 2);
         Table pillTable = new Table();
@@ -601,7 +665,7 @@ public class GameSummaryScreen implements Screen {
 
         String narrativeText = "The bards assemble to record the deeds of courage across the stones...";
         if (game.getRunTracker() != null) {
-            narrativeText = game.getRunTracker().generateBardicNarrative(isVictory, hero, party);
+            narrativeText = game.getRunTracker().generateBardicNarrative(endingType, hero, party);
         }
 
         Label narrativeLabel = new Label(narrativeText, new Label.LabelStyle(bodyFont, Color.valueOf("#fbf2dc")));
@@ -677,7 +741,7 @@ public class GameSummaryScreen implements Screen {
                 {"Spoils Gathered:", stats.getItemsCollected() + " Relics Carried"},
                 {"Potions Ingested:", stats.getItemsUsed() + " Consumed in Need"},
                 {"Final Vitality:", (hero != null ? hero.getHealth() : 0) + " / " + (hero != null ? hero.getMaxHealth() : 100) + " HP"},
-                {"Expedition Status:", isVictory ? "Throne Claimed!" : "Fallen in Peril"}
+                {"Expedition Status:", getExpeditionStatusText(stats)}
             });
 
             gridTable.add(card1).width(605).height(350).pad(6);
@@ -695,8 +759,8 @@ public class GameSummaryScreen implements Screen {
      * Builds a single player's highlight accolade card for multiplayer summary view.
      */
     private Table buildPlayerAccoladeCard(Player p) {
-        Color cardBg = isVictory ? Color.valueOf("#26140cee") : Color.valueOf("#261010ee");
-        Color cardBorder = isVictory ? Color.valueOf("#854b25") : Color.valueOf("#8a2424");
+        Color cardBg = getThemeCardBg();
+        Color cardBorder = getThemeCardBorder();
         Drawable cardBgDrawable = UIUtils.createRoundedDrawable(605, 350, 14, cardBg, cardBorder, 2);
 
         Table card = new Table();
@@ -772,8 +836,8 @@ public class GameSummaryScreen implements Screen {
      * Builds a single category card for the single-player ledger.
      */
     private Table buildLedgerCard(String categoryTitle, Color headerAccent, String[][] statRows) {
-        Color cardBg = isVictory ? Color.valueOf("#26140cee") : Color.valueOf("#261010ee");
-        Color cardBorder = isVictory ? Color.valueOf("#854b25") : Color.valueOf("#8a2424");
+        Color cardBg = getThemeCardBg();
+        Color cardBorder = getThemeCardBorder();
         Drawable cardDrawable = UIUtils.createRoundedDrawable(605, 350, 14, cardBg, cardBorder, 2);
 
         Table card = new Table();
@@ -901,7 +965,9 @@ public class GameSummaryScreen implements Screen {
         batch.begin();
 
         // 1. Subterranean foundation
-        Color subColor = isVictory ? Color.valueOf("#181822") : Color.valueOf("#2e1534");
+        Color subColor = (endingType == EndingType.REBIRTH_TRIUMPH)
+            ? Color.valueOf("#181822")
+            : ((endingType == EndingType.PEACEFUL_REST) ? Color.valueOf("#0f172a") : Color.valueOf("#2e1534"));
         batch.setColor(subColor);
         if (whitePixelTex != null) {
             batch.draw(whitePixelTex, 0, 0, viewW, 140f);
@@ -924,7 +990,9 @@ public class GameSummaryScreen implements Screen {
         }
 
         // 5. Dark Vignette / Contrast Wash for UI legibility
-        Color washColor = isVictory ? Color.valueOf("#120b06ba") : Color.valueOf("#180606c4");
+        Color washColor = (endingType == EndingType.REBIRTH_TRIUMPH)
+            ? Color.valueOf("#120b06ba")
+            : ((endingType == EndingType.PEACEFUL_REST) ? Color.valueOf("#0b1120be") : Color.valueOf("#180606c4"));
         batch.setColor(washColor);
         if (whitePixelTex != null) {
             batch.draw(whitePixelTex, 0, 0, viewW, viewH);
