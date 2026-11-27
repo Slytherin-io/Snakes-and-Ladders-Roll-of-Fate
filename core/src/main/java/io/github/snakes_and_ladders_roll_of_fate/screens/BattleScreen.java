@@ -866,8 +866,8 @@ public class BattleScreen implements Screen {
         Table headerRow = new Table();
         Label speakerLbl;
         if (isPaleShepherdBattle()) {
-            speakerLbl = new Label("THE PALE SHEPHERD  |  HARVESTER OF SOULS",
-                new Label.LabelStyle(introSpeakerFont, Color.valueOf("#ff5252")));
+            speakerLbl = new Label("THE PALE SHEPHERD  |  A QUIET WATCHER",
+                new Label.LabelStyle(introSpeakerFont, Color.valueOf("#ffd54f")));
         } else {
             speakerLbl = new Label("THE DAWN WARDEN  |  GUARDIAN OF THE GATE",
                 new Label.LabelStyle(introSpeakerFont, Color.valueOf("#ffd54f")));
@@ -885,7 +885,7 @@ public class BattleScreen implements Screen {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
                 if (isPaleShepherdBattle()) {
-                    finishPaleShepherdIntro(0, 0, "The Pale Shepherd lowers his scythe for the final harvest!");
+                    finishPaleShepherdIntro(0, 0, "The Pale Shepherd raises his crook in quiet contemplation.");
                 } else {
                     finishDawnWardenIntro(0, 0, "The Dawn Warden descends before you to test your spirit!");
                 }
@@ -1683,15 +1683,15 @@ public class BattleScreen implements Screen {
                     topBannerLabel.setText("MIST SETTLES");
                     modalTitleLabel.setText("QUIET TRIUMPH");
                     modalTitleLabel.setColor(Color.valueOf("#ffd54f"));
-                    modalSubtitleLabel.setText("THE PALE SHEPHERD YIELDS TO YOUR SPIRIT");
+                    modalSubtitleLabel.setText("THE PALE SHEPHERD BESTOWS HIS GENTLE BLESSING");
 
-                    rewardExpLabel.setText("+50 EXP  |  The Pale Shepherd pauses 15 tiles back.");
+                    rewardExpLabel.setText("+100 EXP  |  Full Health Restored  |  Permanent +10 Max HP & +1 ATK");
                     rewardExpLabel.setColor(Color.valueOf("#69f0ae"));
 
-                    rewardLootLabel.setText("Pursuit Halted for 3 Rounds of Contemplation!");
+                    rewardLootLabel.setText("Acquired: Pale Shepherd's Crook (+4 DEF)  |  Reaper Paused 3 Rounds");
                     rewardLootLabel.setColor(Color.valueOf("#ffd54f"));
 
-                    rewardStatusLabel.setText("Hero Health: " + player.getHealth() + " / " + maxHp + " HP   |   Quiet Defiance");
+                    rewardStatusLabel.setText("Hero Health: " + (player.getMaxHealth() + 10) + " / " + (player.getMaxHealth() + 10) + " HP (Fully Restored & Empowered)");
                     rewardStatusLabel.setColor(Color.valueOf("#ffe0b2"));
 
                     continueBtn.setText("RESUME ASCENT");

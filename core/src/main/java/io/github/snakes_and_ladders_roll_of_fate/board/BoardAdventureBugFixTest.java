@@ -3,6 +3,8 @@ package io.github.snakes_and_ladders_roll_of_fate.board;
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
 import io.github.snakes_and_ladders_roll_of_fate.entities.CharacterClass;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -324,7 +326,22 @@ public class BoardAdventureBugFixTest {
         int repelled = Math.max(0, game.getPaleShepherdTile() - 15);
         game.setPaleShepherdTile(repelled);
         game.setShepherdPauseRounds(3);
-        p.gainExperience(50);
+        int initialLevel = p.getLevel();
+        int initialMaxHp = p.getMaxHealth();
+        int initialAtk = p.getBaseAttack();
+        p.setHealth(30);
+
+        p.gainExperience(100);
+        p.modifyMaxHealth(10);
+        p.setAttack(p.getBaseAttack() + 1);
+        p.setHealth(p.getMaxHealth());
+        Item shepherdRelic = Item.createEquipment(
+            "Pale Shepherd's Crook",
+            EventEffectType.DEFENSE,
+            4, 3, 3,
+            "+4 DEF (Warding staff of the mountain wanderer)"
+        );
+        p.addItem(shepherdRelic);
 
         if (game.getPaleShepherdTile() != 10) {
             throw new AssertionError("Victory should banish Death 15 tiles back (25 -> 10), was: " + game.getPaleShepherdTile());
@@ -332,8 +349,27 @@ public class BoardAdventureBugFixTest {
         if (game.getShepherdPauseRounds() != 3) {
             throw new AssertionError("Victory should impose 3 contemplation pause rounds, was: " + game.getShepherdPauseRounds());
         }
-        if (p.getExperience() < 50) {
-            throw new AssertionError("Victory should award at least 50 EXP");
+        if (p.getLevel() != initialLevel + 1) {
+            throw new AssertionError("Victory with 100 EXP should advance player to level 2");
+        }
+        if (p.getMaxHealth() != initialMaxHp + 10) {
+            throw new AssertionError("Victory should grant +10 Max HP");
+        }
+        if (p.getBaseAttack() < initialAtk + 1) {
+            throw new AssertionError("Victory should grant at least +1 ATK");
+        }
+        if (p.getHealth() != p.getMaxHealth()) {
+            throw new AssertionError("Victory should fully heal the player to max HP");
+        }
+        boolean foundCrook = false;
+        for (Item it : p.getInventory().getItems()) {
+            if ("Pale Shepherd's Crook".equals(it.getName())) {
+                foundCrook = true;
+                break;
+            }
+        }
+        if (!foundCrook) {
+            throw new AssertionError("Victory should bestow Pale Shepherd's Crook relic");
         }
 
         // Case B: Escape from Death

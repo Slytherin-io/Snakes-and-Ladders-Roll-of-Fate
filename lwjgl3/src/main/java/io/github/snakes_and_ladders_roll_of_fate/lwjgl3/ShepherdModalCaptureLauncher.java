@@ -87,34 +87,8 @@ public class ShepherdModalCaptureLauncher {
             boardScreen = new BoardScreen(this);
             setScreen(boardScreen);
 
-            // Trigger midair interception & gentle board dialogue
+            // Trigger gentle board dialogue with player and shepherd both at Tile 22
             try {
-                java.lang.reflect.Field fSpecial = BoardScreen.class.getDeclaredField("isSpecialMoving");
-                fSpecial.setAccessible(true);
-                fSpecial.set(boardScreen, true);
-
-                java.lang.reflect.Field fPhase = BoardScreen.class.getDeclaredField("specialMovePhase");
-                fPhase.setAccessible(true);
-                for (Object constant : fPhase.getType().getEnumConstants()) {
-                    if (constant.toString().equals("INTERCEPTED_MIDAIR")) {
-                        fPhase.set(boardScreen, constant);
-                        break;
-                    }
-                }
-
-                java.lang.reflect.Field fCurX = BoardScreen.class.getDeclaredField("specialMoveCurrentX");
-                fCurX.setAccessible(true);
-                java.lang.reflect.Method mGetX = BoardScreen.class.getDeclaredMethod("getTileCenterX", int.class);
-                mGetX.setAccessible(true);
-                fCurX.set(boardScreen, mGetX.invoke(boardScreen, 22));
-
-                java.lang.reflect.Field fCurY = BoardScreen.class.getDeclaredField("specialMoveCurrentY");
-                fCurY.setAccessible(true);
-                java.lang.reflect.Method mGetY = BoardScreen.class.getDeclaredMethod("getCharacterDrawY", int.class);
-                mGetY.setAccessible(true);
-                float baseY = (Float) mGetY.invoke(boardScreen, 22);
-                fCurY.set(boardScreen, baseY + 60f);
-
                 java.lang.reflect.Method mDialogue = BoardScreen.class.getDeclaredMethod("showPaleShepherdBoardDialogue", Player.class);
                 mDialogue.setAccessible(true);
                 mDialogue.invoke(boardScreen, p1);

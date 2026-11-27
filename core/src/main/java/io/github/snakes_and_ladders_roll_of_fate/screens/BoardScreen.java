@@ -133,6 +133,8 @@ public class BoardScreen implements Screen {
     private BitmapFont choiceOutcomeBodyFont;
     private BitmapFont choiceOutcomeValueFont;
     private BitmapFont choiceD20Font;
+    private BitmapFont shepherdDialogueTitleFont;
+    private BitmapFont shepherdDialogueFont;
 
     // Parallax Slices for the 3 Acts (Far Canopy, Mid Silhouettes, Foreground Ground)
     private TextureRegion act1Far, act1Mid, act1Ground;
@@ -212,11 +214,9 @@ public class BoardScreen implements Screen {
     // Special Locomotion Animation (Ascending Ladder Celestial Arc & Descending Snake Slide)
     private enum SpecialMovePhase {
         NONE,
-        WINDUP,                 // Standing on start tile, power gathers & discovery registers (0.8s)
-        IN_FLIGHT,              // Smooth soaring flight across the arc
-        INTERCEPTED_MIDAIR,     // Interrupted mid-flight by The Pale Shepherd, cushioned in mist
-        INTERCEPTED_DESCENT,    // Gently gliding down to shepherd's tile after dialogue
-        LANDED                  // Touchdown landing recovery on destination tile (0.6s)
+        WINDUP,     // Standing on start tile, power gathers & discovery registers (0.8s)
+        IN_FLIGHT,  // Smooth soaring flight across the arc
+        LANDED      // Touchdown landing recovery on destination tile (0.6s)
     }
     private boolean isSpecialMoving = false;
     private SpecialMovePhase specialMovePhase = SpecialMovePhase.NONE;
@@ -255,7 +255,7 @@ public class BoardScreen implements Screen {
     private float shepherdDisplayY = -1f;
     private boolean isShepherdGliding = false;
 
-    // Pale Shepherd Board Dialogue UI & Midair Suspension
+    // Pale Shepherd Board Dialogue UI (Positioned on top over board tiles)
     private Table shepherdDialogueTable;
     private Label shepherdDialogueTitleLabel;
     private Label shepherdDialogueSubLabel;
@@ -263,8 +263,6 @@ public class BoardScreen implements Screen {
     private Table shepherdDialogueActionsRow;
     private boolean isShepherdBoardDialogueActive = false;
     private int shepherdBoardDialogueBeat = 0;
-    private float specialMoveDescentStartX = 0f;
-    private float specialMoveDescentStartY = 0f;
     private Label hudInventorySubLabel;
     private Table inventoryPopup;
     private Table inventorySlotsTable;
@@ -433,6 +431,8 @@ public class BoardScreen implements Screen {
         choiceOutcomeBodyFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#5a3616"));
         choiceOutcomeValueFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 22, Color.WHITE);
         choiceD20Font          = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.WHITE);
+        shepherdDialogueTitleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
+        shepherdDialogueFont      = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.WHITE);
 
         // Class Skill Fonts
         skillTitleFont  = UIUtils.createFont("ui/Fredoka-Bold.ttf", 16, nameBrown);
@@ -551,7 +551,23 @@ public class BoardScreen implements Screen {
             if (pendingBossEnemy.getEnemyType() != null && pendingBossEnemy.getEnemyType().contains("Pale Shepherd")) {
                 if (pendingBattleOutcome == BattleOutcome.VICTORY) {
                     if (current != null) {
-                        current.gainExperience(50);
+                        current.gainExperience(100);
+                        current.modifyMaxHealth(10);
+                        current.setAttack(current.getBaseAttack() + 1);
+                        current.setHealth(current.getMaxHealth());
+
+                        Item shepherdRelic = Item.createEquipment(
+                            "Pale Shepherd's Crook",
+                            EventEffectType.DEFENSE,
+                            4, 3, 3,
+                            "+4 DEF (Warding staff of the mountain wanderer)"
+                        );
+                        boolean added = current.addItem(shepherdRelic);
+                        String relicNote = added ? " ACQUIRED: PALE SHEPHERD'S CROOK!" : "";
+                        topBannerLabel.setText(current.getName().toUpperCase() + " TRIUMPHED OVER DEATH! FULL HEAL, +10 MAX HP, +1 ATK, +100 EXP!" + relicNote);
+                        if (!added) {
+                            showItemSwapPrompt(current, shepherdRelic);
+                        }
                     }
                     int repelled = Math.max(0, game.getPaleShepherdTile() - 15);
                     game.setPaleShepherdTile(repelled);
@@ -559,9 +575,6 @@ public class BoardScreen implements Screen {
                     shepherdDisplayY = getCharacterDrawY(repelled);
                     game.setShepherdPauseRounds(3);
                     updateMiniMapProgress();
-                    if (current != null) {
-                        topBannerLabel.setText(current.getName().toUpperCase() + " STRUCK DOWN DEATH! REAPER BANISHED 15 TILES! ROLL THE DICE!");
-                    }
                     turnState = TurnState.WAITING_FOR_ROLL;
                     rollButton.setColor(1f, 1f, 1f, 1f);
                 } else if (pendingBattleOutcome == BattleOutcome.ESCAPED) {
@@ -1850,33 +1863,36 @@ public class BoardScreen implements Screen {
 
     /**
      * Builds the gentle pre-battle Board Dialogue UI for encounters with The Pale Shepherd.
-     * Displays a sorrowful, atmospheric dusk parchment card over the board tiles with Skip Intro.
+     * Displays a sorrowful, atmospheric dusk parchment card positioned at the top of the screen
+     * over the board tiles with high-contrast text and a Skip Intro option.
      */
     private void buildShepherdDialogueUI() {
         shepherdDialogueTable = new Table();
         shepherdDialogueTable.setFillParent(true);
-        shepherdDialogueTable.bottom().padBottom(36);
+        shepherdDialogueTable.top().padTop(20);
         shepherdDialogueTable.setVisible(false);
 
         Table card = new Table();
         card.setBackground(UIUtils.createRoundedDrawable(
-            960, 240, 18, Color.valueOf("#1a1024f2"), Color.valueOf("#72528a"), 2));
-        card.pad(16, 32, 16, 32);
+            960, 225, 18, Color.valueOf("#150c1ef8"), Color.valueOf("#a779c2"), 2));
+        card.pad(14, 28, 14, 28);
 
-        // Header Row: Speaker Name & Subtitle on left, Skip Intro on right
+        // Header Row: Speaker Name & Subtitle on left, Skip Intro pill on right
         Table headerRow = new Table();
 
         Table titleBox = new Table();
-        shepherdDialogueTitleLabel = new Label("THE PALE SHEPHERD", new Label.LabelStyle(topBannerFont, Color.valueOf("#e8d5b5")));
+        shepherdDialogueTitleLabel = new Label("THE PALE SHEPHERD", new Label.LabelStyle(shepherdDialogueTitleFont, Color.valueOf("#ffd54f")));
         shepherdDialogueTitleLabel.setAlignment(Align.left);
-        shepherdDialogueSubLabel = new Label("A Soft Whisper In The Mist", new Label.LabelStyle(miniFont, Color.valueOf("#b39ddb")));
+        shepherdDialogueSubLabel = new Label("A Soft Whisper In The Mist", new Label.LabelStyle(miniFont, Color.valueOf("#e0d4fc")));
         shepherdDialogueSubLabel.setAlignment(Align.left);
         titleBox.add(shepherdDialogueTitleLabel).left().row();
         titleBox.add(shepherdDialogueSubLabel).left();
 
         TextButton.TextButtonStyle skipStyle = new TextButton.TextButtonStyle();
+        skipStyle.up = UIUtils.createRoundedDrawable(120, 30, 8, Color.valueOf("#371f45"), Color.valueOf("#b382c4"), 1);
+        skipStyle.over = UIUtils.createRoundedDrawable(120, 30, 8, Color.valueOf("#522c68"), Color.valueOf("#d8a6ea"), 1);
         skipStyle.font = miniFont;
-        skipStyle.fontColor = Color.valueOf("#cfb8d6");
+        skipStyle.fontColor = Color.valueOf("#ffd54f");
         skipStyle.overFontColor = Color.WHITE;
         TextButton skipBtn = new TextButton("SKIP INTRO", skipStyle);
         UIUtils.addScaleHoverEffect(skipBtn);
@@ -1890,21 +1906,21 @@ public class BoardScreen implements Screen {
         });
 
         headerRow.add(titleBox).left().expandX();
-        headerRow.add(skipBtn).right().padTop(4);
-        card.add(headerRow).width(896).padBottom(10).row();
+        headerRow.add(skipBtn).right().padTop(2);
+        card.add(headerRow).width(904).padBottom(8).row();
 
-        // Dialogue Body Label
-        shepherdDialogueBodyLabel = new Label("", new Label.LabelStyle(eventDescFont, Color.valueOf("#fffdfa")));
+        // Dialogue Body Label - high-contrast pure white font
+        shepherdDialogueBodyLabel = new Label("", new Label.LabelStyle(shepherdDialogueFont, Color.WHITE));
         shepherdDialogueBodyLabel.setAlignment(Align.center);
         shepherdDialogueBodyLabel.setWrap(true);
-        card.add(shepherdDialogueBodyLabel).width(880).minHeight(64).center().padBottom(12).row();
+        card.add(shepherdDialogueBodyLabel).width(890).minHeight(60).center().padBottom(10).row();
 
         // Actions Row
         shepherdDialogueActionsRow = new Table();
         shepherdDialogueActionsRow.center();
-        card.add(shepherdDialogueActionsRow).width(880).center();
+        card.add(shepherdDialogueActionsRow).width(890).center();
 
-        shepherdDialogueTable.add(card).width(960).minHeight(240).center();
+        shepherdDialogueTable.add(card).width(960).minHeight(225).center();
         hudStage.addActor(shepherdDialogueTable);
     }
 
@@ -1915,6 +1931,9 @@ public class BoardScreen implements Screen {
         if (player == null) return;
         isShepherdBoardDialogueActive = true;
         shepherdBoardDialogueBeat = 0;
+        if (bannerTable != null) {
+            bannerTable.setVisible(false);
+        }
         if (shepherdDialogueTable != null) {
             shepherdDialogueTable.setVisible(true);
         }
@@ -1929,8 +1948,8 @@ public class BoardScreen implements Screen {
         if (shepherdBoardDialogueBeat == 0) {
             shepherdDialogueBodyLabel.setText("\"Softly now, little wanderer. You were falling so fast.\"");
             TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
-            advStyle.up = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#4a3055"), Color.valueOf("#8f629f"), 2);
-            advStyle.over = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#614070"), Color.valueOf("#b382c4"), 2);
+            advStyle.up = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#512d61"), Color.valueOf("#b583c7"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#69397e"), Color.valueOf("#d8a6ea"), 2);
             advStyle.font = choiceActionBtnFont;
             advStyle.fontColor = Color.WHITE;
             TextButton advBtn = new TextButton("CONTINUE  (1/3)", advStyle);
@@ -1949,8 +1968,8 @@ public class BoardScreen implements Screen {
             shepherdDialogueBodyLabel.setText(
                 "\"The stones on this mountain are sharp, and your paws are bruised. Do you stumble because you are weary... or because you are rushing toward the end?\"");
             TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
-            advStyle.up = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#4a3055"), Color.valueOf("#8f629f"), 2);
-            advStyle.over = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#614070"), Color.valueOf("#b382c4"), 2);
+            advStyle.up = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#512d61"), Color.valueOf("#b583c7"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(260, 44, 12, Color.valueOf("#69397e"), Color.valueOf("#d8a6ea"), 2);
             advStyle.font = choiceActionBtnFont;
             advStyle.fontColor = Color.WHITE;
             TextButton advBtn = new TextButton("CONTINUE  (2/3)", advStyle);
@@ -1969,10 +1988,10 @@ public class BoardScreen implements Screen {
             shepherdDialogueBodyLabel.setText(
                 "\"If your heart still yearns to reach the summit, show me the warmth left in your spirit.\"");
             TextButton.TextButtonStyle faceStyle = new TextButton.TextButtonStyle();
-            faceStyle.up = UIUtils.createRoundedDrawable(320, 46, 12, Color.valueOf("#7a4430"), Color.valueOf("#c88258"), 2);
-            faceStyle.over = UIUtils.createRoundedDrawable(320, 46, 12, Color.valueOf("#96543b"), Color.valueOf("#e89b6e"), 2);
+            faceStyle.up = UIUtils.createRoundedDrawable(320, 46, 12, Color.valueOf("#8a472c"), Color.valueOf("#e59368"), 2);
+            faceStyle.over = UIUtils.createRoundedDrawable(320, 46, 12, Color.valueOf("#a95736"), Color.valueOf("#f7b28d"), 2);
             faceStyle.font = choiceActionBtnFont;
-            faceStyle.fontColor = Color.valueOf("#fff8ea");
+            faceStyle.fontColor = Color.WHITE;
             TextButton faceBtn = new TextButton("STAND UP & FACE HIM", faceStyle);
             UIUtils.addScaleHoverEffect(faceBtn);
             faceBtn.addListener(new ChangeListener() {
@@ -1988,25 +2007,20 @@ public class BoardScreen implements Screen {
     }
 
     /**
-     * Concludes the dialogue: cleanly dismisses the UI, handles descent if suspended midair,
+     * Concludes the dialogue: cleanly dismisses the UI, restores the top banner,
      * and transitions directly to BattleScreen without stat-buff choices or bugs.
      */
     private void completeShepherdDialogue(final Player player) {
+        if (bannerTable != null) {
+            bannerTable.setVisible(true);
+        }
         if (shepherdDialogueTable != null) {
             shepherdDialogueTable.setVisible(false);
         }
         isShepherdBoardDialogueActive = false;
 
         Player p = (player != null) ? player : game.getCurrentPlayer();
-        if (specialMovePhase == SpecialMovePhase.INTERCEPTED_MIDAIR) {
-            specialMovePhase = SpecialMovePhase.INTERCEPTED_DESCENT;
-            specialMoveElapsed = 0f;
-            specialMoveDuration = 0.45f;
-            specialMoveDescentStartX = specialMoveCurrentX;
-            specialMoveDescentStartY = specialMoveCurrentY;
-        } else {
-            triggerPaleShepherdEncounter(p);
-        }
+        triggerPaleShepherdEncounter(p);
     }
 
     /**
@@ -2339,9 +2353,9 @@ public class BoardScreen implements Screen {
                     }
                     res.consequences.clear();
                     res.consequences.add(rollDesc);
-                    res.consequences.add("Intercepted mid-slide by The Pale Shepherd!");
+                    res.consequences.add("Caught upon descent by The Pale Shepherd at Tile " + shepherdPos + "!");
                     isSlideInterceptedByReaper = true;
-                    specialSlideTarget = dest;
+                    specialSlideTarget = shepherdPos;
                     showOutcomeView(cleanTitle, res, true);
                     return;
                 } else {
@@ -2537,6 +2551,7 @@ public class BoardScreen implements Screen {
 
     /**
      * Interactive Barter Satchel Slot Selector for trading an item with the merchant on equal terms.
+     * Features simplified text and high-readability structured cards (Give -> Receive + Tier pill badge).
      */
     private void showBarterItemSelector(final Player player, final EventChoice choice, final Tile tile) {
         eventContentTable.clear();
@@ -2544,38 +2559,97 @@ public class BoardScreen implements Screen {
         final BarterCategory cat = (choice.getBarterCategory() != null) ? choice.getBarterCategory() : BarterCategory.ELIXIR;
         setEventBadge("BARTER  -  EQUAL EXCHANGE", Color.valueOf("#9c6818"));
 
-        Label titleLbl = new Label("Equal-Level Barter Trade", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
+        Label titleLbl = new Label("Equal Exchange", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
-        eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
+        eventContentTable.add(titleLbl).padTop(8).padBottom(2).center().row();
 
-        Label subLbl = new Label("The merchant values quality. Choose an item to exchange for equal-tier " + cat.getDisplayName() + ":", new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
+        Label subLbl = new Label("Choose an item from your satchel to trade for an equal-tier " + cat.getDisplayName() + ":",
+            new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
-        eventContentTable.add(subLbl).width(530).padBottom(12).center().row();
+        eventContentTable.add(subLbl).width(530).padBottom(10).center().row();
 
         int itemCount = (player.getInventory() != null) ? player.getInventory().size() : 0;
+        if (itemCount == 0) {
+            Label emptyLbl = new Label("Your satchel is empty! No items available to barter.",
+                new Label.LabelStyle(eventDescFont, Color.valueOf("#7a3d16")));
+            emptyLbl.setAlignment(Align.center);
+            eventContentTable.add(emptyLbl).padTop(20).padBottom(20).center().row();
+        }
+
         for (int i = 0; i < itemCount; i++) {
             final int slotIndex = i;
             final Item it = player.getInventory().getItem(i);
             final int tier = it.getTier();
 
             final Item previewReward;
-            final String itDesc;
             if (it.isCurse()) {
                 previewReward = ItemGenerator.generateCurseCleansingReward();
-                itDesc = "Trade: [CURSE] " + it.getName() + " -> Receive: " + previewReward.getName() + " (+18 HP & 20 EXP)";
             } else {
                 previewReward = ItemGenerator.generateEqualBarterReward(tier, cat);
-                itDesc = "Trade: [" + it.getTierName() + "] " + it.getName() + " -> Equal Trade: [" + previewReward.getTierName() + "] " + previewReward.getName();
             }
 
-            TextButton itemBtn = new TextButton(itDesc, eventChoiceBtnStyle);
-            itemBtn.getLabel().setWrap(true);
-            itemBtn.getLabel().setAlignment(Align.center);
-            itemBtn.pad(6, 18, 6, 18);
-            itemBtn.getLabelCell().width(480);
-            UIUtils.addScaleHoverEffect(itemBtn);
-            itemBtn.addListener(new ChangeListener() {
+            // High-readability Structured Barter Card
+            Button itemCard = new Button(eventChoiceCardStyle);
+            UIUtils.addScaleHoverEffect(itemCard);
+            itemCard.pad(6, 16, 6, 16);
+
+            Table leftTable = new Table();
+            leftTable.left();
+
+            // Line 1: GIVE item
+            Table giveRow = new Table();
+            giveRow.left();
+            Label giveTag = new Label("GIVE: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#e8be8b")));
+            Label giveName = new Label(it.getName(), new Label.LabelStyle(choiceCardTitleFont, Color.valueOf("#fff8ea")));
+            giveRow.add(giveTag).left().padRight(4);
+            giveRow.add(giveName).left();
+
+            // Line 2: RECEIVE item + concise effect preview
+            Table receiveRow = new Table();
+            receiveRow.left();
+            Label receiveTag = new Label("RECEIVE: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#95d5aa")));
+
+            String eff = previewReward.getEffect();
+            if (eff != null && eff.contains("(")) {
+                eff = eff.substring(0, eff.indexOf('(')).trim();
+            }
+            String rewardDesc;
+            if (it.isCurse()) {
+                rewardDesc = previewReward.getName() + " (+18 HP & Purify)";
+            } else {
+                rewardDesc = previewReward.getName() + (eff != null && !eff.isEmpty() ? " (" + eff + ")" : "");
+            }
+            Label receiveName = new Label(rewardDesc, new Label.LabelStyle(choiceBtnFont, Color.valueOf("#dcf7e4")));
+            receiveRow.add(receiveTag).left().padRight(4);
+            receiveRow.add(receiveName).left();
+
+            leftTable.add(giveRow).left().row();
+            leftTable.add(receiveRow).left().padTop(2);
+
+            // Right Pill Badge: Tier or Purify
+            Table tagPill = new Table();
+            String tagText;
+            Color tagColor;
+            Color tagBorder;
+            if (it.isCurse()) {
+                tagText = "PURIFY";
+                tagColor = Color.valueOf("#276654");
+                tagBorder = Color.valueOf("#6eb5a2");
+            } else {
+                tagText = it.getTierName().toUpperCase();
+                tagColor = (tier == 1) ? Color.valueOf("#4a6b36") : ((tier == 2) ? Color.valueOf("#855918") : Color.valueOf("#7a2b6e"));
+                tagBorder = (tier == 1) ? Color.valueOf("#89bf6b") : ((tier == 2) ? Color.valueOf("#cfa259") : Color.valueOf("#d46ebc"));
+            }
+            tagPill.setBackground(UIUtils.createRoundedDrawable(90, 24, 6, tagColor, tagBorder, 2));
+            Label tagLbl = new Label(tagText, new Label.LabelStyle(choiceTagFont, Color.WHITE));
+            tagLbl.setAlignment(Align.center);
+            tagPill.add(tagLbl).pad(2, 8, 2, 8);
+
+            itemCard.add(leftTable).expandX().left().padRight(8);
+            itemCard.add(tagPill).right();
+
+            itemCard.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent evt, Actor actor) {
                     if (game.getAudioManager() != null) {
@@ -2605,7 +2679,7 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Equal Barter Completed", res, false);
                 }
             });
-            eventContentTable.add(itemBtn).width(530).minHeight(48).padBottom(6).center().row();
+            eventContentTable.add(itemCard).width(530).minHeight(56).padBottom(6).center().row();
         }
 
         TextButton cancelBtn = new TextButton("CANCEL & RETURN", cancelEventChoiceBtnStyle);
@@ -2619,7 +2693,7 @@ public class BoardScreen implements Screen {
                 showEventChoiceView(activeCurrentEvent, tile);
             }
         });
-        eventContentTable.add(cancelBtn).size(280, 48).padTop(6).center().row();
+        eventContentTable.add(cancelBtn).size(280, 46).padTop(6).center().row();
     }
 
     /**
@@ -2632,9 +2706,9 @@ public class BoardScreen implements Screen {
 
         Label titleLbl = new Label("Inventory Full!", new Label.LabelStyle(eventTitleFont, Color.valueOf("#361704")));
         titleLbl.setAlignment(Align.center);
-        eventContentTable.add(titleLbl).padTop(10).padBottom(4).center().row();
+        eventContentTable.add(titleLbl).padTop(8).padBottom(2).center().row();
 
-        Label subLbl = new Label("You discovered [" + newItem.getName() + "], but your inventory is full.\nSelect an item to discard and replace, or leave it behind:",
+        Label subLbl = new Label("You discovered [" + newItem.getName() + "], but your satchel is full.\nSelect an item to discard and replace, or leave it behind:",
             new Label.LabelStyle(eventDescFont, Color.valueOf("#4a2c11")));
         subLbl.setAlignment(Align.center);
         subLbl.setWrap(true);
@@ -2643,14 +2717,49 @@ public class BoardScreen implements Screen {
         for (int i = 0; i < player.getInventory().size(); i++) {
             final int slot = i;
             final Item existing = player.getInventory().getItem(i);
-            String label = "Replace: " + existing.getName() + " (" + existing.getEffect() + ")";
-            TextButton swapSlotBtn = new TextButton(label, eventChoiceBtnStyle);
-            swapSlotBtn.getLabel().setWrap(true);
-            swapSlotBtn.getLabel().setAlignment(Align.center);
-            swapSlotBtn.pad(6, 18, 6, 18);
-            swapSlotBtn.getLabelCell().width(480);
-            UIUtils.addScaleHoverEffect(swapSlotBtn);
-            swapSlotBtn.addListener(new ChangeListener() {
+
+            Button swapCard = new Button(eventChoiceCardStyle);
+            UIUtils.addScaleHoverEffect(swapCard);
+            swapCard.pad(6, 16, 6, 16);
+
+            Table leftTable = new Table();
+            leftTable.left();
+
+            // Row 1: DISCARD existing
+            Table discardRow = new Table();
+            discardRow.left();
+            Label discardTag = new Label("DISCARD: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#e8998b")));
+            Label discardName = new Label(existing.getName(), new Label.LabelStyle(choiceCardTitleFont, Color.valueOf("#fff8ea")));
+            discardRow.add(discardTag).left().padRight(4);
+            discardRow.add(discardName).left();
+
+            // Row 2: TAKE new item
+            Table takeRow = new Table();
+            takeRow.left();
+            Label takeTag = new Label("TAKE: ", new Label.LabelStyle(choiceTagFont, Color.valueOf("#95d5aa")));
+            String cleanEff = newItem.getEffect();
+            if (cleanEff != null && cleanEff.contains("(")) {
+                cleanEff = cleanEff.substring(0, cleanEff.indexOf('(')).trim();
+            }
+            String takeDesc = newItem.getName() + (cleanEff != null && !cleanEff.isEmpty() ? " (" + cleanEff + ")" : "");
+            Label takeName = new Label(takeDesc, new Label.LabelStyle(choiceBtnFont, Color.valueOf("#dcf7e4")));
+            takeRow.add(takeTag).left().padRight(4);
+            takeRow.add(takeName).left();
+
+            leftTable.add(discardRow).left().row();
+            leftTable.add(takeRow).left().padTop(2);
+
+            // Right Pill Badge: REPLACE
+            Table tagPill = new Table();
+            tagPill.setBackground(UIUtils.createRoundedDrawable(90, 24, 6, Color.valueOf("#8a2e24"), Color.valueOf("#d46e66"), 2));
+            Label tagLbl = new Label("REPLACE", new Label.LabelStyle(choiceTagFont, Color.WHITE));
+            tagLbl.setAlignment(Align.center);
+            tagPill.add(tagLbl).pad(2, 8, 2, 8);
+
+            swapCard.add(leftTable).expandX().left().padRight(8);
+            swapCard.add(tagPill).right();
+
+            swapCard.addListener(new ChangeListener() {
                 @Override
                 public void changed(ChangeEvent evt, Actor actor) {
                     if (game.getAudioManager() != null) {
@@ -2662,7 +2771,7 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Item Swapped", res, false);
                 }
             });
-            eventContentTable.add(swapSlotBtn).width(530).minHeight(48).padBottom(6).center().row();
+            eventContentTable.add(swapCard).width(530).minHeight(56).padBottom(6).center().row();
         }
 
         TextButton leaveBtn = new TextButton("LEAVE " + newItem.getName().toUpperCase() + " BEHIND", cancelEventChoiceBtnStyle);
@@ -3158,24 +3267,6 @@ public class BoardScreen implements Screen {
                                 float tY = Interpolation.linear.apply(progress);
                                 float dip = (float) Math.sin(progress * Math.PI) * specialMoveArcHeight;
                                 specialMoveCurrentY = MathUtils.lerp(startY, destY, tY) - dip;
-
-                                if (isSlideInterceptedByReaper) {
-                                    int shepherdPos = game.getPaleShepherdTile();
-                                    float interceptProgress = 0.50f;
-                                    if (specialMoveStartTile > specialMoveDestTile && shepherdPos < specialMoveStartTile && shepherdPos >= specialMoveDestTile) {
-                                        interceptProgress = (float) (specialMoveStartTile - shepherdPos) / (float) (specialMoveStartTile - specialMoveDestTile);
-                                        interceptProgress = MathUtils.clamp(interceptProgress, 0.30f, 0.70f);
-                                    }
-                                    if (progress >= interceptProgress) {
-                                        specialMovePhase = SpecialMovePhase.INTERCEPTED_MIDAIR;
-                                        specialMovePhaseTimer = 0f;
-                                        if (game.getAudioManager() != null) {
-                                            game.getAudioManager().playSound(AudioManager.SoundEffect.REAPER_APPEAR, 0.75f);
-                                        }
-                                        showPaleShepherdBoardDialogue(player);
-                                        break;
-                                    }
-                                }
                             }
 
                             if (progress >= 1.0f) {
@@ -3227,34 +3318,6 @@ public class BoardScreen implements Screen {
                                 if (game.getAudioManager() != null && isLadderMove) {
                                     game.getAudioManager().playSound(AudioManager.SoundEffect.LADDER_LAND);
                                 }
-                            }
-                            break;
-
-                        case INTERCEPTED_MIDAIR:
-                            // Hovering midair cushioned by gentle dark mist while dialogue is active
-                            specialMovePhaseTimer += delta;
-                            break;
-
-                        case INTERCEPTED_DESCENT:
-                            // Smoothly and gently gliding down from midair to the reaper's tile
-                            specialMoveElapsed += delta;
-                            float dProgress = MathUtils.clamp(specialMoveElapsed / specialMoveDuration, 0f, 1f);
-                            float dt = Interpolation.sineOut.apply(dProgress);
-                            int shepTile = Math.max(1, game.getPaleShepherdTile());
-                            float groundDestX = getTileCenterX(shepTile);
-                            float groundDestY = getCharacterDrawY(shepTile);
-
-                            specialMoveCurrentX = MathUtils.lerp(specialMoveDescentStartX, groundDestX, dt);
-                            specialMoveCurrentY = MathUtils.lerp(specialMoveDescentStartY, groundDestY, dt);
-
-                            if (dProgress >= 1.0f) {
-                                specialMoveCurrentX = groundDestX;
-                                specialMoveCurrentY = groundDestY;
-                                player.setPosition(shepTile);
-                                isSpecialMoving = false;
-                                specialMovePhase = SpecialMovePhase.NONE;
-                                isSlideInterceptedByReaper = false;
-                                triggerPaleShepherdEncounter(player);
                             }
                             break;
 
@@ -3649,6 +3712,7 @@ public class BoardScreen implements Screen {
         if (modalScrim != null) modalScrim.setVisible(false);
         if (eventModalTable != null) eventModalTable.setVisible(false);
         if (shepherdDialogueTable != null) shepherdDialogueTable.setVisible(false);
+        if (bannerTable != null) bannerTable.setVisible(true);
         isEventModalActive = false;
         isShepherdAmbushActive = false;
         isShepherdBoardDialogueActive = false;
@@ -3892,8 +3956,6 @@ public class BoardScreen implements Screen {
                 targetY = baselineY + (getTileBottomY(specialMoveStartTile) - 220f);
             } else if (specialMovePhase == SpecialMovePhase.LANDED) {
                 targetY = baselineY + (getTileBottomY(specialMoveDestTile) - 220f);
-            } else if (specialMovePhase == SpecialMovePhase.INTERCEPTED_MIDAIR || specialMovePhase == SpecialMovePhase.INTERCEPTED_DESCENT) {
-                targetY = baselineY + (specialMoveCurrentY - 220f);
             } else {
                 float moveProgress = MathUtils.clamp(specialMoveElapsed / specialMoveDuration, 0f, 1f);
                 float startElev = getTileBottomY(specialMoveStartTile) - 220f;
@@ -4490,23 +4552,6 @@ public class BoardScreen implements Screen {
                         batch.draw(whitePixelTex, specialMoveCurrentX - ringW / 2f, drawY - 4f, ringW, 12f);
                         batch.setColor(Color.WHITE);
                     }
-                } else if (specialMovePhase == SpecialMovePhase.INTERCEPTED_MIDAIR) {
-                    float hoverBob = (float) Math.sin(stateTime * 2.5f) * 6f;
-                    drawY = specialMoveCurrentY + hoverBob;
-                    activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
-
-                    // Soft misty cushion beneath character
-                    float pulse = 0.5f + 0.5f * MathUtils.sinDeg(stateTime * 180f);
-                    if (softShadowTex != null) {
-                        batch.setColor(0.20f, 0.10f, 0.28f, 0.50f + 0.15f * pulse);
-                        batch.draw(softShadowTex, specialMoveCurrentX - 45f, drawY - 8f, 90f, 22f);
-                        batch.setColor(0.60f, 0.15f, 0.35f, 0.25f + 0.10f * pulse);
-                        batch.draw(softShadowTex, specialMoveCurrentX - 35f, drawY - 4f, 70f, 16f);
-                        batch.setColor(Color.WHITE);
-                    }
-                } else if (specialMovePhase == SpecialMovePhase.INTERCEPTED_DESCENT) {
-                    drawY = specialMoveCurrentY;
-                    activeFrame = (anim != null) ? anim.getKeyFrames()[0] : new TextureRegion(charTex);
                 } else {
                     // IN_FLIGHT: active walking/climbing motion along the soaring arc
                     activeFrame = (anim != null) ? anim.getKeyFrame(walkStateTime, true) : new TextureRegion(charTex);
@@ -4994,6 +5039,8 @@ public class BoardScreen implements Screen {
         if (choiceOutcomeBodyFont != null) choiceOutcomeBodyFont.dispose();
         if (choiceOutcomeValueFont != null) choiceOutcomeValueFont.dispose();
         if (choiceD20Font != null) choiceD20Font.dispose();
+        if (shepherdDialogueTitleFont != null) shepherdDialogueTitleFont.dispose();
+        if (shepherdDialogueFont != null) shepherdDialogueFont.dispose();
         if (skillTitleFont != null) skillTitleFont.dispose();
         if (skillEffectFont != null) skillEffectFont.dispose();
         if (skillSubFont != null) skillSubFont.dispose();
