@@ -1,6 +1,7 @@
 package io.github.snakes_and_ladders_roll_of_fate.screens;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -71,6 +72,8 @@ public class GameSummaryScreen implements Screen {
     private Label ribbonTitleLabel;
     private Label ribbonSubtitleLabel;
     private TextButton toggleViewBtn;
+    private final List<TextButton> bottomActionFocusables = new ArrayList<>();
+    private int bottomActionFocusIdx = 0;
 
     // Fonts
     private BitmapFont headerTitleFont;
@@ -920,10 +923,29 @@ public class GameSummaryScreen implements Screen {
             }
         });
 
-        // 3. MAIN MENU Button (Navigation - Dark leather with muted border)
+        // 3. REPLAY EPILOGUE Button (Allows reviewing the storybook ending anytime)
+        TextButton.TextButtonStyle epilogueStyle = new TextButton.TextButtonStyle();
+        epilogueStyle.up = UIUtils.createRoundedDrawable(260, 60, 14, Color.valueOf("#261933"), Color.valueOf("#a779c2"), 2);
+        epilogueStyle.over = UIUtils.createRoundedDrawable(260, 60, 14, Color.valueOf("#3b2650"), Color.valueOf("#ffd54f"), 2);
+        epilogueStyle.font = buttonFont;
+        epilogueStyle.fontColor = Color.valueOf("#ffd54f");
+
+        TextButton epilogueBtn = new TextButton("REPLAY EPILOGUE", epilogueStyle);
+        UIUtils.addScaleHoverEffect(epilogueBtn);
+        epilogueBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                }
+                game.setScreen(new EndingStoryScreen(game, hero, party, endingType));
+            }
+        });
+
+        // 4. MAIN MENU Button (Navigation - Dark leather with muted border)
         TextButton.TextButtonStyle menuStyle = new TextButton.TextButtonStyle();
-        menuStyle.up = UIUtils.createRoundedDrawable(280, 60, 14, Color.valueOf("#4a2307"), Color.valueOf("#854b25"), 2);
-        menuStyle.over = UIUtils.createRoundedDrawable(280, 60, 14, Color.valueOf("#5e2e0a"), Color.valueOf("#c89259"), 2);
+        menuStyle.up = UIUtils.createRoundedDrawable(240, 60, 14, Color.valueOf("#4a2307"), Color.valueOf("#854b25"), 2);
+        menuStyle.over = UIUtils.createRoundedDrawable(240, 60, 14, Color.valueOf("#5e2e0a"), Color.valueOf("#c89259"), 2);
         menuStyle.font = buttonFont;
         menuStyle.fontColor = Color.WHITE;
 
@@ -939,15 +961,53 @@ public class GameSummaryScreen implements Screen {
             }
         });
 
-        table.add(playAgainBtn).size(280, 60).padRight(30);
-        table.add(toggleViewBtn).size(420, 60).padRight(30);
-        table.add(menuBtn).size(280, 60);
+        bottomActionFocusables.clear();
+        bottomActionFocusables.add(playAgainBtn);
+        bottomActionFocusables.add(toggleViewBtn);
+        bottomActionFocusables.add(epilogueBtn);
+        bottomActionFocusables.add(menuBtn);
+        bottomActionFocusIdx = 0;
+        UIUtils.applyFocusVisuals(bottomActionFocusables, bottomActionFocusIdx);
+
+        table.add(playAgainBtn).size(260, 60).padRight(20);
+        table.add(toggleViewBtn).size(420, 60).padRight(20);
+        table.add(epilogueBtn).size(260, 60).padRight(20);
+        table.add(menuBtn).size(240, 60);
 
         return table;
     }
 
+    private void handleKeyboardInput() {
+        if (bottomActionFocusables.isEmpty()) return;
+        boolean tabPressed = Gdx.input.isKeyJustPressed(Input.Keys.TAB);
+        int tabDelta = UIUtils.isShiftHeld() ? -1 : 1;
+
+        UIUtils.applyFocusVisuals(bottomActionFocusables, bottomActionFocusIdx);
+
+        if (UIUtils.isNavPrevHorizontalJustPressed() || (tabPressed && tabDelta < 0)) {
+            bottomActionFocusIdx = UIUtils.stepFocus(bottomActionFocusables, bottomActionFocusIdx, -1);
+        } else if (UIUtils.isNavNextHorizontalJustPressed() || tabPressed) {
+            bottomActionFocusIdx = UIUtils.stepFocus(bottomActionFocusables, bottomActionFocusIdx, 1);
+        } else if (UIUtils.isConfirmJustPressed()) {
+            UIUtils.activateButton(bottomActionFocusables.get(bottomActionFocusIdx));
+        } else if (UIUtils.isBackJustPressed()) {
+            UIUtils.activateButton(bottomActionFocusables.get(3)); // MAIN MENU
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.V)) {
+            UIUtils.activateButton(bottomActionFocusables.get(1)); // TOGGLE SUMMARY
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            UIUtils.activateButton(bottomActionFocusables.get(2)); // REPLAY EPILOGUE
+        } else {
+            int num = UIUtils.justPressedNumberKey(bottomActionFocusables.size());
+            if (num >= 0) {
+                bottomActionFocusIdx = num;
+                UIUtils.activateButton(bottomActionFocusables.get(num));
+            }
+        }
+    }
+
     @Override
     public void render(float delta) {
+        handleKeyboardInput();
         Gdx.gl.glClearColor(0.08f, 0.04f, 0.02f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 

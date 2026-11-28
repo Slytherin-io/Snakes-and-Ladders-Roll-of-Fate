@@ -23,14 +23,11 @@ public class Player extends Entity {
     private boolean inBattle = false;
     private int turnsSinceLastEvent = 99; // Starts ready for encounter
     private CharacterClass characterClass;
-    private int skillCooldown = 0;
-
-
-
     private int maxHealthBonus = 0;
 
     // Polymorphic Class Skill (Starts inactive on full cooldown)
     private ClassSkill classSkill;
+    private int skillCooldown = 4;
     private boolean luckyPawActive = false;
     private boolean hazardImmune = false;
     private boolean serpentWhispererActive = false;
@@ -343,9 +340,9 @@ public class Player extends Entity {
     }
     public int getExpThresh() { return expThresh; }
     public void setExpThresh(int expThresh) { this.expThresh = expThresh; }
-    public boolean canUseSkill() { return skillCooldown == 0; }
-    public void useSkill() { this.skillCooldown = 4; }
-    public void tickSkillCooldown() { if (skillCooldown > 0) skillCooldown--; }
+    public boolean canUseSkill() { return skillCooldown <= 0; }
+    public void useSkill() { this.skillCooldown = (classSkill != null) ? classSkill.getMaxCooldown() : 4; }
+    public void tickSkillCooldown() { decrementSkillCooldown(); }
     public Inventory getInventory() { return inventory; }
     public void setInventory(Inventory inventory) { this.inventory = inventory; }
 

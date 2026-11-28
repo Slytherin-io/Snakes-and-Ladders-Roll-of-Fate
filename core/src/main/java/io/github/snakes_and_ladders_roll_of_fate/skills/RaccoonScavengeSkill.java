@@ -4,8 +4,10 @@ import com.badlogic.gdx.assets.AssetDescriptor;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.math.MathUtils;
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
 import io.github.snakes_and_ladders_roll_of_fate.items.Item;
+import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 import io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType;
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 
@@ -29,7 +31,7 @@ public class RaccoonScavengeSkill implements ClassSkill {
 
     @Override
     public String getActionSubtext() {
-        return "LOOT / +15 HP";
+        return "ITEM OR +15 HP";
     }
 
     @Override
@@ -39,7 +41,7 @@ public class RaccoonScavengeSkill implements ClassSkill {
 
     @Override
     public String getDescription() {
-        return "Survival scavenger: Forages useful supplies. If backpack is full, converts scraps into +15 HP emergency medicine.";
+        return "Finds a random trail item, or heals +15 HP if your satchel is full.";
     }
 
     @Override
@@ -84,5 +86,32 @@ public class RaccoonScavengeSkill implements ClassSkill {
             player.getInventory().addItem(loot);
         }
         return new SkillResult(true, "Raccoon scavenged a [" + loot.getName() + "] from the mountain trail!");
+    }
+
+    @Override
+    public String getCombatSkillName() {
+        return "Scavenge Strike";
+    }
+
+    @Override
+    public String getCombatDescription() {
+        return "Strike the enemy and scavenge healing supplies on kill!";
+    }
+
+    @Override
+    public SkillResult executeCombat(Player player, Enemy enemy, BattleSystem battleSystem) {
+        if (enemy == null || battleSystem == null) {
+            return new SkillResult(false, "No valid target.");
+        }
+        int scavDmg = battleSystem.calculateDamage(player, enemy);
+        enemy.setHealth(Math.max(0, enemy.getHealth() - scavDmg));
+        battleSystem.notifyDamageDealt(player, enemy, scavDmg, false, false);
+        if (enemy.getHealth() <= 0) {
+            Item loot = Item.createConsumable("Scavenged Rations", EventEffectType.HEALTH, 25, "Restores 25 HP");
+            player.addItem(loot);
+            return new SkillResult(true, "SCAVENGE STRIKE! Deals " + scavDmg + " damage! You loot " + loot.getName() + "!");
+        } else {
+            return new SkillResult(true, "Scavenge Strike deals " + scavDmg + " damage! (Loot on kill)");
+        }
     }
 }

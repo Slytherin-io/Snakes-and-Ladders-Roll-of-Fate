@@ -3,6 +3,7 @@ package io.github.snakes_and_ladders_roll_of_fate.screens;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.assets.AssetDescriptor;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -48,7 +49,10 @@ import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutc
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 import io.github.snakes_and_ladders_roll_of_fate.ui.UIUtils;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class BattleScreen implements Screen {
@@ -57,7 +61,11 @@ public class BattleScreen implements Screen {
         PLAYER_SWORD,
         SNAKE_FANGS,
         DAWN_SOLAR_CLAW,
-        SHEPHERD_SCYTHE
+        SHEPHERD_SCYTHE,
+        CAT_DUAL_CLAW,
+        FOX_VITAL_PIERCE,
+        RACCOON_HOOK_SWIPE,
+        TURTLE_RIPOSTE
     }
 
     public static class HitSpark {
@@ -163,6 +171,13 @@ public class BattleScreen implements Screen {
     private float playerFlinchTimer = 0f;
     private float enemyFlinchTimer = 0f;
 
+    // Class Skill Animation States & Kinematics
+    private float skillAnimTimer = 0f;
+    private float skillAnimDuration = 0f;
+    private CharacterClass activeSkillClass = null;
+    private boolean skillPhase1Done = false;
+    private boolean skillPhase2Done = false;
+
     private float screenShakeTimer = 0f;
     private float screenShakeDuration = 0f;
     private float screenShakeIntensity = 0f;
@@ -207,6 +222,7 @@ public class BattleScreen implements Screen {
 
     // Fonts (MATCHING BoardScreen Hierarchy)
     private BitmapFont titleFont, topBannerFont, hudHpFont, battleLogFont, playerTagFont, miniFont;
+    private BitmapFont skillBtnFont;
     private BitmapFont damageFont, critFont;
     private BitmapFont modalTitleFont, modalSubFont, modalRewardFont, modalNarrativeFont, modalStatusFont;
     private BitmapFont introSpeakerFont, introBodyFont, introBtnFont;
@@ -227,19 +243,39 @@ public class BattleScreen implements Screen {
     private Table pauseModalTable;
     private Table settingsModalTable;
     private Table leaveConfirmModalTable;
+    private final List<Button> pauseFocusables = new ArrayList<>();
+    private int pauseFocusIdx = 0;
+    private final List<Actor> settingsFocusables = new ArrayList<>();
+    private int settingsFocusIdx = 0;
+    private com.badlogic.gdx.scenes.scene2d.ui.Slider settingsMusicSlider;
+    private com.badlogic.gdx.scenes.scene2d.ui.Slider settingsSfxSlider;
+    private final List<Button> leaveFocusables = new ArrayList<>();
+    private int leaveFocusIdx = 0;
 
     // UI Elements
     private Label topBannerLabel, battleLogLabel, playerHpLabel, enemyHpLabel, enemyNameLabel;
     private Table topBannerWrap, topBannerBox, playerHpWrap, enemyHpWrap;
     private Table battleLogContainer;
     private TextButton btnAttack, btnDefend, btnItem, btnEscape, btnSkill, continueBtn;
+    private final List<Button> battleActionFocusables = new ArrayList<>();
+    private int battleActionFocusIdx = 0;
+    private final List<Button> itemPopupFocusables = new ArrayList<>();
+    private final Button[] itemSlotButtons = new Button[4];
+    private int itemPopupFocusIdx = 0;
+    private Button itemCloseBtn;
+    private final List<Button> dialogueFocusables = new ArrayList<>();
+    private int dialogueFocusIdx = 0;
     private Table bottomBar;
     private Table bossIntroTable;
     private Label introDialogueLabel;
     private Table introActionsRow;
     private TextButton introAdvanceBtn;
+    private TextButton introSkipBtn;
     private boolean isIntroDialogueActive = false;
     private int introBeatIndex = 0;
+    private boolean isEpilogueDialogueActive = false;
+    private boolean isEpilogueVictory = false;
+    private int epilogueBeatIndex = 0;
     private boolean scrambleAnnounced = false;
     private Cell<TextButton> continueBtnCell;
     private Table itemPopup;
@@ -256,9 +292,26 @@ public class BattleScreen implements Screen {
     private Animation<TextureRegion> playerIdleAnim;
     private Animation<TextureRegion> enemyIdleAnim;
     private Animation<TextureRegion> enemyAttackAnim;
+    private int currentSnakeAct = 1;
     private float stateTime = 0f;
     private boolean outcomeResolved = false;
     private String outcomeMessage = "";
+
+    private int resolveSnakeAct() {
+        if (snakeTile != null) {
+            return (snakeTile.getPosition() <= 30) ? 1 : ((snakeTile.getPosition() <= 70) ? 2 : 3);
+        } else if (player != null && player.getPosition() > 0) {
+            return (player.getPosition() <= 30) ? 1 : ((player.getPosition() <= 70) ? 2 : 3);
+        } else if (enemy != null && enemy.getEnemyType() != null) {
+            String eType = enemy.getEnemyType();
+            if (eType.contains("Obsidian") || eType.contains("Crag") || eType.contains("Rattler")) {
+                return 2;
+            } else if (eType.contains("Magma") || eType.contains("Abyssal") || eType.contains("Celestial")) {
+                return 3;
+            }
+        }
+        return 1;
+    }
 
     public BattleScreen(RollOfFateGame game, Player player, SnakeTile snakeTile) {
         this(game, player, snakeTile != null ? snakeTile.createSnakeEnemy() : null, snakeTile);
@@ -421,6 +474,113 @@ public class BattleScreen implements Screen {
         }
     }
 
+    private float getEnemyCenterY() {
+        if (isBossBattle()) {
+            return ENEMY_DRAW_Y + 70f;
+        } else if (currentSnakeAct == 1) {
+            return 282f + 53f; // Centered on ~107px tall Forest Green Snake
+        } else if (currentSnakeAct == 2) {
+            return 282f + 70f; // Centered on ~139px tall Sapphire Horned Serpent
+        } else {
+            return 282f + 76f; // Centered on ~152px tall Crimson Magma Wyrm
+        }
+    }
+
+    private void spawnTurtleFortressSparks(float cx, float cy) {
+        Color[] fortressColors = new Color[]{
+            Color.valueOf("#2e7d32"),
+            Color.valueOf("#4caf50"),
+            Color.valueOf("#69f0ae"),
+            Color.valueOf("#ffd700"),
+            Color.valueOf("#fff9c4")
+        };
+        for (int i = 0; i < 22; i++) {
+            float angle = MathUtils.random(0f, 360f) * MathUtils.degRad;
+            float speed = MathUtils.random(90f, 240f);
+            float vx = MathUtils.cos(angle) * speed;
+            float vy = MathUtils.sin(angle) * speed + MathUtils.random(30f, 120f);
+            float dur = MathUtils.random(0.40f, 0.70f);
+            float size = MathUtils.random(4f, 7f);
+            Color c = fortressColors[MathUtils.random(fortressColors.length - 1)];
+            hitSparks.add(new HitSpark(cx, cy, vx, vy, dur, size, 220f, c));
+        }
+    }
+
+    private void spawnScavengeLootSparks(float cx, float cy) {
+        Color[] lootColors = new Color[]{
+            Color.valueOf("#ffd700"), // Gold
+            Color.valueOf("#ffea00"), // Yellow coin
+            Color.valueOf("#00e676"), // Emerald ration
+            Color.valueOf("#69f0ae"), // Mint heal
+            Color.valueOf("#ffffff")  // Sparkle
+        };
+        for (int i = 0; i < 26; i++) {
+            float angle = MathUtils.random(0f, 360f) * MathUtils.degRad;
+            float speed = MathUtils.random(120f, 320f);
+            float vx = MathUtils.cos(angle) * speed;
+            float vy = MathUtils.sin(angle) * speed + MathUtils.random(60f, 180f);
+            float dur = MathUtils.random(0.45f, 0.75f);
+            float size = MathUtils.random(4f, 7.5f);
+            Color c = lootColors[MathUtils.random(lootColors.length - 1)];
+            hitSparks.add(new HitSpark(cx, cy, vx, vy, dur, size, 380f, c));
+        }
+    }
+
+    private void startPlayerSkillAnimation() {
+        CharacterClass cls = player.getCharacterClass();
+        if (cls == null) {
+            battleSystem.onPlayerUseSkill();
+            syncUi();
+            return;
+        }
+
+        activeSkillClass = cls;
+        skillPhase1Done = false;
+        skillPhase2Done = false;
+
+        switch (cls) {
+            case CAT:
+                skillAnimDuration = 0.72f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                }
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "DOUBLE STRIKE!", Color.valueOf("#00e5ff"), true);
+                break;
+
+            case TURTLE:
+                skillAnimDuration = 0.65f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
+                }
+                spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
+                spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 30f, 130f, Color.valueOf("#2e7d32"), Color.valueOf("#ffd700"), 0.55f);
+                spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 15f, 85f, Color.valueOf("#66bb6a"), Color.valueOf("#ffffff"), 0.45f);
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "IRON FORTRESS!", Color.valueOf("#69f0ae"), true);
+                spawnTurtleFortressSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
+                break;
+
+            case FOX:
+                skillAnimDuration = 0.65f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.SCOUT_FLARE);
+                }
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "VITAL STRIKE!", Color.valueOf("#ff9100"), true);
+                break;
+
+            case RACCOON:
+                skillAnimDuration = 0.60f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                }
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "SCAVENGE STRIKE!", Color.valueOf("#ffd54f"), true);
+                break;
+        }
+    }
+
     private void spawnFloatingText(float x, float y, String text, Color color, boolean isCrit) {
         damageNumbers.add(new DamageNumber(text, x, y, 1.15f, color, isCrit));
     }
@@ -471,6 +631,7 @@ public class BattleScreen implements Screen {
 
         // Load Fredoka Fonts (Option 1 pairing matching BoardScreen)
         titleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
+        skillBtnFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 20, Color.WHITE);
         topBannerFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 32, Color.valueOf("#fffdfa"));
         hudHpFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#a81717"));
         battleLogFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.WHITE);
@@ -498,16 +659,39 @@ public class BattleScreen implements Screen {
         pauseTipFont   = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#54280e"));
         sliderFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 24, darkBrown);
 
+        currentSnakeAct = resolveSnakeAct();
+
         // Register Battle Listeners for Dynamic FX
         battleSystem.setBattleListener((attacker, defender, damage, isCrit, isMiss) -> {
             if (attacker == player) {
                 if (game.getRunTracker() != null) {
                     game.getRunTracker().recordSnakeCombat(player, damage, false, isCrit);
                 }
-                spawnSlash(ENEMY_X, ENEMY_DRAW_Y + 70f, false, isCrit);
-                spawnHitSparks(ENEMY_X, ENEMY_DRAW_Y + 70f, false, isCrit ? 26 : 16, isCrit);
+                float enemyHitY = getEnemyCenterY();
+
+                // Riposte counter-strike when Turtle's Iron Fortress deflects during enemy turn
+                if (player.getCharacterClass() == CharacterClass.TURTLE && battleSystem.getCurrentState() == BattleState.ENEMY_TURN) {
+                    spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 40f, 160f, Color.valueOf("#ffd700"), Color.valueOf("#ffffff"), 0.45f);
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "DEFLECTED! 0 DMG", Color.valueOf("#4fc3f7"), true);
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyHitY, 0.35f, SlashStyle.TURTLE_RIPOSTE, true, 0f));
+                    spawnTurtleFortressSparks(ENEMY_X, enemyHitY);
+                    spawnFloatingText(ENEMY_X, enemyHitY + 110f, "CRUSHING RIPOSTE!", Color.valueOf("#ffd54f"), true);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    spawnDamageNumber(ENEMY_X, enemyHitY + 65f, damage, true, false);
+                    triggerScreenShake(18f, 0.35f);
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.BOSS_ROAR);
+                    }
+                    return;
+                }
+
+                // If not in a skill animation, spawn generic sword slash & sparks
+                if (skillAnimTimer <= 0f) {
+                    spawnSlash(ENEMY_X, enemyHitY, false, isCrit);
+                    spawnHitSparks(ENEMY_X, enemyHitY, false, isCrit ? 26 : 16, isCrit);
+                }
                 enemyFlinchTimer = FLINCH_DURATION;
-                spawnDamageNumber(ENEMY_X, ENEMY_DRAW_Y + 140f, damage, isCrit, isMiss);
+                spawnDamageNumber(ENEMY_X, enemyHitY + 65f, damage, isCrit, isMiss);
                 triggerScreenShake(isCrit ? 15f : 8f, isCrit ? 0.28f : 0.18f);
             } else {
                 if (game.getRunTracker() != null) {
@@ -561,15 +745,25 @@ public class BattleScreen implements Screen {
             enemyAttackAnim = new Animation<>(0.18f, bossGrid[1]);
             enemyAttackAnim.setPlayMode(Animation.PlayMode.NORMAL);
         } else {
-            Texture snakeSheet = game.getAssetManager().get(Assets.ENEMY_SNAKE);
-            TextureRegion[][] snakeGrid = TextureRegion.split(snakeSheet, 32, 32);
-            for (TextureRegion frame : snakeGrid[0]) {
-                if (!frame.isFlipX()) {
-                    frame.flip(true, false);
+            // Act-stratified serpent combat: Act I (Green Snake), Act II (Sapphire), Act III (Crimson Magma)
+            int act = currentSnakeAct;
+
+            AssetDescriptor<Texture> snakeAsset = Assets.getSnakeTextureForAct(act);
+            Texture snakeSheet = game.getAssetManager().get(snakeAsset);
+            TextureRegion[][] snakeGrid = TextureRegion.split(snakeSheet, 128, 128);
+            TextureRegion[] frames = snakeGrid[0];
+            for (TextureRegion frame : frames) {
+                if (frame.isFlipX()) {
+                    frame.flip(true, false); // Ensure facing left towards hero
                 }
             }
-            enemyIdleAnim = new Animation<>(0.15f, snakeGrid[0]);
-            enemyAttackAnim = enemyIdleAnim;
+            // Idle animation: coiled breathing ready stance (frames 0 & 1)
+            enemyIdleAnim = new Animation<>(0.26f, new TextureRegion[]{frames[0], frames[1]});
+            enemyIdleAnim.setPlayMode(Animation.PlayMode.LOOP);
+
+            // Attack animation: strike & fangs/venom sequence (frames 2, 3, 4, 5)
+            enemyAttackAnim = new Animation<>(0.13f, new TextureRegion[]{frames[2], frames[3], frames[4], frames[5]});
+            enemyAttackAnim.setPlayMode(Animation.PlayMode.NORMAL);
         }
 
         // Start Battle
@@ -770,13 +964,30 @@ public class BattleScreen implements Screen {
         btnItem = new TextButton("ITEM", style);
         btnEscape = new TextButton("ESCAPE", style);
 
-        String skillName = player.getCharacterClass() != null ? player.getCharacterClass().getName().toUpperCase() + " SKILL" : "SKILL";
-        btnSkill = new TextButton(skillName, style);
+        TextButton.TextButtonStyle skillStyle = new TextButton.TextButtonStyle();
+        skillStyle.up = UIUtils.createRoundedDrawable(180, 100, 15, leather, pillBrown, 3);
+        skillStyle.over = UIUtils.createRoundedDrawable(180, 100, 15, Color.valueOf("#d8a46f"), pillBrown, 3);
+        skillStyle.font = skillBtnFont;
+        skillStyle.fontColor = Color.WHITE;
+
+        String rawSkillName = (player.getClassSkill() != null)
+            ? player.getClassSkill().getCombatSkillName().toUpperCase()
+            : (player.getCharacterClass() != null ? player.getCharacterClass().getName().toUpperCase() + " SKILL" : "SKILL");
+        btnSkill = new TextButton(formatSkillButtonText(rawSkillName), skillStyle);
+        btnSkill.getLabel().setAlignment(Align.center);
+        btnSkill.getLabelCell().padLeft(6f).padRight(6f);
+
+        battleActionFocusables.clear();
+        battleActionFocusables.add(btnAttack);
+        battleActionFocusables.add(btnDefend);
+        battleActionFocusables.add(btnSkill);
+        battleActionFocusables.add(btnItem);
+        battleActionFocusables.add(btnEscape);
 
         // Attack Listener
         btnAttack.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
                     playerLungeTimer = PLAYER_LUNGE_DURATION;
                     playerAttackLanded = false;
@@ -788,10 +999,10 @@ public class BattleScreen implements Screen {
         // Defend Listener
         btnDefend.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
                     spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
-                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "GUARD & RIPOSTE", Color.valueOf("#ffd54f"), false);
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "GUARD", Color.valueOf("#ffd54f"), false);
                     battleSystem.onPlayerDefend();
                     syncUi();
                 }
@@ -801,9 +1012,13 @@ public class BattleScreen implements Screen {
         // Skill Listener
         btnSkill.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
-                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
-                    battleSystem.onPlayerUseSkill();
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
+                    if (!player.canUseSkill()) {
+                        if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "COOLDOWN (" + player.getSkillCooldown() + ")", Color.valueOf("#ff7043"), false);
+                        return;
+                    }
+                    startPlayerSkillAnimation();
                     syncUi();
                 }
             }
@@ -812,7 +1027,7 @@ public class BattleScreen implements Screen {
         // Item Listener
         btnItem.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     if (!itemPopup.isVisible()) refreshItemPopup();
                     itemPopup.setVisible(!itemPopup.isVisible());
@@ -823,7 +1038,7 @@ public class BattleScreen implements Screen {
         // Escape Listener
         btnEscape.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     battleSystem.onPlayerEscape();
                     syncUi();
@@ -853,6 +1068,15 @@ public class BattleScreen implements Screen {
 
         hudStage.addActor(bottomBar);
     }
+
+    private String formatSkillButtonText(String text) {
+        if (text == null) return "SKILL";
+        if (text.contains(" ") && !text.contains("\n")) {
+            return text.replaceFirst(" ", "\n");
+        }
+        return text;
+    }
+
     /**
      * Builds the in-arena dramatic intro confrontation for Boss trials (The Dawn Warden and The Pale Shepherd).
      * Sits neatly in the bottom center space between the HP pills, below both fighters.
@@ -871,12 +1095,12 @@ public class BattleScreen implements Screen {
         Table card = new Table();
         if (isPaleShepherdBattle()) {
             card.setBackground(UIUtils.createRoundedDrawable(
-                960, 190, 18, Color.valueOf("#180609f6"), Color.valueOf("#a62828"), 3));
+                1660, 190, 18, Color.valueOf("#180609f6"), Color.valueOf("#a62828"), 3));
         } else {
             card.setBackground(UIUtils.createRoundedDrawable(
-                960, 190, 18, Color.valueOf("#261105f4"), Color.valueOf("#c89259"), 3));
+                1660, 190, 18, Color.valueOf("#261105f4"), Color.valueOf("#c89259"), 3));
         }
-        card.pad(14, 28, 16, 28);
+        card.pad(14, 38, 16, 38);
 
         // Header Row: Speaker Label + Skip
         Table headerRow = new Table();
@@ -894,13 +1118,15 @@ public class BattleScreen implements Screen {
         skipStyle.font = miniFont;
         skipStyle.fontColor = isPaleShepherdBattle() ? Color.valueOf("#cf9696") : Color.valueOf("#cfb896");
         skipStyle.overFontColor = Color.WHITE;
-        TextButton skipBtn = new TextButton("SKIP INTRO", skipStyle);
-        skipBtn.addListener(new ChangeListener() {
+        introSkipBtn = new TextButton("SKIP INTRO", skipStyle);
+        introSkipBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, Actor actor) {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
-                if (isPaleShepherdBattle()) {
+                if (isEpilogueDialogueActive) {
+                    finishDawnWardenEpilogue();
+                } else if (isPaleShepherdBattle()) {
                     finishPaleShepherdIntro(0, 0, "The Pale Shepherd raises his crook in quiet contemplation.");
                 } else {
                     finishDawnWardenIntro(0, 0, "The Dawn Warden descends before you to test your spirit!");
@@ -909,26 +1135,26 @@ public class BattleScreen implements Screen {
         });
 
         headerRow.add(speakerLbl).left().expandX();
-        headerRow.add(skipBtn).right();
-        card.add(headerRow).width(900).padBottom(6).row();
+        headerRow.add(introSkipBtn).right();
+        card.add(headerRow).width(1580).padBottom(6).row();
 
         // Dialogue Body
         introDialogueLabel = new Label("", new Label.LabelStyle(introBodyFont, Color.valueOf("#fff8ea")));
         introDialogueLabel.setAlignment(Align.center);
         introDialogueLabel.setWrap(true);
-        card.add(introDialogueLabel).width(900).minHeight(64).center().padBottom(10).row();
+        card.add(introDialogueLabel).width(1580).minHeight(64).center().padBottom(10).row();
 
         // Action Row (dynamically populated per beat)
         introActionsRow = new Table();
-        card.add(introActionsRow).width(900).center();
+        card.add(introActionsRow).width(1580).center();
 
         TextButton.TextButtonStyle advStyle = new TextButton.TextButtonStyle();
         if (isPaleShepherdBattle()) {
-            advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#691515"), Color.valueOf("#b32b2b"), 2);
-            advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#8f1d1d"), Color.valueOf("#ff5252"), 2);
+            advStyle.up = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#691515"), Color.valueOf("#b32b2b"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#8f1d1d"), Color.valueOf("#ff5252"), 2);
         } else {
-            advStyle.up = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#854b25"), Color.valueOf("#c89259"), 2);
-            advStyle.over = UIUtils.createRoundedDrawable(260, 46, 12, Color.valueOf("#a66032"), Color.valueOf("#ffd54f"), 2);
+            advStyle.up = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#854b25"), Color.valueOf("#c89259"), 2);
+            advStyle.over = UIUtils.createRoundedDrawable(280, 46, 12, Color.valueOf("#a66032"), Color.valueOf("#ffd54f"), 2);
         }
         advStyle.font = introBtnFont;
         advStyle.fontColor = Color.WHITE;
@@ -939,16 +1165,21 @@ public class BattleScreen implements Screen {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 }
-                introBeatIndex++;
-                if (isDawnWardenBattle()) {
-                    refreshDawnWardenIntroBeat();
-                } else if (isPaleShepherdBattle()) {
-                    refreshPaleShepherdIntroBeat();
+                if (isEpilogueDialogueActive) {
+                    epilogueBeatIndex++;
+                    refreshDawnWardenEpilogueBeat();
+                } else {
+                    introBeatIndex++;
+                    if (isDawnWardenBattle()) {
+                        refreshDawnWardenIntroBeat();
+                    } else if (isPaleShepherdBattle()) {
+                        refreshPaleShepherdIntroBeat();
+                    }
                 }
             }
         });
 
-        bossIntroTable.add(card).width(960).minHeight(186).center();
+        bossIntroTable.add(card).width(1660).minHeight(186).center();
         hudStage.addActor(bossIntroTable);
         if (isDawnWardenBattle()) {
             refreshDawnWardenIntroBeat();
@@ -994,14 +1225,14 @@ public class BattleScreen implements Screen {
             introDialogueLabel.setText("The golden scythe hums with mortal finality. How do you meet the inevitable?");
 
             TextButton.TextButtonStyle atkChoiceStyle = new TextButton.TextButtonStyle();
-            atkChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#7a1a1a"), Color.valueOf("#d45d5d"), 2);
-            atkChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#9e2424"), Color.valueOf("#ff7b7b"), 2);
+            atkChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#7a1a1a"), Color.valueOf("#d45d5d"), 2);
+            atkChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#9e2424"), Color.valueOf("#ff7b7b"), 2);
             atkChoiceStyle.font = introBtnFont;
             atkChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
             TextButton.TextButtonStyle defChoiceStyle = new TextButton.TextButtonStyle();
-            defChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#261c3b"), Color.valueOf("#6e559e"), 2);
-            defChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#3b2a5c"), Color.valueOf("#9174cb"), 2);
+            defChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#261c3b"), Color.valueOf("#6e559e"), 2);
+            defChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#3b2a5c"), Color.valueOf("#9174cb"), 2);
             defChoiceStyle.font = introBtnFont;
             defChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
@@ -1031,8 +1262,8 @@ public class BattleScreen implements Screen {
                 }
             });
 
-            introActionsRow.add(atkChoiceBtn).size(430, 50).padRight(18);
-            introActionsRow.add(defChoiceBtn).size(430, 50);
+            introActionsRow.add(atkChoiceBtn).size(580, 50).padRight(28);
+            introActionsRow.add(defChoiceBtn).size(580, 50);
         }
     }
 
@@ -1079,7 +1310,7 @@ public class BattleScreen implements Screen {
 
         if (introBeatIndex == 0) {
             introDialogueLabel.setText(
-                "So far you have climbed, little soul - past fang, abyss, and frost. " + getClassReflectiveLine());
+                "So far you have climbed, little soul - past fang, frost, and abyss. " + getClassReflectiveLine());
             introAdvanceBtn.setText("CONTINUE  (1/3)");
             introActionsRow.add(introAdvanceBtn).size(260, 46).center();
         } else if (introBeatIndex == 1) {
@@ -1091,14 +1322,14 @@ public class BattleScreen implements Screen {
             introDialogueLabel.setText("Speak your resolve before the golden gates ignite:");
 
             TextButton.TextButtonStyle atkChoiceStyle = new TextButton.TextButtonStyle();
-            atkChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#8c2a24"), Color.valueOf("#d46e66"), 2);
-            atkChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#a8342d"), Color.valueOf("#f08a82"), 2);
+            atkChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#8c2a24"), Color.valueOf("#d46e66"), 2);
+            atkChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#a8342d"), Color.valueOf("#f08a82"), 2);
             atkChoiceStyle.font = introBtnFont;
             atkChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
             TextButton.TextButtonStyle defChoiceStyle = new TextButton.TextButtonStyle();
-            defChoiceStyle.up = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#2f5778"), Color.valueOf("#759ec2"), 2);
-            defChoiceStyle.over = UIUtils.createRoundedDrawable(430, 50, 12, Color.valueOf("#3b6b94"), Color.valueOf("#96bfe3"), 2);
+            defChoiceStyle.up = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#2f5778"), Color.valueOf("#759ec2"), 2);
+            defChoiceStyle.over = UIUtils.createRoundedDrawable(580, 50, 12, Color.valueOf("#3b6b94"), Color.valueOf("#96bfe3"), 2);
             defChoiceStyle.font = introBtnFont;
             defChoiceStyle.fontColor = Color.valueOf("#fff8ea");
 
@@ -1128,8 +1359,8 @@ public class BattleScreen implements Screen {
                 }
             });
 
-            introActionsRow.add(atkChoiceBtn).size(430, 50).padRight(18);
-            introActionsRow.add(defChoiceBtn).size(430, 50);
+            introActionsRow.add(atkChoiceBtn).size(580, 50).padRight(28);
+            introActionsRow.add(defChoiceBtn).size(580, 50);
         }
     }
 
@@ -1149,6 +1380,155 @@ public class BattleScreen implements Screen {
         }
         battleSystem.setBattleLog(startLog);
         syncUi();
+    }
+
+    private void startDawnWardenEpilogue(boolean victory) {
+        isEpilogueDialogueActive = true;
+        isEpilogueVictory = victory;
+        epilogueBeatIndex = 0;
+
+        if (victory) {
+            bossEnraged = false;
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("THE DAWN WARDEN BOWS BEFORE YOU");
+            }
+            if (topBannerBox != null) {
+                topBannerBox.setBackground(UIUtils.createRoundedDrawable(
+                    920, 70, 20, Color.valueOf("#8f5916"), Color.valueOf("#ffd54f"), 3));
+            }
+        } else {
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playMusic(AudioManager.MusicTrack.EPILOGUE_REST, true);
+            }
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("THE DAWN WARDEN STEADIES YOUR FALL");
+            }
+        }
+
+        if (introSkipBtn != null) {
+            introSkipBtn.setText("SKIP");
+        }
+        refreshDawnWardenEpilogueBeat();
+        if (bossIntroTable != null) {
+            bossIntroTable.setVisible(true);
+        }
+    }
+
+    private String getWardenVictoryRecognizeLine() {
+        CharacterClass cls = (player != null) ? player.getCharacterClass() : null;
+        if (cls == null) {
+            return "\"Enough, brave soul... You shattered even the second sun. Not out of blind defiance - your heart still burns for those waiting beyond the gate.\"";
+        }
+        switch (cls) {
+            case CAT:
+                return "\"Enough, little prowler... Even with nine scars upon your fur, you refused to stay asleep. Someone still waits for you beyond this gate.\"";
+            case TURTLE:
+                return "\"Enough, iron guardian... Your shell cracked, yet your resolve outlasted stone and flame. Not even death could make you lay down what you chose to protect.\"";
+            case FOX:
+                return "\"Enough, clever trickster... No bargain or sleight won this trial - only a heart that refused to trade away tomorrow.\"";
+            case RACCOON:
+                return "\"Enough, weary scavenger... Every relic in your satchel weighed far less than the breath you fought so hard to reclaim.\"";
+            default:
+                return "\"Enough, brave soul... You shattered even the second sun. Your heart still burns for those waiting beyond the gate.\"";
+        }
+    }
+
+    private void refreshDawnWardenEpilogueBeat() {
+        if (introDialogueLabel == null || introActionsRow == null) return;
+        introActionsRow.clear();
+
+        if (isEpilogueVictory) {
+            if (epilogueBeatIndex == 0) {
+                introDialogueLabel.setText(getWardenVictoryRecognizeLine());
+                introAdvanceBtn.setText("CONTINUE  (1/2)");
+                introActionsRow.add(introAdvanceBtn).size(280, 46).center();
+            } else {
+                introDialogueLabel.setText(
+                    "\"Go now. The Pale Shepherd will understand. Claim the morning the mountain owed you - and step back into the living dawn.\"");
+
+                TextButton.TextButtonStyle gateStyle = new TextButton.TextButtonStyle();
+                gateStyle.up = UIUtils.createRoundedDrawable(380, 50, 12, Color.valueOf("#2e7d32"), Color.valueOf("#ffd54f"), 2);
+                gateStyle.over = UIUtils.createRoundedDrawable(380, 50, 12, Color.valueOf("#388e3c"), Color.WHITE, 2);
+                gateStyle.font = introBtnFont;
+                gateStyle.fontColor = Color.WHITE;
+
+                TextButton gateBtn = new TextButton("STEP THROUGH THE GATE", gateStyle);
+                UIUtils.addScaleHoverEffect(gateBtn);
+                gateBtn.addListener(new ChangeListener() {
+                    @Override public void changed(ChangeEvent event, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
+                        finishDawnWardenEpilogue();
+                    }
+                });
+                introActionsRow.add(gateBtn).size(380, 50).center();
+            }
+        } else {
+            if (epilogueBeatIndex == 0) {
+                introDialogueLabel.setText(
+                    "\"Be still, wanderer... Your steps have grown heavy, and your spirit is running cold. Even a flame this fierce was never meant to burn alone forever.\"");
+                introAdvanceBtn.setText("CONTINUE  (1/2)");
+                introActionsRow.add(introAdvanceBtn).size(280, 46).center();
+            } else {
+                boolean hasSurvivors = game.getPlayers().size() > 1 && !game.isPartyWiped();
+                if (hasSurvivors) {
+                    introDialogueLabel.setText(
+                        "\"Rest gently at the summit. Your companions still walk the stones below - let your lantern keep their path warm until dawn.\"");
+                } else {
+                    introDialogueLabel.setText(
+                        "\"The climb does not have to hurt anymore. Rest beneath the golden eaves - there is no shame in finally laying down the weight you carried so far.\"");
+                }
+
+                TextButton.TextButtonStyle restStyle = new TextButton.TextButtonStyle();
+                restStyle.up = UIUtils.createRoundedDrawable(360, 50, 12, Color.valueOf("#5c3518"), Color.valueOf("#c89259"), 2);
+                restStyle.over = UIUtils.createRoundedDrawable(360, 50, 12, Color.valueOf("#7a4823"), Color.valueOf("#ffd54f"), 2);
+                restStyle.font = introBtnFont;
+                restStyle.fontColor = Color.valueOf("#fff8ea");
+
+                TextButton restBtn = new TextButton(hasSurvivors ? "REST AT THE SUMMIT" : "CLOSE YOUR EYES", restStyle);
+                UIUtils.addScaleHoverEffect(restBtn);
+                restBtn.addListener(new ChangeListener() {
+                    @Override public void changed(ChangeEvent event, Actor actor) {
+                        if (game.getAudioManager() != null) {
+                            game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        }
+                        finishDawnWardenEpilogue();
+                    }
+                });
+                introActionsRow.add(restBtn).size(360, 50).center();
+            }
+        }
+    }
+
+    private void finishDawnWardenEpilogue() {
+        isEpilogueDialogueActive = false;
+        if (bossIntroTable != null) {
+            bossIntroTable.setVisible(false);
+        }
+        if (pauseBtn != null) {
+            pauseBtn.setVisible(false);
+        }
+        if (isEpilogueVictory) {
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("SUMMIT CONQUERED!");
+            }
+            spawnShockwave(ENEMY_X, ENEMY_DRAW_Y + 120f, 70f, 310f, Color.valueOf("#ffd54f"), Color.WHITE, 0.70f);
+            spawnCelebrationSparks(960f, 540f);
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.DAWN_REBIRTH);
+            }
+        } else {
+            if (topBannerLabel != null) {
+                topBannerLabel.setText("REST AT THE SUMMIT");
+            }
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playSound(AudioManager.SoundEffect.PLAYER_HURT, 0.45f);
+            }
+        }
+        if (continueTable != null) {
+            continueTable.setVisible(true);
+        }
     }
 
     private void buildContinueOverlay() {
@@ -1222,13 +1602,25 @@ public class BattleScreen implements Screen {
                 if (isDawnWardenBattle()) {
                     BattleOutcome outcome = battleSystem.getFinalOutcome();
                     boolean won = (outcome == BattleOutcome.VICTORY);
-                    if (game.getRunTracker() != null && won) {
-                        game.getRunTracker().recordThroneClaimed(player);
+                    if (won) {
+                        if (game.getRunTracker() != null) {
+                            game.getRunTracker().recordThroneClaimed(player);
+                        }
+                        game.setScreen(new EndingStoryScreen(
+                            game, player,
+                            io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.REBIRTH_TRIUMPH));
+                        return;
                     }
-                    game.setScreen(new GameSummaryScreen(
-                        game, won, player,
-                        won ? io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.REBIRTH_TRIUMPH
-                            : io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.PEACEFUL_REST));
+                    if (game.getRunTracker() != null) {
+                        game.getRunTracker().recordPlayerFallen(player);
+                    }
+                    if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                        game.setScreen(new EndingStoryScreen(
+                            game, player,
+                            io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.PEACEFUL_REST));
+                        return;
+                    }
+                    game.setScreen(new BoardScreen(game, BattleOutcome.DEFEAT, enemy));
                     return;
                 }
                 if (isPaleShepherdBattle()) {
@@ -1241,8 +1633,8 @@ public class BattleScreen implements Screen {
                             game.getRunTracker().recordPlayerFallen(player);
                         }
                         if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                            game.setScreen(new GameSummaryScreen(
-                                game, false, player,
+                            game.setScreen(new EndingStoryScreen(
+                                game, player,
                                 io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.HARVESTED_BY_SHEPHERD));
                             return;
                         }
@@ -1255,8 +1647,8 @@ public class BattleScreen implements Screen {
                         game.getRunTracker().recordPlayerFallen(player);
                     }
                     if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                        game.setScreen(new GameSummaryScreen(
-                            game, false, player,
+                        game.setScreen(new EndingStoryScreen(
+                            game, player,
                             io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.FALLEN_ON_TRAIL));
                         return;
                     }
@@ -1347,6 +1739,11 @@ public class BattleScreen implements Screen {
             }
         });
 
+        pauseFocusables.clear();
+        pauseFocusables.add(resumeBtn);
+        pauseFocusables.add(settingsBtn);
+        pauseFocusables.add(leaveBtn);
+
         pauseContent.add(resumeBtn).size(340, 52).padBottom(12).center().row();
         pauseContent.add(settingsBtn).size(340, 52).padBottom(12).center().row();
         pauseContent.add(leaveBtn).size(340, 52).padBottom(16).center().row();
@@ -1382,6 +1779,7 @@ public class BattleScreen implements Screen {
         Slider.SliderStyle sliderStyle = UIUtils.createSliderStyle(darkBrown, darkBrown);
 
         Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
+        this.settingsMusicSlider = musicSlider;
         int musicVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getMusicVolume() * 10f) : 7;
         musicSlider.setValue(musicVal);
         Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(sliderFont, darkBrown));
@@ -1397,6 +1795,7 @@ public class BattleScreen implements Screen {
         });
 
         Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
+        this.settingsSfxSlider = sfxSlider;
         int sfxVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getSfxVolume() * 10f) : 8;
         sfxSlider.setValue(sfxVal);
         Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(sliderFont, darkBrown));
@@ -1445,6 +1844,11 @@ public class BattleScreen implements Screen {
                 showPauseMenu();
             }
         });
+
+        settingsFocusables.clear();
+        settingsFocusables.add(musicSlider);
+        settingsFocusables.add(sfxSlider);
+        settingsFocusables.add(backSettingsBtn);
 
         settingsModalTable = new Table();
         settingsModalTable.setFillParent(true);
@@ -1496,6 +1900,10 @@ public class BattleScreen implements Screen {
             }
         });
 
+        leaveFocusables.clear();
+        leaveFocusables.add(stayBtn);
+        leaveFocusables.add(confirmLeaveBtn);
+
         leaveBtnRow.add(stayBtn).size(170, 52).padRight(20);
         leaveBtnRow.add(confirmLeaveBtn).size(170, 52);
         leaveContent.add(leaveBtnRow).padBottom(12).center();
@@ -1536,6 +1944,8 @@ public class BattleScreen implements Screen {
         pauseModalTable.setVisible(true);
         settingsModalTable.setVisible(false);
         leaveConfirmModalTable.setVisible(false);
+        pauseFocusIdx = 0;
+        UIUtils.applyFocusVisuals(pauseFocusables, pauseFocusIdx);
     }
 
     private void showSettingsMenu() {
@@ -1543,6 +1953,8 @@ public class BattleScreen implements Screen {
         pauseModalTable.setVisible(false);
         settingsModalTable.setVisible(true);
         leaveConfirmModalTable.setVisible(false);
+        settingsFocusIdx = 0;
+        UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
     }
 
     private void showLeaveConfirmMenu() {
@@ -1550,6 +1962,8 @@ public class BattleScreen implements Screen {
         pauseModalTable.setVisible(false);
         settingsModalTable.setVisible(false);
         leaveConfirmModalTable.setVisible(true);
+        leaveFocusIdx = 0;
+        UIUtils.applyFocusVisuals(leaveFocusables, leaveFocusIdx);
     }
 
     private void leaveGameToMainMenu() {
@@ -1558,27 +1972,29 @@ public class BattleScreen implements Screen {
 
     private void syncUi() {
         BattleState state = battleSystem.getCurrentState();
-        boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f);
-        boolean playerTurn = (!bossEntranceActive && !isIntroDialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
+        boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f || skillAnimTimer > 0f);
+        boolean dialogueActive = isIntroDialogueActive || isEpilogueDialogueActive;
+        boolean playerTurn = (!bossEntranceActive && !dialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
         boolean ended = (state == BattleState.BATTLE_END);
 
         if (topBannerWrap != null) {
             topBannerWrap.setVisible(bossLanded);
         }
+        boolean showHpPills = bossLanded && !ended && !bossEntranceActive && !dialogueActive;
         if (playerHpWrap != null) {
-            playerHpWrap.setVisible(bossLanded && !ended);
+            playerHpWrap.setVisible(showHpPills);
         }
         if (enemyHpWrap != null) {
-            enemyHpWrap.setVisible(bossLanded && !ended);
+            enemyHpWrap.setVisible(showHpPills);
         }
         if (bossIntroTable != null) {
-            bossIntroTable.setVisible(!bossEntranceActive && isIntroDialogueActive && !ended);
+            bossIntroTable.setVisible(!bossEntranceActive && (isIntroDialogueActive || (isEpilogueDialogueActive && ended)));
         }
         if (bottomBar != null) {
-            bottomBar.setVisible(!bossEntranceActive && !isIntroDialogueActive && !ended);
+            bottomBar.setVisible(!bossEntranceActive && !dialogueActive && !ended);
         }
         if (battleLogContainer != null && !ended) {
-            battleLogContainer.setVisible(!bossEntranceActive && !isIntroDialogueActive);
+            battleLogContainer.setVisible(!bossEntranceActive && !dialogueActive);
         }
 
         // True Phase 2 Transition when Phase 1 HP reaches 0
@@ -1670,19 +2086,36 @@ public class BattleScreen implements Screen {
         btnSkill.setDisabled(!skillReady);
 
         if (!player.canUseSkill()) {
-            btnSkill.setText("COOLDOWN (" + player.getSkillCooldown() + ")");
+            btnSkill.setText("COOLDOWN\n(" + player.getSkillCooldown() + ")");
             btnSkill.setColor(0.6f, 0.6f, 0.6f, 0.5f); // Dimmed grey
         } else {
-            btnSkill.setText("SKILL");
+            io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill cs = player.getClassSkill();
+            String skillBtnText = (cs != null) ? cs.getCombatSkillName().toUpperCase() : "SKILL";
+            btnSkill.setText(formatSkillButtonText(skillBtnText));
             btnSkill.setColor(1, 1, 1, playerTurn ? 1f : 0.5f);
         }
-        if (!isBossBattle()) {
         if (!isDawnWardenBattle() && !isPaleShepherdBattle()) {
             btnEscape.setColor(1, 1, 1, alpha);
+            btnEscape.setDisabled(!playerTurn);
+        }
+        btnAttack.setDisabled(!playerTurn);
+        btnDefend.setDisabled(!playerTurn);
+        btnItem.setDisabled(!playerTurn);
+
+        if (playerTurn && !isPaused && (itemPopup == null || !itemPopup.isVisible())) {
+            if (!UIUtils.isActorActivatable(battleActionFocusables.get(battleActionFocusIdx))) {
+                battleActionFocusIdx = UIUtils.stepFocus(battleActionFocusables, battleActionFocusIdx, 1);
+            } else {
+                UIUtils.applyFocusVisuals(battleActionFocusables, battleActionFocusIdx);
+            }
+        } else {
+            for (Button b : battleActionFocusables) {
+                b.setScale(1.0f);
+            }
         }
 
-        // Handle End State
-        if (ended && !outcomeResolved) {
+        // Handle End State (wait for lunge return animation to finish cleanly first)
+        if (ended && !outcomeResolved && !isAnimating) {
             outcomeResolved = true;
             BattleOutcome o = battleSystem.getFinalOutcome();
             if (isPaleShepherdBattle()) {
@@ -1765,10 +2198,17 @@ public class BattleScreen implements Screen {
                     rewardStatusLabel.setText("Hero Status: Fallen (0 / " + maxHp + " HP)");
                     rewardStatusLabel.setColor(Color.valueOf("#cfd8dc"));
 
-                    continueBtn.setText("VIEW EXPEDITION SUMMARY");
-                    continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
-                    continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
-                    if (continueBtnCell != null) continueBtnCell.width(460);
+                    if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                        continueBtn.setText("VIEW EXPEDITION SUMMARY");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(460);
+                    } else {
+                        continueBtn.setText("RETURN TO BOARD");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(340);
+                    }
                 }
                 victoryCard.invalidateHierarchy();
                 continueTable.setVisible(true);
@@ -1798,12 +2238,6 @@ public class BattleScreen implements Screen {
                     continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#2e7d32"), Color.valueOf("#1b5e20"), 2);
                     continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#388e3c"), Color.valueOf("#2e7d32"), 2);
                     if (continueBtnCell != null) continueBtnCell.width(340);
-
-                    spawnShockwave(ENEMY_X, ENEMY_DRAW_Y + 120f, 70f, 310f, Color.valueOf("#ffd54f"), Color.WHITE, 0.70f);
-                    spawnCelebrationSparks(960f, 540f);
-                    if (game.getAudioManager() != null) {
-                        game.getAudioManager().playSound(AudioManager.SoundEffect.DAWN_REBIRTH);
-                    }
                 } else {
                     topBannerLabel.setText("REST AT THE SUMMIT");
                     modalTitleLabel.setText("PEACEFUL SLEEP");
@@ -1819,13 +2253,20 @@ public class BattleScreen implements Screen {
                     rewardStatusLabel.setText("Hero Status: At Peace (0 / " + maxHp + " HP)");
                     rewardStatusLabel.setColor(Color.valueOf("#cfd8dc"));
 
-                    continueBtn.setText("VIEW EXPEDITION SUMMARY");
-                    continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
-                    continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
-                    if (continueBtnCell != null) continueBtnCell.width(460);
+                    if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
+                        continueBtn.setText("VIEW EXPEDITION SUMMARY");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(460, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(460);
+                    } else {
+                        continueBtn.setText("RETURN TO BOARD");
+                        continueBtn.getStyle().up = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#854b25"), Color.valueOf("#54280e"), 2);
+                        continueBtn.getStyle().over = UIUtils.createRoundedDrawable(340, 62, 14, Color.valueOf("#a66032"), Color.valueOf("#854b25"), 2);
+                        if (continueBtnCell != null) continueBtnCell.width(340);
+                    }
                 }
                 victoryCard.invalidateHierarchy();
-                continueTable.setVisible(true);
+                startDawnWardenEpilogue(o == BattleOutcome.VICTORY);
                 return;
             }
 
@@ -1927,7 +2368,6 @@ public class BattleScreen implements Screen {
             continueTable.setVisible(true);
         }
     }
-    }
     private void buildItemPopup() {
         itemPopup = new Table();
         // Dark leather background matching your other UI
@@ -1944,6 +2384,9 @@ public class BattleScreen implements Screen {
 
     private void refreshItemPopup() {
         itemPopup.clear(); // Clear old rows
+        itemPopupFocusables.clear();
+        java.util.Arrays.fill(itemSlotButtons, null);
+        itemPopupFocusIdx = 0;
 
         Inventory inv = player.getInventory();
         if (inv == null) return;
@@ -2003,6 +2446,8 @@ public class BattleScreen implements Screen {
             TextButton useBtn = new TextButton(btnText, useStyle);
 
             if (canUseInBattle) {
+                itemSlotButtons[i] = useBtn;
+                itemPopupFocusables.add(useBtn);
                 useBtn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
@@ -2032,6 +2477,7 @@ public class BattleScreen implements Screen {
         closeStyle.fontColor = Color.WHITE;
 
         TextButton closeBtn = new TextButton("CLOSE", closeStyle);
+        this.itemCloseBtn = closeBtn;
         closeBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
                 if (game.getAudioManager() != null) {
@@ -2040,25 +2486,176 @@ public class BattleScreen implements Screen {
                 itemPopup.setVisible(false);
             }
         });
+        itemPopupFocusables.add(closeBtn);
         itemPopup.add(closeBtn).size(140, 44).padTop(16).center().row();
+        UIUtils.applyFocusVisuals(itemPopupFocusables, itemPopupFocusIdx);
+    }
+
+    private void handleBattleKeyboardInput() {
+        boolean tabPressed = Gdx.input.isKeyJustPressed(Input.Keys.TAB);
+        int tabDelta = UIUtils.isShiftHeld() ? -1 : 1;
+
+        if (isPaused) {
+            if (settingsModalTable != null && settingsModalTable.isVisible()) {
+                UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
+                if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                    settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, -1);
+                } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+                } else if (UIUtils.isNavPrevHorizontalJustPressed()) {
+                    if (settingsFocusIdx == 0 && settingsMusicSlider != null) {
+                        settingsMusicSlider.setValue(Math.max(0, settingsMusicSlider.getValue() - 1f));
+                    } else if (settingsFocusIdx == 1 && settingsSfxSlider != null) {
+                        settingsSfxSlider.setValue(Math.max(0, settingsSfxSlider.getValue() - 1f));
+                    }
+                } else if (UIUtils.isNavNextHorizontalJustPressed()) {
+                    if (settingsFocusIdx == 0 && settingsMusicSlider != null) {
+                        settingsMusicSlider.setValue(Math.min(10, settingsMusicSlider.getValue() + 1f));
+                    } else if (settingsFocusIdx == 1 && settingsSfxSlider != null) {
+                        settingsSfxSlider.setValue(Math.min(10, settingsSfxSlider.getValue() + 1f));
+                    }
+                } else if (UIUtils.isConfirmJustPressed()) {
+                    if (settingsFocusIdx == settingsFocusables.size() - 1) {
+                        UIUtils.activateButton(settingsFocusables.get(settingsFocusIdx));
+                    } else {
+                        settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+                    }
+                } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                    showPauseMenu();
+                }
+            } else if (leaveConfirmModalTable != null && leaveConfirmModalTable.isVisible()) {
+                UIUtils.applyFocusVisuals(leaveFocusables, leaveFocusIdx);
+                if (UIUtils.isNavPrevHorizontalJustPressed() || UIUtils.isNavNextHorizontalJustPressed()
+                        || UIUtils.isNavPrevVerticalJustPressed() || UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    leaveFocusIdx = UIUtils.stepFocus(leaveFocusables, leaveFocusIdx, tabDelta);
+                } else if (UIUtils.isConfirmJustPressed() && !leaveFocusables.isEmpty()) {
+                    UIUtils.activateButton(leaveFocusables.get(leaveFocusIdx));
+                } else if (UIUtils.isBackJustPressed()) {
+                    showPauseMenu();
+                } else if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                    resumeGame();
+                }
+            } else {
+                UIUtils.applyFocusVisuals(pauseFocusables, pauseFocusIdx);
+                if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                    pauseFocusIdx = UIUtils.stepFocus(pauseFocusables, pauseFocusIdx, -1);
+                } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    pauseFocusIdx = UIUtils.stepFocus(pauseFocusables, pauseFocusIdx, 1);
+                } else if (UIUtils.isConfirmJustPressed() && !pauseFocusables.isEmpty()) {
+                    UIUtils.activateButton(pauseFocusables.get(pauseFocusIdx));
+                } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                    resumeGame();
+                } else {
+                    int num = UIUtils.justPressedNumberKey(pauseFocusables.size());
+                    if (num >= 0) {
+                        pauseFocusIdx = num;
+                        UIUtils.activateButton(pauseFocusables.get(num));
+                    }
+                }
+            }
+            return;
+        }
+
+        if (bossIntroTable != null && bossIntroTable.isVisible() && !bossEntranceActive) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                pauseGame();
+                return;
+            }
+            dialogueFocusables.clear();
+            if (introActionsRow != null) {
+                for (Actor child : introActionsRow.getChildren()) {
+                    if (child instanceof Button && child.isVisible()) {
+                        dialogueFocusables.add((Button) child);
+                    }
+                }
+            }
+            if (dialogueFocusIdx >= dialogueFocusables.size()) {
+                dialogueFocusIdx = 0;
+            }
+            UIUtils.applyFocusVisuals(dialogueFocusables, dialogueFocusIdx);
+
+            if (UIUtils.isNavPrevHorizontalJustPressed() || UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                dialogueFocusIdx = UIUtils.stepFocus(dialogueFocusables, dialogueFocusIdx, -1);
+            } else if (UIUtils.isNavNextHorizontalJustPressed() || UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                dialogueFocusIdx = UIUtils.stepFocus(dialogueFocusables, dialogueFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !dialogueFocusables.isEmpty()) {
+                UIUtils.activateButton(dialogueFocusables.get(dialogueFocusIdx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE) && introSkipBtn != null && introSkipBtn.isVisible()) {
+                UIUtils.activateButton(introSkipBtn);
+            } else {
+                int num = UIUtils.justPressedNumberKey(dialogueFocusables.size());
+                if (num >= 0) {
+                    UIUtils.activateButton(dialogueFocusables.get(num));
+                }
+            }
+            return;
+        }
+
+        if (continueTable != null && continueTable.isVisible() && continueBtn != null) {
+            UIUtils.applyFocusVisuals(Collections.singletonList(continueBtn), 0);
+            if (UIUtils.isConfirmJustPressed() || UIUtils.justPressedNumberKey(1) == 0) {
+                UIUtils.activateButton(continueBtn);
+            }
+            return;
+        }
+
+        if (itemPopup != null && itemPopup.isVisible() && battleSystem.getCurrentState() == BattleState.PLAYER_TURN) {
+            UIUtils.applyFocusVisuals(itemPopupFocusables, itemPopupFocusIdx);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                pauseGame();
+            } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.I) || tabPressed) {
+                itemPopup.setVisible(false);
+            } else if (UIUtils.isNavPrevVerticalJustPressed()) {
+                itemPopupFocusIdx = UIUtils.stepFocus(itemPopupFocusables, itemPopupFocusIdx, -1);
+            } else if (UIUtils.isNavNextVerticalJustPressed()) {
+                itemPopupFocusIdx = UIUtils.stepFocus(itemPopupFocusables, itemPopupFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !itemPopupFocusables.isEmpty()) {
+                UIUtils.activateButton(itemPopupFocusables.get(itemPopupFocusIdx));
+            } else {
+                int num = UIUtils.justPressedNumberKey(itemSlotButtons.length);
+                if (num >= 0 && itemSlotButtons[num] != null) {
+                    UIUtils.activateButton(itemSlotButtons[num]);
+                }
+            }
+            return;
+        }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+            pauseGame();
+            return;
+        }
+
+        boolean dialogueActive = isIntroDialogueActive || isEpilogueDialogueActive;
+        boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f || skillAnimTimer > 0f);
+        if (!bossEntranceActive && !dialogueActive
+                && battleSystem.getCurrentState() == BattleState.PLAYER_TURN && !isAnimating) {
+            int num = UIUtils.justPressedNumberKey(battleActionFocusables.size());
+            if (num >= 0) {
+                if (UIUtils.activateButton(battleActionFocusables.get(num))) {
+                    battleActionFocusIdx = num;
+                }
+            } else if (UIUtils.isNavPrevHorizontalJustPressed() || (tabPressed && tabDelta < 0)) {
+                battleActionFocusIdx = UIUtils.stepFocus(battleActionFocusables, battleActionFocusIdx, -1);
+            } else if (UIUtils.isNavNextHorizontalJustPressed() || tabPressed) {
+                battleActionFocusIdx = UIUtils.stepFocus(battleActionFocusables, battleActionFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !battleActionFocusables.isEmpty()) {
+                UIUtils.activateButton(battleActionFocusables.get(battleActionFocusIdx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.Q)) {
+                if (UIUtils.activateButton(btnSkill)) {
+                    battleActionFocusIdx = 2;
+                }
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.I)) {
+                if (UIUtils.activateButton(btnItem)) {
+                    battleActionFocusIdx = 3;
+                }
+            }
+        }
     }
 
     @Override
     public void render(float delta) {
         float hudDelta = delta;
-
-        // Hotkeys: Toggle pause with ESC or P, or step back in modal hierarchy
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
-            if (isPaused) {
-                if (settingsModalTable.isVisible() || leaveConfirmModalTable.isVisible()) {
-                    showPauseMenu();
-                } else {
-                    resumeGame();
-                }
-            } else if (continueTable == null || !continueTable.isVisible()) {
-                pauseGame();
-            }
-        }
+        handleBattleKeyboardInput();
 
         if (isPaused) {
             delta = 0f;
@@ -2130,6 +2727,92 @@ public class BattleScreen implements Screen {
             }
         }
 
+        if (skillAnimTimer > 0f) {
+            skillAnimTimer -= delta;
+            float p = 1.0f - (skillAnimTimer / skillAnimDuration);
+            float enemyY = getEnemyCenterY();
+
+            if (activeSkillClass == CharacterClass.CAT) {
+                // Cat Double Strike: Strike 1 at p >= 0.28, Strike 2 at p >= 0.62
+                if (p >= 0.28f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.28f, SlashStyle.CAT_DUAL_CLAW, false, -38f));
+                    spawnHitSparks(ENEMY_X, enemyY, false, 18, false);
+                    enemyFlinchTimer = FLINCH_DURATION * 0.7f;
+                    triggerScreenShake(7f, 0.16f);
+                }
+                if (p >= 0.62f && !skillPhase2Done) {
+                    skillPhase2Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.32f, SlashStyle.CAT_DUAL_CLAW, true, +38f));
+                    spawnHitSparks(ENEMY_X, enemyY, false, 28, true);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    triggerScreenShake(14f, 0.26f);
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+                }
+            } else if (activeSkillClass == CharacterClass.TURTLE) {
+                // Turtle Iron Fortress: Activates at p >= 0.30
+                if (p >= 0.30f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
+                    }
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+                }
+            } else if (activeSkillClass == CharacterClass.FOX) {
+                // Fox Vital Strike: Hits with guaranteed critical pierce at p >= 0.50
+                if (p >= 0.50f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.38f, SlashStyle.FOX_VITAL_PIERCE, true, -42f));
+                    spawnSolarBurst(ENEMY_X, enemyY, 24);
+                    spawnHitSparks(ENEMY_X, enemyY, false, 32, true);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    triggerScreenShake(16f, 0.32f);
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+                }
+            } else if (activeSkillClass == CharacterClass.RACCOON) {
+                // Raccoon Scavenge Strike: Hits at p >= 0.48
+                if (p >= 0.48f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    int enemyHpBefore = enemy != null ? enemy.getHealth() : 0;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP);
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.32f, SlashStyle.RACCOON_HOOK_SWIPE, false, -25f));
+                    spawnScavengeLootSparks(ENEMY_X, enemyY);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    triggerScreenShake(9f, 0.20f);
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+
+                    // If finishing blow triggered rations loot
+                    if (enemyHpBefore > 0 && enemy != null && enemy.getHealth() <= 0) {
+                        spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 70f);
+                        spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "+25 HP RATIONS!", Color.valueOf("#69f0ae"), true);
+                    }
+                }
+            }
+
+            if (skillAnimTimer <= 0f) {
+                activeSkillClass = null;
+                syncUi();
+            }
+        }
+
         if (enemyLungeTimer > 0f) {
             enemyLungeTimer -= delta;
             float progress = 1.0f - (enemyLungeTimer / ENEMY_LUNGE_DURATION);
@@ -2195,59 +2878,6 @@ public class BattleScreen implements Screen {
         hudStage.getViewport().apply();
         hudStage.act(hudDelta);
         hudStage.draw();
-        syncUi(); // Keep UI in sync with state machine
-        // --- KEYBOARD: NUM 1-5 for Battle Actions (Disabled when Item Popup is open) ---
-        if ((itemPopup == null || !itemPopup.isVisible()) && battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_1)) {
-                btnAttack.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_2)) {
-                btnDefend.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_3)) {
-                btnSkill.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_4) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_4)) {
-                btnItem.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_5) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_5)) {
-                btnEscape.fire(new ChangeListener.ChangeEvent());
-            }
-        }
-
-// --- KEYBOARD: NUM 1-4 for Item Usage (When Item Popup is open) ---
-        if (itemPopup != null && itemPopup.isVisible() && battleSystem.getCurrentState() == BattleState.PLAYER_TURN) {
-            Inventory inv = player.getInventory();
-            if (inv != null) {
-                for (int i = 0; i < inv.getCapacity(); i++) {
-                    int keyNum = Input.Keys.NUM_1 + i;
-                    int numpadNum = Input.Keys.NUMPAD_1 + i;
-                    if (Gdx.input.isKeyJustPressed(keyNum) || Gdx.input.isKeyJustPressed(numpadNum)) {
-                        if (i < inv.size()) {
-                            Item item = inv.getItem(i);
-                            // Re-use the exact same validation logic as the USE button
-                            boolean isCurse = item.isCurse();
-                            io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType eff = item.getEffectType();
-                            boolean isBoardOnly = (eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.MOVE
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_EXACT
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_CLAMP
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SNAKE_WARD
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SWAP_PLAYER
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SCOUT);
-                            boolean lethalCost = (item.getSecondaryEffectType() == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.HEALTH
-                                && item.getSecondaryEffectValue() < 0
-                                && player.getHealth() + item.getSecondaryEffectValue() <= 0);
-                            boolean canUseInBattle = !isCurse && !isBoardOnly && !lethalCost;
-
-                            if (canUseInBattle) {
-                                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                                spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
-                                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, item.getName().toUpperCase(), Color.valueOf("#81c784"), false);
-                                battleSystem.onPlayerUseItem(i);
-                                itemPopup.setVisible(false);
-                                syncUi();
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         if (!isPaused) {
             syncUi(); // Keep UI in sync with state machine
@@ -2266,7 +2896,42 @@ public class BattleScreen implements Screen {
         float pLungeX = 0f;
         float pLungeY = 0f;
         float pRotation = 0f;
-        if (playerLungeTimer > 0f) {
+        float pScaleX = 1.0f;
+        float pScaleY = 1.0f;
+        boolean drawGhostTrail = false;
+
+        if (skillAnimTimer > 0f) {
+            float p = 1.0f - (skillAnimTimer / skillAnimDuration);
+            if (activeSkillClass == CharacterClass.CAT) {
+                drawGhostTrail = true;
+                if (p < 0.48f) {
+                    float s = p / 0.48f;
+                    pLungeX = MathUtils.sin(s * MathUtils.PI) * 520f;
+                    pLungeY = MathUtils.sin(s * MathUtils.PI) * 20f;
+                    pRotation = -MathUtils.sin(s * MathUtils.PI) * 10f;
+                } else {
+                    float s = (p - 0.48f) / 0.52f;
+                    pLungeX = MathUtils.sin(s * MathUtils.PI) * 550f;
+                    pLungeY = MathUtils.sin(s * MathUtils.PI) * 32f;
+                    pRotation = -MathUtils.sin(s * MathUtils.PI) * 14f;
+                }
+            } else if (activeSkillClass == CharacterClass.TURTLE) {
+                float brace = MathUtils.sin(p * MathUtils.PI);
+                pLungeY = -brace * 12f;
+                pScaleX = 1.0f + brace * 0.14f;
+                pScaleY = 1.0f - brace * 0.10f;
+            } else if (activeSkillClass == CharacterClass.FOX) {
+                float s = MathUtils.sin(p * MathUtils.PI);
+                pLungeX = s * 540f;
+                pLungeY = s * 115f;
+                pRotation = -s * 20f;
+            } else if (activeSkillClass == CharacterClass.RACCOON) {
+                float s = MathUtils.sin(p * MathUtils.PI);
+                pLungeX = s * 510f;
+                pLungeY = s * 35f;
+                pRotation = -p * 360f;
+            }
+        } else if (playerLungeTimer > 0f) {
             float p = 1.0f - (playerLungeTimer / PLAYER_LUNGE_DURATION);
             if (p < 0.15f) {
                 float w = p / 0.15f;
@@ -2285,10 +2950,51 @@ public class BattleScreen implements Screen {
             pFlinchX = -MathUtils.sin(playerFlinchTimer * 40f) * p * 26f;
         }
 
-        // Draw Player
+        // Draw Player Ghost Afterimage Trail (Cat Double Strike)
         TextureRegion pFrame = playerIdleAnim != null ? playerIdleAnim.getKeyFrame(stateTime, true) : null;
+        float bob = (player.getHealth() <= 0) ? 0f : MathUtils.sin(stateTime * 3f) * 4f;
+        float drawPX = PLAYER_X + pLungeX + pFlinchX;
+        float drawPY = CHAR_DRAW_Y + (player.getHealth() <= 0 ? -12f : bob) + pLungeY;
+        float drawH = (player.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE;
+
+        if (drawGhostTrail && pFrame != null && Math.abs(pLungeX) > 20f) {
+            batch.setColor(0.15f, 0.85f, 1.0f, 0.40f);
+            batch.draw(pFrame,
+                drawPX - CHAR_DISPLAY_SIZE / 2 - Math.signum(pLungeX) * 38f, drawPY,
+                CHAR_DISPLAY_SIZE / 2, CHAR_DISPLAY_SIZE / 2,
+                CHAR_DISPLAY_SIZE, drawH,
+                pScaleX, pScaleY, pRotation);
+            batch.setColor(Color.WHITE);
+        }
+
+        // Turtle Fortress Barrier Aura (Drawn around player platform)
+        if (radialGlowTex != null && (battleSystem.isTurtleFortressActive() || (skillAnimTimer > 0f && activeSkillClass == CharacterClass.TURTLE))) {
+            float barrierCenterY = CHAR_DRAW_Y + 75f;
+            float pulse = 0.70f + 0.30f * MathUtils.sin(stateTime * 4.5f);
+
+            // Shimmering outer emerald dome
+            batch.setColor(0.12f, 0.85f, 0.35f, 0.32f * pulse);
+            batch.draw(radialGlowTex, PLAYER_X - 150f, barrierCenterY - 150f, 300f, 300f);
+
+            // Radiant gold-emerald inner shield core
+            batch.setColor(1.0f, 0.90f, 0.30f, 0.26f * pulse);
+            batch.draw(radialGlowTex, PLAYER_X - 100f, barrierCenterY - 100f, 200f, 200f);
+
+            // Rotating crystalline fortress rune motes
+            for (int k = 0; k < 4; k++) {
+                float ang = stateTime * 2.2f + k * (MathUtils.PI / 2f);
+                float rx = PLAYER_X + MathUtils.cos(ang) * 115f;
+                float ry = barrierCenterY + MathUtils.sin(ang) * 55f;
+                batch.setColor(0.4f, 1.0f, 0.6f, 0.85f);
+                batch.draw(whitePixelTex, rx - 5f, ry - 5f, 5f, 5f, 10f, 10f, 1f, 1f, 45f + stateTime * 90f, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, 0.95f);
+                batch.draw(whitePixelTex, rx - 2.5f, ry - 2.5f, 2.5f, 2.5f, 5f, 5f, 1f, 1f, 45f + stateTime * 90f, 0, 0, 1, 1, false, false);
+            }
+            batch.setColor(Color.WHITE);
+        }
+
+        // Draw Player
         if (pFrame != null) {
-            float bob = (player.getHealth() <= 0) ? 0f : MathUtils.sin(stateTime * 3f) * 4f;
             float pAlpha = (player.getHealth() <= 0) ? 0.45f : 1.0f;
             if (playerFlinchTimer > 0.12f) {
                 batch.setColor(1f, 0.25f, 0.25f, 1f); // Red hurt flash
@@ -2297,14 +3003,11 @@ public class BattleScreen implements Screen {
             } else {
                 batch.setColor(Color.WHITE);
             }
-            float drawPX = PLAYER_X + pLungeX + pFlinchX;
-            float drawPY = CHAR_DRAW_Y + (player.getHealth() <= 0 ? -12f : bob) + pLungeY;
-            float drawH = (player.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE;
             batch.draw(pFrame,
                 drawPX - CHAR_DISPLAY_SIZE / 2, drawPY,
                 CHAR_DISPLAY_SIZE / 2, CHAR_DISPLAY_SIZE / 2,
                 CHAR_DISPLAY_SIZE, drawH,
-                1f, 1f, pRotation);
+                pScaleX, pScaleY, pRotation);
             batch.setColor(Color.WHITE);
         }
 
@@ -2333,14 +3036,16 @@ public class BattleScreen implements Screen {
 
         // Draw Enemy
         TextureRegion eFrame;
-        if (isBossBattle() && enemyLungeTimer > 0f && enemyAttackAnim != null) {
-            eFrame = enemyAttackAnim.getKeyFrame(stateTime, true);
+        if (enemyLungeTimer > 0f && enemyAttackAnim != null) {
+            float lungeProgress = 1.0f - (enemyLungeTimer / ENEMY_LUNGE_DURATION);
+            float animTime = lungeProgress * enemyAttackAnim.getAnimationDuration();
+            eFrame = enemyAttackAnim.getKeyFrame(animTime, true);
         } else if (isDawnWardenBattle() && bossEntranceActive && !bossLanded && enemyAttackAnim != null) {
             eFrame = enemyAttackAnim.getKeyFrame(stateTime, true);
         } else {
             eFrame = enemyIdleAnim != null ? enemyIdleAnim.getKeyFrame(stateTime, true) : null;
         }
-        float eBob = isBossBattle() ? 0f : (MathUtils.sin(stateTime * 3f + 1f) * 4f);
+        float eBob = isBossBattle() ? 0f : (MathUtils.sin(stateTime * 3f + 1f) * 2.5f);
         float descentOffsetY = 0f;
         float entranceScale = 1.0f;
         float entranceAlphaScale = 1.0f;
@@ -2360,9 +3065,48 @@ public class BattleScreen implements Screen {
             float enemyAlpha = ((enemy.getHealth() <= 0) ? 0.35f : 1.0f) * entranceAlphaScale;
             float hover = isPaleShepherdBattle() ? ((float) Math.sin(stateTime * 2.2f) * 8f) : 0f;
             float drawEX = ENEMY_X + eLungeX + eFlinchX;
-            float drawEY = ENEMY_DRAW_Y + (isPaleShepherdBattle() ? (16f + hover) : (enemy.getHealth() <= 0 ? -12f : eBob)) + eLungeY + descentOffsetY;
-            float enemyW = (isPaleShepherdBattle() ? 280f : (isBossBattle() ? 320f : CHAR_DISPLAY_SIZE)) * entranceScale;
-            float enemyH = (isPaleShepherdBattle() ? ((enemy.getHealth() <= 0) ? 220f : 280f) : (isBossBattle() ? (enemy.getHealth() <= 0 ? 250f : 350f) : ((enemy.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE))) * entranceScale;
+
+            float enemyW;
+            float enemyH;
+            float bottomPadPx;
+            if (isPaleShepherdBattle()) {
+                enemyW = 280f;
+                enemyH = (enemy.getHealth() <= 0) ? 220f : 280f;
+                bottomPadPx = 0f;
+            } else if (isBossBattle()) {
+                enemyW = 320f;
+                enemyH = (enemy.getHealth() <= 0) ? 250f : 350f;
+                bottomPadPx = 0f;
+            } else {
+                // Act-stratified serpent combat sizing: visible body scaled to match hero's stature (~150-180px wide, ~110-150px tall)
+                if (currentSnakeAct == 1) {
+                    enemyW = 440f;
+                    enemyH = 440f;
+                    bottomPadPx = 17f;
+                } else if (currentSnakeAct == 2) {
+                    enemyW = 270f;
+                    enemyH = 270f;
+                    bottomPadPx = 17f;
+                } else {
+                    enemyW = 290f;
+                    enemyH = 290f;
+                    bottomPadPx = 18f;
+                }
+                if (enemy.getHealth() <= 0) {
+                    enemyH *= 0.72f;
+                }
+            }
+            enemyW *= entranceScale;
+            enemyH *= entranceScale;
+
+            float enemyBaseY;
+            if (isPaleShepherdBattle() || isBossBattle()) {
+                enemyBaseY = ENEMY_DRAW_Y;
+            } else {
+                float padOffset = (bottomPadPx / 128f) * enemyH;
+                enemyBaseY = 282f - padOffset;
+            }
+            float drawEY = enemyBaseY + (isPaleShepherdBattle() ? (16f + hover) : (enemy.getHealth() <= 0 ? -12f : eBob)) + eLungeY + descentOffsetY;
 
             // Smooth circular radial solar aura behind The Dawn Warden (zero square edges)
             if (isDawnWardenBattle() && enemy.getHealth() > 0 && bossLanded && radialGlowTex != null) {
@@ -2396,10 +3140,9 @@ public class BattleScreen implements Screen {
                     batch.setColor(1.0f, 0.95f, 0.80f, enemyAlpha); // Radiant Golden Dawn Light
                 }
             } else {
-                int tilePos = (snakeTile != null) ? snakeTile.getPosition() : 1;
-                if (tilePos <= 30) {
+                if (currentSnakeAct == 1) {
                     batch.setColor(0.85f, 1.0f, 0.88f, enemyAlpha); // Act 1: Verdant Moss / Emerald Hue
-                } else if (tilePos <= 70) {
+                } else if (currentSnakeAct == 2) {
                     batch.setColor(0.80f, 0.88f, 1.0f, enemyAlpha); // Act 2: Deep Cavern Sapphire / Indigo Hue
                 } else {
                     batch.setColor(1.0f, 0.78f, 0.72f, enemyAlpha); // Act 3: Scorched Magma / Crimson Ember Hue
@@ -2412,6 +3155,50 @@ public class BattleScreen implements Screen {
                 enemyW, enemyH,
                 1f, 1f, eRotation);
             batch.setColor(Color.WHITE);
+        }
+
+        // Fox Vital Strike Target Reticle (Locks onto enemy core during skill leap)
+        if (skillAnimTimer > 0f && activeSkillClass == CharacterClass.FOX && enemy != null && enemy.getHealth() > 0) {
+            float p = 1.0f - (skillAnimTimer / skillAnimDuration);
+            float reticleAlpha = (p < 0.55f) ? Math.min(1.0f, p * 3.5f) : Math.max(0f, 1.0f - (p - 0.55f) / 0.30f);
+            if (reticleAlpha > 0f) {
+                float targetCX = ENEMY_X;
+                float targetCY = getEnemyCenterY();
+                float contract = (p < 0.45f) ? (1.6f - (p / 0.45f) * 0.6f) : 1.0f;
+                float reticleR = 48f * contract;
+                float spinAngle = p * 120f;
+
+                int sides = 16;
+                float segThick = 2.5f;
+                for (int s = 0; s < sides; s++) {
+                    float a1 = spinAngle + (s / (float) sides) * 360f;
+                    float a2 = spinAngle + ((s + 0.65f) / (float) sides) * 360f;
+                    float x1 = targetCX + MathUtils.cosDeg(a1) * reticleR;
+                    float y1 = targetCY + MathUtils.sinDeg(a1) * reticleR;
+                    float x2 = targetCX + MathUtils.cosDeg(a2) * reticleR;
+                    float y2 = targetCY + MathUtils.sinDeg(a2) * reticleR;
+                    float dx = x2 - x1;
+                    float dy = y2 - y1;
+                    float dLen = (float) Math.sqrt(dx * dx + dy * dy);
+                    float segAngle = MathUtils.radDeg * MathUtils.atan2(dy, dx);
+
+                    batch.setColor(1.0f, 0.2f, 0.15f, reticleAlpha * 0.85f);
+                    batch.draw(whitePixelTex, x1, y1 - segThick / 2, 0f, segThick / 2, dLen, segThick, 1f, 1f, segAngle, 0, 0, 1, 1, false, false);
+                }
+
+                float crossArm = 24f;
+                float innerGap = 8f;
+                float crossThick = 2f;
+                batch.setColor(1.0f, 0.85f, 0.2f, reticleAlpha * 0.95f);
+                batch.draw(whitePixelTex, targetCX - crossThick / 2, targetCY + innerGap, crossThick, crossArm);
+                batch.draw(whitePixelTex, targetCX - crossThick / 2, targetCY - innerGap - crossArm, crossThick, crossArm);
+                batch.draw(whitePixelTex, targetCX - innerGap - crossArm, targetCY - crossThick / 2, crossArm, crossThick);
+                batch.draw(whitePixelTex, targetCX + innerGap, targetCY - crossThick / 2, crossArm, crossThick);
+
+                batch.setColor(1.0f, 0.1f, 0.1f, reticleAlpha);
+                batch.draw(whitePixelTex, targetCX - 3f, targetCY - 3f, 6f, 6f);
+                batch.setColor(Color.WHITE);
+            }
         }
     }
 
@@ -2510,6 +3297,61 @@ public class BattleScreen implements Screen {
                 batch.draw(whitePixelTex, slash.x - len / 2, slash.y - (thickness * 1.7f) / 2, len / 2, (thickness * 1.7f) / 2, len, thickness * 1.7f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
                 batch.setColor(1.0f, 0.82f, 0.35f, alpha * 0.9f);
                 batch.draw(whitePixelTex, slash.x - len / 2, slash.y - thickness / 2, len / 2, thickness / 2, len * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+            } else if (slash.style == SlashStyle.CAT_DUAL_CLAW) {
+                float len = Math.min(260f, (t / 0.22f) * 260f);
+                float thickness = Math.max(2.2f, (1.0f - t) * 18f);
+                float[] rakeOffsets = { -16f, 0f, 16f };
+                for (float off : rakeOffsets) {
+                    float cx = slash.x + MathUtils.cosDeg(slash.angle + 90f) * off;
+                    float cy = slash.y + MathUtils.sinDeg(slash.angle + 90f) * off;
+                    batch.setColor(0.0f, 0.85f, 1.0f, alpha * 0.65f);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - (thickness * 1.6f) / 2, len / 2, (thickness * 1.6f) / 2, len, thickness * 1.6f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                    batch.setColor(0.9f, 0.95f, 1.0f, alpha * 0.95f);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - thickness / 2, len / 2, thickness / 2, len * 0.96f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                    batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - (thickness * 0.35f) / 2, len / 2, (thickness * 0.35f) / 2, len * 0.9f, thickness * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                }
+            } else if (slash.style == SlashStyle.FOX_VITAL_PIERCE) {
+                float beamLen = Math.min(380f, (t / 0.20f) * 380f);
+                float beamThick = Math.max(3f, (1.0f - t) * 26f);
+                batch.setColor(1.0f, 0.15f, 0.20f, alpha * 0.65f);
+                batch.draw(whitePixelTex, slash.x - beamLen / 2, slash.y - (beamThick * 1.8f) / 2, beamLen / 2, (beamThick * 1.8f) / 2, beamLen, beamThick * 1.8f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.82f, 0.15f, alpha * 0.95f);
+                batch.draw(whitePixelTex, slash.x - beamLen / 2, slash.y - beamThick / 2, beamLen / 2, beamThick / 2, beamLen * 0.98f, beamThick, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                batch.draw(whitePixelTex, slash.x - beamLen / 2, slash.y - (beamThick * 0.35f) / 2, beamLen / 2, (beamThick * 0.35f) / 2, beamLen * 0.92f, beamThick * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                float needleLen = beamLen * 0.45f;
+                float needleThick = beamThick * 0.6f;
+                batch.setColor(1.0f, 0.4f, 0.2f, alpha * 0.6f);
+                batch.draw(whitePixelTex, slash.x - needleLen / 2, slash.y - needleThick / 2, needleLen / 2, needleThick / 2, needleLen, needleThick, 1f, 1f, slash.angle + 90f, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.95f, 0.7f, alpha * 0.9f);
+                batch.draw(whitePixelTex, slash.x - needleLen / 2, slash.y - (needleThick * 0.35f) / 2, needleLen / 2, (needleThick * 0.35f) / 2, needleLen * 0.85f, needleThick * 0.35f, 1f, 1f, slash.angle + 90f, 0, 0, 1, 1, false, false);
+            } else if (slash.style == SlashStyle.RACCOON_HOOK_SWIPE) {
+                float arcLen = Math.min(290f, (t / 0.24f) * 290f);
+                float thickness = Math.max(2.8f, (1.0f - t) * 22f);
+                batch.setColor(0.3f, 0.85f, 0.95f, alpha * 0.55f);
+                batch.draw(whitePixelTex, slash.x - arcLen / 2, slash.y - (thickness * 1.6f) / 2, arcLen / 2, (thickness * 1.6f) / 2, arcLen, thickness * 1.6f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.88f, 0.35f, alpha * 0.92f);
+                batch.draw(whitePixelTex, slash.x - arcLen / 2, slash.y - thickness / 2, arcLen / 2, thickness / 2, arcLen * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                batch.draw(whitePixelTex, slash.x - arcLen / 2, slash.y - (thickness * 0.35f) / 2, arcLen / 2, (thickness * 0.35f) / 2, arcLen * 0.9f, thickness * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                float hookTrail = arcLen * 0.65f;
+                batch.setColor(1.0f, 0.78f, 0.2f, alpha * 0.45f);
+                batch.draw(whitePixelTex, slash.x - hookTrail / 2 - 14f, slash.y - (thickness * 0.8f) / 2 + 10f, hookTrail / 2, (thickness * 0.8f) / 2, hookTrail, thickness * 0.8f, 1f, 1f, slash.angle - 22f, 0, 0, 1, 1, false, false);
+            } else if (slash.style == SlashStyle.TURTLE_RIPOSTE) {
+                float waveLen = Math.min(340f, (t / 0.22f) * 340f);
+                float thickness = Math.max(3.5f, (1.0f - t) * 32f);
+                batch.setColor(0.05f, 0.85f, 0.35f, alpha * 0.65f);
+                batch.draw(whitePixelTex, slash.x - waveLen / 2, slash.y - (thickness * 1.8f) / 2, waveLen / 2, (thickness * 1.8f) / 2, waveLen, thickness * 1.8f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.85f, 0.25f, alpha * 0.95f);
+                batch.draw(whitePixelTex, slash.x - waveLen / 2, slash.y - thickness / 2, waveLen / 2, thickness / 2, waveLen * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                batch.draw(whitePixelTex, slash.x - waveLen / 2, slash.y - (thickness * 0.35f) / 2, waveLen / 2, (thickness * 0.35f) / 2, waveLen * 0.9f, thickness * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                float wingLen = waveLen * 0.5f;
+                float wingThick = thickness * 0.6f;
+                batch.setColor(0.1f, 0.9f, 0.5f, alpha * 0.5f);
+                batch.draw(whitePixelTex, slash.x - wingLen / 2, slash.y - wingThick / 2 + 18f, wingLen / 2, wingThick / 2, wingLen, wingThick, 1f, 1f, slash.angle + 35f, 0, 0, 1, 1, false, false);
+                batch.draw(whitePixelTex, slash.x - wingLen / 2, slash.y - wingThick / 2 - 18f, wingLen / 2, wingThick / 2, wingLen, wingThick, 1f, 1f, slash.angle - 35f, 0, 0, 1, 1, false, false);
             } else {
                 // Radiant Sword Slash Arc
                 float len = Math.min(270f, (t / 0.3f) * 270f);
@@ -2666,6 +3508,7 @@ public class BattleScreen implements Screen {
         if (whitePixelTex != null) whitePixelTex.dispose();
         if (radialGlowTex != null) radialGlowTex.dispose();
         if (titleFont != null) titleFont.dispose();
+        if (skillBtnFont != null) skillBtnFont.dispose();
         if (topBannerFont != null) topBannerFont.dispose();
         if (hudHpFont != null) hudHpFont.dispose();
         if (battleLogFont != null) battleLogFont.dispose();

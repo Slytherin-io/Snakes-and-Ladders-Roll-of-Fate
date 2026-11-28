@@ -64,6 +64,16 @@ public class MainMenuScreen implements Screen {
     private final List<Actor> playerCountFocusables = new ArrayList<>();
     private final List<Actor> characterSelectFocusables = new ArrayList<>();
     private final List<Actor> settingsFocusables = new ArrayList<>();
+    private int menuFocusIdx = 0;
+    private int gameModeFocusIdx = 0;
+    private int playerCountFocusIdx = 3;
+    private int charSelectFocusIdx = 1;
+    private int settingsFocusIdx = 0;
+
+    private Slider musicSliderRef;
+    private Slider sfxSliderRef;
+    private TextButton charLeftArrow;
+    private TextButton charRightArrow;
 
     // Navigation tables for the different views on this screen
     private Table menuTable;
@@ -80,6 +90,10 @@ public class MainMenuScreen implements Screen {
     private BitmapFont modeSubtitleFont;
     private BitmapFont instructionFont;
     private BitmapFont statFont;
+    private BitmapFont statLabelFont;
+    private BitmapFont statValueFont;
+    private BitmapFont skillTitleFont;
+    private BitmapFont skillTagFont;
     private BitmapFont perkFont;
     private BitmapFont countNumFont;
 
@@ -102,9 +116,14 @@ public class MainMenuScreen implements Screen {
     private Image characterImage;
     private Label charNameLabel;
     private Label charTitleLabel;
-    private Label charStatsLabel;
+    private Label charHpValLabel;
+    private Label charAtkValLabel;
+    private Label charDefValLabel;
+    private Label charSkillTitleLabel;
     private Label charPerkLabel;
+    private Table lockOverlayTable;
     private Label lockBanner;
+    private Table rosterPipsRow;
     private TextButton enterButton;
 
     public MainMenuScreen(RollOfFateGame game) {
@@ -151,16 +170,6 @@ public class MainMenuScreen implements Screen {
         Color darkBrown = Color.valueOf("#5a2d0c"); // Main font & icon color
         Color pillBrown = Color.valueOf("#854b25"); // Header badge & button color
 
-        // Crisp FreeType Sniglet fonts - enlarged for clear visibility and readability
-        badgeFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, Color.WHITE);
-        textFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
-        numFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 28, darkBrown);
-        modeTitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 30, darkBrown);
-        modeSubtitleFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 22, darkBrown);
-        instructionFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 25, darkBrown);
-        statFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 24, darkBrown);
-        perkFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 21, Color.valueOf("#6d3b17"));
-        countNumFont = UIUtils.createFont("ui/Sniglet-ExtraBold.ttf", 64, darkBrown);
         // Crisp FreeType Fredoka fonts - Option 1 pairing for clear visibility and readability
         badgeFont        = UIUtils.createFont("ui/Fredoka-Bold.ttf", 28, Color.WHITE);
         textFont         = UIUtils.createFont("ui/Fredoka-Bold.ttf", 28, darkBrown);
@@ -169,7 +178,11 @@ public class MainMenuScreen implements Screen {
         modeSubtitleFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, darkBrown);
         instructionFont  = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 25, darkBrown);
         statFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 24, darkBrown);
-        perkFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 21, Color.valueOf("#6d3b17"));
+        statLabelFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 14, pillBrown);
+        statValueFont    = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.valueOf("#361704"));
+        skillTitleFont   = UIUtils.createFont("ui/Fredoka-Bold.ttf", 19, Color.valueOf("#361704"));
+        skillTagFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 13, Color.WHITE);
+        perkFont         = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 18, Color.valueOf("#5a3616"));
         countNumFont     = UIUtils.createFont("ui/Fredoka-Bold.ttf", 64, darkBrown);
 
         // --- Main Menu Buttons & Title ---
@@ -218,7 +231,8 @@ public class MainMenuScreen implements Screen {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 menuTable.setVisible(false);
                 gameModeTable.setVisible(true);
-                stage.setKeyboardFocus(gameModeFocusables.get(0)); // <--- ADD THIS
+                gameModeFocusIdx = 0;
+                UIUtils.applyFocusVisuals(gameModeFocusables, gameModeFocusIdx);
             }
         });
 
@@ -229,7 +243,8 @@ public class MainMenuScreen implements Screen {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 menuTable.setVisible(false);
                 settingsTable.setVisible(true);
-                stage.setKeyboardFocus(settingsFocusables.get(0)); // <--- ADD THIS
+                settingsFocusIdx = 0;
+                UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
             }
         });
 
@@ -262,6 +277,9 @@ public class MainMenuScreen implements Screen {
         stage.addActor(gameModeTable);
         stage.addActor(playerCountTable);
         stage.addActor(characterSelectTable);
+
+        menuFocusIdx = 0;
+        stage.setKeyboardFocus(menuFocusables.get(0));
     }
 
     /**
@@ -276,7 +294,8 @@ public class MainMenuScreen implements Screen {
         updateCharacterDisplay();
         gameModeTable.setVisible(false);
         characterSelectTable.setVisible(true);
-        stage.setKeyboardFocus(characterSelectFocusables.get(0)); // <--- ADD THIS
+        charSelectFocusIdx = 3; // ENTER button highlighted by default
+        UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
     }
 
     /**
@@ -338,7 +357,8 @@ public class MainMenuScreen implements Screen {
                 gameModeTable.setVisible(false);
                 updatePlayerCountDisplay();
                 playerCountTable.setVisible(true);
-                stage.setKeyboardFocus(playerCountFocusables.get(0)); // <--- ADD THIS
+                playerCountFocusIdx = 3; // ENTER highlighted by default
+                UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
             }
         });
 
@@ -378,6 +398,8 @@ public class MainMenuScreen implements Screen {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 gameModeTable.setVisible(false);
                 menuTable.setVisible(true);
+                menuFocusIdx = 0;
+                stage.setKeyboardFocus(playButton);
             }
         });
         gameModeFocusables.add(singlePlayerBtn);
@@ -502,6 +524,8 @@ public class MainMenuScreen implements Screen {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 playerCountTable.setVisible(false);
                 gameModeTable.setVisible(true);
+                gameModeFocusIdx = 1;
+                UIUtils.applyFocusVisuals(gameModeFocusables, gameModeFocusIdx);
             }
         });
 
@@ -594,14 +618,17 @@ public class MainMenuScreen implements Screen {
         badgeTable.setBackground(UIUtils.createRoundedDrawable(420, 60, 20, pillBrown));
         badgeTable.add(characterBadge).pad(8, 35, 8, 35);
 
-        // --- 2. Carousel Row (< arrow, frame with sprite, > arrow) ---
+        // --- 2. Carousel Row (< arrow, framed pedestal with sprite + lock stamp, > arrow) ---
         TextButton.TextButtonStyle arrowStyle = new TextButton.TextButtonStyle();
-        arrowStyle.up = UIUtils.createRoundedDrawable(54, 54, 18, pillBrown);
+        arrowStyle.up = UIUtils.createRoundedDrawable(52, 52, 16, Color.valueOf("#9c572b"), Color.valueOf("#d8a46f"), 2);
+        arrowStyle.over = UIUtils.createRoundedDrawable(52, 52, 16, Color.valueOf("#b36634"), Color.valueOf("#ffd54f"), 2);
         arrowStyle.font = badgeFont;
         arrowStyle.fontColor = Color.WHITE;
 
         TextButton leftArrow = new TextButton("<", arrowStyle);
         TextButton rightArrow = new TextButton(">", arrowStyle);
+        charLeftArrow = leftArrow;
+        charRightArrow = rightArrow;
         UIUtils.addScaleHoverEffect(leftArrow);
         UIUtils.addScaleHoverEffect(rightArrow);
 
@@ -626,55 +653,92 @@ public class MainMenuScreen implements Screen {
             }
         });
 
-
-        // =========================================================================
-        // Character Frame with Sprite Placeholder
-        // NOTE FOR USER: The image below uses Assets.getCharacterTexture(cls).
-        // When your real pixel character sprites are added into assets/img/,
-        // they will automatically render inside this frame!
-        // =========================================================================
+        // Framed Portrait Pedestal with gold/mahogany trim + non-shifting lock overlay
         Table frameBox = new Table();
-        frameBox.setBackground(UIUtils.createRoundedDrawable(190, 190, 20, Color.valueOf("#4a2307")));
+        frameBox.setBackground(UIUtils.createRoundedDrawable(170, 170, 22, Color.valueOf("#3a1906"), Color.valueOf("#c89259"), 3));
 
         characterImage = new Image(game.getAssetManager().get(Assets.CHAR_TURTLE));
         characterImage.setScaling(Scaling.fit);
-        frameBox.add(characterImage).size(175, 175).center();
+        frameBox.add(characterImage).size(148, 148).center();
 
-        // Lock Banner (Displayed directly over the character if already taken by Player 1)
-        lockBanner = new Label("LOCKED BY PLAYER 1", new Label.LabelStyle(modeSubtitleFont, Color.valueOf("#ff5252")));
+        lockOverlayTable = new Table();
+        lockOverlayTable.setBackground(UIUtils.createRoundedDrawable(170, 170, 22, Color.valueOf("#140805b8"), Color.valueOf("#c89259"), 3));
+        Table lockStampBox = new Table();
+        lockStampBox.setBackground(UIUtils.createRoundedDrawable(148, 30, 8, Color.valueOf("#8a2424"), Color.valueOf("#ff8a80"), 2));
+        lockBanner = new Label("LOCKED BY P1", new Label.LabelStyle(skillTagFont, Color.WHITE));
         lockBanner.setAlignment(Align.center);
-        lockBanner.setVisible(false);
+        lockStampBox.add(lockBanner).pad(4, 8, 4, 8);
+        lockOverlayTable.add(lockStampBox).center();
+        lockOverlayTable.setVisible(false);
+
+        Stack portraitStack = new Stack();
+        portraitStack.add(frameBox);
+        portraitStack.add(lockOverlayTable);
 
         // Carousel row assembly
         Table carouselRow = new Table();
-        carouselRow.add(leftArrow).size(54, 54).padRight(28);
-        carouselRow.add(frameBox).size(190, 190);
-        carouselRow.add(rightArrow).size(54, 54).padLeft(28);
+        carouselRow.add(leftArrow).size(52, 52).padRight(26);
+        carouselRow.add(portraitStack).size(170, 170);
+        carouselRow.add(rightArrow).size(52, 52).padLeft(26);
 
-        // --- 3. Clean Text & Stats Below Frame ---
-        charNameLabel = new Label("TURTLE", new Label.LabelStyle(modeTitleFont, darkBrown));
-        charTitleLabel = new Label("Iron Guardian", new Label.LabelStyle(modeSubtitleFont, Color.valueOf("#854b25")));
-        charStatsLabel = new Label("HP 120   |   ATK 4   |   DEF 7", new Label.LabelStyle(statFont, darkBrown));
-        charPerkLabel = new Label("Perk: Iron Shell\n(Turtle Shell Buckler)", new Label.LabelStyle(perkFont, Color.valueOf("#6d3b17")));
+        // Roster Indicator Pips
+        rosterPipsRow = new Table();
+        rosterPipsRow.center();
 
+        // --- 3. Structured Hero Header, Stat Pills & Inset Skill/Perk Card ---
+        charNameLabel  = new Label("TURTLE", new Label.LabelStyle(modeTitleFont, Color.valueOf("#361704")));
+        charTitleLabel = new Label("Iron Guardian", new Label.LabelStyle(modeSubtitleFont, Color.valueOf("#7c441d")));
         charNameLabel.setAlignment(Align.center);
         charTitleLabel.setAlignment(Align.center);
-        charStatsLabel.setAlignment(Align.center);
-        charPerkLabel.setAlignment(Align.center);
-
-        // Enable wrapping so text never spills over onto the scroll curls
         charTitleLabel.setWrap(true);
-        charPerkLabel.setWrap(true);
-        lockBanner.setWrap(true);
 
-        // Stack the content inside the parchment area (confined to 460px width, well within the two curls)
+        // 3 Stat Pills (HEALTH | ATTACK | DEFENSE)
+        Color creamFill = Color.valueOf("#faedd7");
+        Table hpPill  = createHeroStatPill("HEALTH",  "120", creamFill, pillBrown);
+        Table atkPill = createHeroStatPill("ATTACK",  "4",   creamFill, pillBrown);
+        Table defPill = createHeroStatPill("DEFENSE", "7",   creamFill, pillBrown);
+        charHpValLabel  = (Label) hpPill.getUserObject();
+        charAtkValLabel = (Label) atkPill.getUserObject();
+        charDefValLabel = (Label) defPill.getUserObject();
+
+        Table statPillsRow = new Table();
+        statPillsRow.add(hpPill).size(158, 54).padRight(12);
+        statPillsRow.add(atkPill).size(158, 54).padRight(12);
+        statPillsRow.add(defPill).size(158, 54);
+
+        // Inset Skill & Perk Card (wider 4px border + generous inner padding around text)
+        Table perkCard = new Table();
+        perkCard.setBackground(UIUtils.createRoundedDrawable(510, 114, 14, creamFill, pillBrown, 4));
+        perkCard.pad(12, 22, 12, 22);
+
+        Table perkTopRow = new Table();
+        charSkillTitleLabel = new Label("Skill: Slow & Steady", new Label.LabelStyle(skillTitleFont, Color.valueOf("#361704")));
+        charSkillTitleLabel.setAlignment(Align.left);
+
+        Table cdTag = new Table();
+        cdTag.setBackground(UIUtils.createRoundedDrawable(102, 22, 10, Color.valueOf("#854b251c"), Color.valueOf("#854b2555"), 1));
+        Label cdLbl = new Label("4-TURN CD", new Label.LabelStyle(skillTagFont, Color.valueOf("#7c441d")));
+        cdLbl.setAlignment(Align.center);
+        cdTag.add(cdLbl).pad(2, 8, 2, 8);
+
+        perkTopRow.add(charSkillTitleLabel).left().expandX();
+        perkTopRow.add(cdTag).right();
+
+        charPerkLabel = new Label("Cleanses curses and marches +4 tiles safely.", new Label.LabelStyle(perkFont, Color.valueOf("#5a3616")));
+        charPerkLabel.setAlignment(Align.left);
+        charPerkLabel.setWrap(true);
+
+        perkCard.add(perkTopRow).width(466).padBottom(5).row();
+        perkCard.add(charPerkLabel).width(466).left();
+
+        // Stack the content cleanly inside the flat parchment scroll
         Table contentTable = new Table();
-        contentTable.add(carouselRow).padBottom(4).center().row();
-        contentTable.add(lockBanner).width(460).padBottom(2).center().row();
-        contentTable.add(charNameLabel).width(460).center().row();
-        contentTable.add(charTitleLabel).width(460).padBottom(6).center().row();
-        contentTable.add(charStatsLabel).width(460).padBottom(4).center().row();
-        contentTable.add(charPerkLabel).width(460).center().row();
+        contentTable.add(carouselRow).padBottom(6).center().row();
+        contentTable.add(rosterPipsRow).padBottom(6).center().row();
+        contentTable.add(charNameLabel).width(510).center().row();
+        contentTable.add(charTitleLabel).width(510).padBottom(8).center().row();
+        contentTable.add(statPillsRow).width(510).padBottom(10).center().row();
+        contentTable.add(perkCard).width(510).minHeight(110).center().row();
 
         Image scrollBg = new Image(game.getAssetManager().get(Assets.SCROLL));
         scrollBg.setScaling(Scaling.stretch);
@@ -709,8 +773,12 @@ public class MainMenuScreen implements Screen {
                     characterSelectTable.setVisible(false);
                     if (totalSelectingPlayers > 1) {
                         playerCountTable.setVisible(true);
+                        playerCountFocusIdx = 3;
+                        UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
                     } else {
                         gameModeTable.setVisible(true);
+                        gameModeFocusIdx = 0;
+                        UIUtils.applyFocusVisuals(gameModeFocusables, gameModeFocusIdx);
                     }
                 }
             }
@@ -762,34 +830,74 @@ public class MainMenuScreen implements Screen {
         characterSelectTable.setFillParent(true);
         characterSelectTable.setVisible(false);
 
-        characterSelectTable.add(badgeTable).size(420, 60).padBottom(-22).center().row();
-        characterSelectTable.add(scrollStack).size(840, 646).center().row();
-        characterSelectTable.add(bottomBtnTable).padTop(-22).center().row();
-        stage.setKeyboardFocus(leftArrow);
+        characterSelectTable.add(badgeTable).size(420, 60).padBottom(-24).center().row();
+        characterSelectTable.add(scrollStack).size(940, 710).center().row();
+        characterSelectTable.add(bottomBtnTable).padTop(-24).center().row();
+    }
+
+    private Table createHeroStatPill(String label, String value, Color fill, Color border) {
+        Table pill = new Table();
+        pill.setBackground(UIUtils.createRoundedDrawable(158, 54, 12, fill, border, 4));
+        Label lbl = new Label(label, new Label.LabelStyle(statLabelFont, Color.valueOf("#854b25")));
+        lbl.setAlignment(Align.center);
+        Label val = new Label(value, new Label.LabelStyle(statValueFont, Color.valueOf("#361704")));
+        val.setAlignment(Align.center);
+        pill.add(lbl).center().row();
+        pill.add(val).center().padTop(-2);
+        pill.setUserObject(val);
+        return pill;
     }
 
     /**
      * Updates the Character Select display to reflect the current character and player turn.
-     * Implements Approach A: shows locked status and dims/disables ENTER if already taken.
+     * Implements Approach A: shows locked status overlay on the pedestal and dims/disables ENTER if already taken.
      */
     private void updateCharacterDisplay() {
         CharacterClass[] classes = CharacterClass.values();
         CharacterClass cls = classes[currentCharacterIndex];
 
-        // 1. Text labels
+        // 1. Text labels & stat pills
         charNameLabel.setText(cls.getName().toUpperCase());
         charTitleLabel.setText(cls.getTitle());
-        charStatsLabel.setText("HP " + cls.getBaseHealth() + "   |   ATK " + cls.getBaseAttack() + "   |   DEF " + cls.getBaseDefense());
+        if (charHpValLabel != null)  charHpValLabel.setText(String.valueOf(cls.getBaseHealth()));
+        if (charAtkValLabel != null) charAtkValLabel.setText(String.valueOf(cls.getBaseAttack()));
+        if (charDefValLabel != null) charDefValLabel.setText(String.valueOf(cls.getBaseDefense()));
 
-        // Keep perk description concise, readable, and split onto two lines so it stays inside the flat parchment
-        String perk = cls.getPerkDescription();
-        if (perk.contains(":")) {
-            perk = perk.split(":")[0];
+        io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill skill = cls.createSkill();
+        String skillName = (skill != null) ? skill.getSkillName() : "Class Trait";
+        String skillDesc = (skill != null) ? skill.getDescription() : cls.getPerkDescription();
+        if (charSkillTitleLabel != null) {
+            charSkillTitleLabel.setText("Skill: " + skillName);
         }
-        String skillName = (cls.createSkill() != null) ? cls.createSkill().getSkillName() : "Class Trait";
-        charPerkLabel.setText("Skill: " + skillName + " (4-Turn Cooldown)\n" + perk);
+        String startItem = cls.getStartingItemName();
+        charPerkLabel.setText(skillDesc + (startItem != null ? "\nItem: " + startItem : ""));
 
-        // 2. Character sprite texture & initial frame
+        // 2. Refresh clickable roster pips
+        if (rosterPipsRow != null) {
+            rosterPipsRow.clear();
+            for (int i = 0; i < classes.length; i++) {
+                final int idx = i;
+                boolean isSelected = (i == currentCharacterIndex);
+                boolean isTaken = chosenClasses.contains(classes[i]);
+                Color pipFill = isSelected ? Color.valueOf("#854b25")
+                    : (isTaken ? Color.valueOf("#8a2424") : Color.valueOf("#bfa17a"));
+                Color pipBorder = isSelected ? Color.valueOf("#ffd54f") : Color.valueOf("#6d3b17");
+                int pipW = isSelected ? 28 : 12;
+                Button.ButtonStyle pipStyle = new Button.ButtonStyle();
+                pipStyle.up = UIUtils.createRoundedDrawable(pipW, 10, 5, pipFill, pipBorder, 2);
+                Button pipBtn = new Button(pipStyle);
+                pipBtn.addListener(new ChangeListener() {
+                    @Override public void changed(ChangeEvent event, Actor actor) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP, 0.7f, 0.1f);
+                        currentCharacterIndex = idx;
+                        updateCharacterDisplay();
+                    }
+                });
+                rosterPipsRow.add(pipBtn).size(pipW, 10).pad(0, 4, 0, 4);
+            }
+        }
+
+        // 3. Character sprite texture & initial frame
         charAnimTimer = 0f;
         Animation<TextureRegion> anim = charAnimations.get(cls);
         if (anim != null) {
@@ -799,29 +907,25 @@ public class MainMenuScreen implements Screen {
             characterImage.setDrawable(new TextureRegionDrawable(new TextureRegion(charTex)));
         }
 
-        // 3. Top badge title: indicates which player is choosing
+        // 4. Top badge title: indicates which player is choosing
         if (totalSelectingPlayers == 1) {
             characterBadge.setText("CHOOSE YOUR HERO");
         } else {
             characterBadge.setText("PLAYER " + (selectingPlayerIndex + 1) + ": SELECT HERO");
         }
 
-        // 4. Approach A (Locking mechanism):
-        // If this character is already chosen by a previous player, show LOCKED and disable ENTER
+        // 5. Approach A (Locking mechanism via overlay stamp - zero layout shift):
         if (chosenClasses.contains(cls)) {
             int takenBy = chosenClasses.indexOf(cls) + 1;
-            lockBanner.setText("LOCKED BY PLAYER " + takenBy);
-            lockBanner.setVisible(true);
+            lockBanner.setText("LOCKED BY P" + takenBy);
+            if (lockOverlayTable != null) lockOverlayTable.setVisible(true);
 
-            // Dim sprite slightly
             characterImage.setColor(0.35f, 0.35f, 0.35f, 0.5f);
-
-            // Disable Enter button
             enterButton.setDisabled(true);
             enterButton.setText("TAKEN");
             enterButton.setColor(Color.valueOf("#7a6356"));
         } else {
-            lockBanner.setVisible(false);
+            if (lockOverlayTable != null) lockOverlayTable.setVisible(false);
             characterImage.setColor(Color.WHITE);
 
             enterButton.setDisabled(false);
@@ -838,6 +942,7 @@ public class MainMenuScreen implements Screen {
 
         // 1. Music volume controls
         Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
+        musicSliderRef = musicSlider;
         int musicVal = Math.round(game.getAudioManager().getMusicVolume() * 10f);
         musicSlider.setValue(musicVal);
         Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(numFont, darkBrown));
@@ -853,6 +958,7 @@ public class MainMenuScreen implements Screen {
 
         // 2. Sound Effects (SFX) volume controls
         Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
+        sfxSliderRef = sfxSlider;
         int sfxVal = Math.round(game.getAudioManager().getSfxVolume() * 10f);
         sfxSlider.setValue(sfxVal);
         Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(numFont, darkBrown));
@@ -921,9 +1027,12 @@ public class MainMenuScreen implements Screen {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 settingsTable.setVisible(false);
                 menuTable.setVisible(true);
+                menuFocusIdx = 1;
+                stage.setKeyboardFocus(settingsButton);
             }
         });
-        // After creating backButton:
+        settingsFocusables.add(musicSlider);
+        settingsFocusables.add(sfxSlider);
         settingsFocusables.add(backButton);
 
         // 7. Outer Settings Table
@@ -970,98 +1079,169 @@ public class MainMenuScreen implements Screen {
 
         stage.act(delta);
         stage.draw();
-// --- KEYBOARD NAVIGATION (context-aware for each modal) ---
+        // --- CONVENTIONAL KEYBOARD NAVIGATION (Arrows, WASD, Tab, Enter/Space, Esc/Backspace, 1-4) ---
+        boolean tabPressed = Gdx.input.isKeyJustPressed(Input.Keys.TAB);
+        int tabDelta = UIUtils.isShiftHeld() ? -1 : 1;
+
         if (menuTable.isVisible() && !menuFocusables.isEmpty()) {
             Actor focus = stage.getKeyboardFocus();
             int idx = menuFocusables.indexOf(focus);
-            if (idx < 0) idx = 0;
-            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
-                idx = (idx - 1 + menuFocusables.size()) % menuFocusables.size();
-                stage.setKeyboardFocus(menuFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
-                idx = (idx + 1) % menuFocusables.size();
-                stage.setKeyboardFocus(menuFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                menuFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
-            }
-        }
-        else if (gameModeTable.isVisible() && !gameModeFocusables.isEmpty()) {
-            Actor focus = stage.getKeyboardFocus();
-            int idx = gameModeFocusables.indexOf(focus);
-            if (idx < 0) idx = 0;
-            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
-                idx = (idx - 1 + gameModeFocusables.size()) % gameModeFocusables.size();
-                stage.setKeyboardFocus(gameModeFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
-                idx = (idx + 1) % gameModeFocusables.size();
-                stage.setKeyboardFocus(gameModeFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                gameModeFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
-            }
-        }
-        else if (playerCountTable.isVisible() && !playerCountFocusables.isEmpty()) {
-            Actor focus = stage.getKeyboardFocus();
-            int idx = playerCountFocusables.indexOf(focus);
-            if (idx < 0) idx = 0;
-            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)) {
-                idx = (idx - 1 + playerCountFocusables.size()) % playerCountFocusables.size();
-                stage.setKeyboardFocus(playerCountFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
-                idx = (idx + 1) % playerCountFocusables.size();
-                stage.setKeyboardFocus(playerCountFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                playerCountFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
-            }
-        }
-        else if (characterSelectTable.isVisible() && !characterSelectFocusables.isEmpty()) {
-            Actor focus = stage.getKeyboardFocus();
-            int idx = characterSelectFocusables.indexOf(focus);
-            if (idx < 0) idx = 0;
-            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)) {
-                idx = (idx - 1 + characterSelectFocusables.size()) % characterSelectFocusables.size();
-                stage.setKeyboardFocus(characterSelectFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
-                idx = (idx + 1) % characterSelectFocusables.size();
-                stage.setKeyboardFocus(characterSelectFocusables.get(idx));
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                characterSelectFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
-            }
-        }
-        else if (settingsTable.isVisible() && !settingsFocusables.isEmpty()) {
-            Actor focus = stage.getKeyboardFocus();
-            int idx = settingsFocusables.indexOf(focus);
-            if (idx < 0) idx = 0;
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                settingsFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
-            }
-        }
+            if (idx >= 0) menuFocusIdx = idx;
+            else stage.setKeyboardFocus(menuFocusables.get(menuFocusIdx));
 
-// --- KEYBOARD: ESC to go back from sub-menus ---
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            if (settingsTable.isVisible()) {
-                settingsTable.setVisible(false);
-                menuTable.setVisible(true);
-                stage.setKeyboardFocus(settingsButton);
-            } else if (gameModeTable.isVisible()) {
-                gameModeTable.setVisible(false);
-                menuTable.setVisible(true);
-                stage.setKeyboardFocus(playButton);
-            } else if (playerCountTable.isVisible()) {
-                playerCountTable.setVisible(false);
-                gameModeTable.setVisible(true);
-            } else if (characterSelectTable.isVisible()) {
-                if (selectingPlayerIndex > 0) {
-                    selectingPlayerIndex--;
-                    chosenClasses.remove(selectingPlayerIndex);
-                    updateCharacterDisplay();
-                } else {
-                    characterSelectTable.setVisible(false);
-                    if (totalSelectingPlayers > 1) {
-                        playerCountTable.setVisible(true);
-                    } else {
-                        gameModeTable.setVisible(true);
-                    }
+            if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                menuFocusIdx = (menuFocusIdx - 1 + menuFocusables.size()) % menuFocusables.size();
+                stage.setKeyboardFocus(menuFocusables.get(menuFocusIdx));
+            } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                menuFocusIdx = (menuFocusIdx + 1) % menuFocusables.size();
+                stage.setKeyboardFocus(menuFocusables.get(menuFocusIdx));
+            } else if (UIUtils.isConfirmJustPressed()) {
+                UIUtils.activateButton(menuFocusables.get(menuFocusIdx));
+            } else {
+                int num = UIUtils.justPressedNumberKey(menuFocusables.size());
+                if (num >= 0) {
+                    menuFocusIdx = num;
+                    stage.setKeyboardFocus(menuFocusables.get(num));
+                    UIUtils.activateButton(menuFocusables.get(num));
                 }
+            }
+        } else if (gameModeTable.isVisible() && !gameModeFocusables.isEmpty()) {
+            UIUtils.applyFocusVisuals(gameModeFocusables, gameModeFocusIdx);
+            if (UIUtils.isNavPrevVerticalJustPressed() || UIUtils.isNavPrevHorizontalJustPressed() || (tabPressed && tabDelta < 0)) {
+                gameModeFocusIdx = UIUtils.stepFocus(gameModeFocusables, gameModeFocusIdx, -1);
+            } else if (UIUtils.isNavNextVerticalJustPressed() || UIUtils.isNavNextHorizontalJustPressed() || tabPressed) {
+                gameModeFocusIdx = UIUtils.stepFocus(gameModeFocusables, gameModeFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed()) {
+                UIUtils.activateButton(gameModeFocusables.get(gameModeFocusIdx));
+            } else if (UIUtils.isBackJustPressed()) {
+                UIUtils.activateButton(gameModeFocusables.get(gameModeFocusables.size() - 1));
+            } else {
+                int num = UIUtils.justPressedNumberKey(2); // 1: Single Player, 2: Pass & Play
+                if (num >= 0) {
+                    gameModeFocusIdx = num;
+                    UIUtils.activateButton(gameModeFocusables.get(num));
+                }
+            }
+        } else if (playerCountTable.isVisible() && !playerCountFocusables.isEmpty()) {
+            // Focusables order: [0: <, 1: >, 2: BACK, 3: ENTER]
+            UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+            if (UIUtils.isNavPrevVerticalJustPressed()) {
+                playerCountFocusIdx = (playerCountFocusIdx == 2) ? 0 : 1;
+                UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+            } else if (UIUtils.isNavNextVerticalJustPressed()) {
+                playerCountFocusIdx = (playerCountFocusIdx == 0) ? 2 : 3;
+                UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+            } else if (UIUtils.isNavPrevHorizontalJustPressed()) {
+                if (playerCountFocusIdx <= 1) {
+                    playerCountFocusIdx = 0;
+                    UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+                    UIUtils.activateButton(countLeftArrow);
+                } else {
+                    playerCountFocusIdx = 2;
+                    UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+                }
+            } else if (UIUtils.isNavNextHorizontalJustPressed()) {
+                if (playerCountFocusIdx <= 1) {
+                    playerCountFocusIdx = 1;
+                    UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+                    UIUtils.activateButton(countRightArrow);
+                } else {
+                    playerCountFocusIdx = 3;
+                    UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+                }
+            } else if (tabPressed) {
+                playerCountFocusIdx = UIUtils.stepFocus(playerCountFocusables, playerCountFocusIdx, tabDelta);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.MINUS) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_SUBTRACT)) {
+                UIUtils.activateButton(countLeftArrow);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS) || Gdx.input.isKeyJustPressed(Input.Keys.PLUS)
+                    || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_ADD)) {
+                UIUtils.activateButton(countRightArrow);
+            } else if (UIUtils.isConfirmJustPressed()) {
+                UIUtils.activateButton(playerCountFocusables.get(playerCountFocusIdx));
+            } else if (UIUtils.isBackJustPressed()) {
+                UIUtils.activateButton(playerCountFocusables.get(2));
+            } else {
+                int num = UIUtils.justPressedNumberKey(4);
+                if (num >= 1 && num <= 3) { // keys 2, 3, 4 select 2-4 players
+                    passPlayPlayerCount = num + 1;
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    updatePlayerCountDisplay();
+                    playerCountFocusIdx = 3;
+                    UIUtils.applyFocusVisuals(playerCountFocusables, playerCountFocusIdx);
+                }
+            }
+        } else if (characterSelectTable.isVisible() && !characterSelectFocusables.isEmpty()) {
+            // Focusables order: [0: <, 1: >, 2: BACK, 3: ENTER]
+            UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
+            if (UIUtils.isNavPrevVerticalJustPressed()) {
+                charSelectFocusIdx = (charSelectFocusIdx == 2) ? 0 : 1;
+                UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
+            } else if (UIUtils.isNavNextVerticalJustPressed()) {
+                charSelectFocusIdx = (charSelectFocusIdx == 0) ? 2 : 3;
+                UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
+            } else if (UIUtils.isNavPrevHorizontalJustPressed()) {
+                if (charSelectFocusIdx <= 1) {
+                    charSelectFocusIdx = 0;
+                    UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
+                    UIUtils.activateButton(charLeftArrow);
+                } else {
+                    charSelectFocusIdx = 2;
+                    UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
+                }
+            } else if (UIUtils.isNavNextHorizontalJustPressed()) {
+                if (charSelectFocusIdx <= 1) {
+                    charSelectFocusIdx = 1;
+                    UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
+                    UIUtils.activateButton(charRightArrow);
+                } else {
+                    charSelectFocusIdx = 3;
+                    UIUtils.applyFocusVisuals(characterSelectFocusables, charSelectFocusIdx);
+                }
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.Q)) {
+                UIUtils.activateButton(charLeftArrow);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.E)) {
+                UIUtils.activateButton(charRightArrow);
+            } else if (tabPressed) {
+                charSelectFocusIdx = UIUtils.stepFocus(characterSelectFocusables, charSelectFocusIdx, tabDelta);
+            } else if (UIUtils.isConfirmJustPressed()) {
+                UIUtils.activateButton(characterSelectFocusables.get(charSelectFocusIdx));
+            } else if (UIUtils.isBackJustPressed()) {
+                UIUtils.activateButton(characterSelectFocusables.get(2));
+            } else {
+                int num = UIUtils.justPressedNumberKey(CharacterClass.values().length);
+                if (num >= 0) {
+                    currentCharacterIndex = num;
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP, 0.7f, 0.1f);
+                    updateCharacterDisplay();
+                }
+            }
+        } else if (settingsTable.isVisible() && !settingsFocusables.isEmpty()) {
+            // Focusables order: [0: musicSlider, 1: sfxSlider, 2: BACK]
+            UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
+            if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, -1);
+            } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+            } else if (UIUtils.isNavPrevHorizontalJustPressed()) {
+                if (settingsFocusIdx == 0 && musicSliderRef != null) {
+                    musicSliderRef.setValue(Math.max(0, musicSliderRef.getValue() - 1f));
+                } else if (settingsFocusIdx == 1 && sfxSliderRef != null) {
+                    sfxSliderRef.setValue(Math.max(0, sfxSliderRef.getValue() - 1f));
+                }
+            } else if (UIUtils.isNavNextHorizontalJustPressed()) {
+                if (settingsFocusIdx == 0 && musicSliderRef != null) {
+                    musicSliderRef.setValue(Math.min(10, musicSliderRef.getValue() + 1f));
+                } else if (settingsFocusIdx == 1 && sfxSliderRef != null) {
+                    sfxSliderRef.setValue(Math.min(10, sfxSliderRef.getValue() + 1f));
+                }
+            } else if (UIUtils.isConfirmJustPressed()) {
+                if (settingsFocusIdx == settingsFocusables.size() - 1) {
+                    UIUtils.activateButton(settingsFocusables.get(settingsFocusIdx));
+                } else {
+                    settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+                }
+            } else if (UIUtils.isBackJustPressed()) {
+                UIUtils.activateButton(settingsFocusables.get(settingsFocusables.size() - 1));
             }
         }
     }
@@ -1098,6 +1278,10 @@ public class MainMenuScreen implements Screen {
         if (modeSubtitleFont != null) modeSubtitleFont.dispose();
         if (instructionFont != null) instructionFont.dispose();
         if (statFont != null) statFont.dispose();
+        if (statLabelFont != null) statLabelFont.dispose();
+        if (statValueFont != null) statValueFont.dispose();
+        if (skillTitleFont != null) skillTitleFont.dispose();
+        if (skillTagFont != null) skillTagFont.dispose();
         if (perkFont != null) perkFont.dispose();
         if (countNumFont != null) countNumFont.dispose();
     }
