@@ -23,6 +23,9 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.utils.FocusListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Scaling;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
@@ -50,6 +53,17 @@ public class MainMenuScreen implements Screen {
     private VideoPlayer videoPlayer;
     private SpriteBatch batch;
     private Stage stage;
+    // Add these fields at the top of the class
+    private TextButton playButton;
+    private TextButton settingsButton;
+    private TextButton exitButton;
+    private Color btnNormal;
+    private Color btnFocused;
+    private final List<TextButton> menuFocusables = new ArrayList<>();
+    private final List<Actor> gameModeFocusables = new ArrayList<>();
+    private final List<Actor> playerCountFocusables = new ArrayList<>();
+    private final List<Actor> characterSelectFocusables = new ArrayList<>();
+    private final List<Actor> settingsFocusables = new ArrayList<>();
 
     // Navigation tables for the different views on this screen
     private Table menuTable;
@@ -105,7 +119,14 @@ public class MainMenuScreen implements Screen {
     public MainMenuScreen(RollOfFateGame game) {
         this.game = game;
     }
-
+    private void makeFocusable(TextButton button) {
+        button.addListener(new FocusListener() {
+            @Override
+            public void keyboardFocusChanged(FocusEvent event, Actor actor, boolean focused) {
+                button.setColor(focused ? btnFocused : btnNormal);
+            }
+        });
+    }
     @Override
     public void show() {
         if (game.getAudioManager() != null) {
@@ -161,18 +182,28 @@ public class MainMenuScreen implements Screen {
 
         Skin skin = game.getAssetManager().get(Assets.UI_SKIN);
 
-        TextButton playButton = new TextButton("Play Game", skin);
-        TextButton settingsButton = new TextButton("Settings", skin);
-        TextButton exitButton = new TextButton("Exit", skin);
+        playButton = new TextButton("Play Game", skin);
+        settingsButton = new TextButton("Settings", skin);
+        exitButton = new TextButton("Exit", skin);
 
         playButton.getLabel().setFontScale(2.5f);
         settingsButton.getLabel().setFontScale(2.5f);
         exitButton.getLabel().setFontScale(2.5f);
 
-        Color btnColor = Color.valueOf("#a8642cCC");
-        playButton.setColor(btnColor);
-        settingsButton.setColor(btnColor);
-        exitButton.setColor(btnColor);
+        btnNormal  = Color.valueOf("#a8642cCC");
+        btnFocused = Color.valueOf("#ffd54f");
+        playButton.setColor(btnNormal);
+
+        settingsButton.setColor(btnNormal);
+        exitButton.setColor(btnNormal);
+
+        // Register for arrow-key navigation (order matters: top to bottom)
+        menuFocusables.add(playButton);
+        menuFocusables.add(settingsButton);
+        menuFocusables.add(exitButton);
+        makeFocusable(playButton);
+        makeFocusable(settingsButton);
+        makeFocusable(exitButton);
 
         playButton.getLabel().setAlignment(Align.center);
         settingsButton.getLabel().setAlignment(Align.center);
@@ -190,6 +221,7 @@ public class MainMenuScreen implements Screen {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 menuTable.setVisible(false);
                 gameModeTable.setVisible(true);
+                stage.setKeyboardFocus(gameModeFocusables.get(0)); // <--- ADD THIS
             }
         });
 
@@ -200,6 +232,7 @@ public class MainMenuScreen implements Screen {
                 game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                 menuTable.setVisible(false);
                 settingsTable.setVisible(true);
+                stage.setKeyboardFocus(settingsFocusables.get(0)); // <--- ADD THIS
             }
         });
 
@@ -246,6 +279,7 @@ public class MainMenuScreen implements Screen {
         updateCharacterDisplay();
         gameModeTable.setVisible(false);
         characterSelectTable.setVisible(true);
+        stage.setKeyboardFocus(characterSelectFocusables.get(0)); // <--- ADD THIS
     }
 
     /**
@@ -307,6 +341,7 @@ public class MainMenuScreen implements Screen {
                 gameModeTable.setVisible(false);
                 updatePlayerCountDisplay();
                 playerCountTable.setVisible(true);
+                stage.setKeyboardFocus(playerCountFocusables.get(0)); // <--- ADD THIS
             }
         });
 
@@ -348,6 +383,9 @@ public class MainMenuScreen implements Screen {
                 menuTable.setVisible(true);
             }
         });
+        gameModeFocusables.add(singlePlayerBtn);
+        gameModeFocusables.add(passPlayBtn);
+        gameModeFocusables.add(backButton);
 
         // 6. Outer Game Mode Table
         gameModeTable = new Table();
@@ -432,6 +470,7 @@ public class MainMenuScreen implements Screen {
             }
         });
 
+
         // Assemble stepper row: [ < ]  [ 2 PLAYERS ]  [ > ]
         Table stepperRow = new Table();
         stepperRow.add(countLeftArrow).size(56, 56).padRight(28);
@@ -478,6 +517,10 @@ public class MainMenuScreen implements Screen {
                 openCharacterSelect(passPlayPlayerCount);
             }
         });
+        playerCountFocusables.add(countLeftArrow);
+        playerCountFocusables.add(countRightArrow);
+        playerCountFocusables.add(backButton);
+        playerCountFocusables.add(enterButton);
 
         Table bottomBtnTable = new Table();
         bottomBtnTable.add(backButton).size(180, 52).padRight(30);
@@ -744,6 +787,11 @@ public class MainMenuScreen implements Screen {
                 }
             }
         });
+        // After creating leftArrow, rightArrow, backButton, and enterButton:
+        characterSelectFocusables.add(leftArrow);
+        characterSelectFocusables.add(rightArrow);
+        characterSelectFocusables.add(backButton);
+        characterSelectFocusables.add(enterButton);
 
         // Bottom row holding both buttons
         Table bottomBtnTable = new Table();
@@ -758,6 +806,7 @@ public class MainMenuScreen implements Screen {
         characterSelectTable.add(badgeTable).size(420, 60).padBottom(-24).center().row();
         characterSelectTable.add(scrollStack).size(940, 710).center().row();
         characterSelectTable.add(bottomBtnTable).padTop(-24).center().row();
+        stage.setKeyboardFocus(leftArrow);
     }
 
     private Table createHeroStatPill(String label, String value, Color fill, Color border) {
@@ -952,6 +1001,8 @@ public class MainMenuScreen implements Screen {
                 menuTable.setVisible(true);
             }
         });
+        // After creating backButton:
+        settingsFocusables.add(backButton);
 
         // 7. Outer Settings Table
         settingsTable = new Table();
@@ -997,6 +1048,100 @@ public class MainMenuScreen implements Screen {
 
         stage.act(delta);
         stage.draw();
+// --- KEYBOARD NAVIGATION (context-aware for each modal) ---
+        if (menuTable.isVisible() && !menuFocusables.isEmpty()) {
+            Actor focus = stage.getKeyboardFocus();
+            int idx = menuFocusables.indexOf(focus);
+            if (idx < 0) idx = 0;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+                idx = (idx - 1 + menuFocusables.size()) % menuFocusables.size();
+                stage.setKeyboardFocus(menuFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+                idx = (idx + 1) % menuFocusables.size();
+                stage.setKeyboardFocus(menuFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                menuFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
+            }
+        }
+        else if (gameModeTable.isVisible() && !gameModeFocusables.isEmpty()) {
+            Actor focus = stage.getKeyboardFocus();
+            int idx = gameModeFocusables.indexOf(focus);
+            if (idx < 0) idx = 0;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+                idx = (idx - 1 + gameModeFocusables.size()) % gameModeFocusables.size();
+                stage.setKeyboardFocus(gameModeFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+                idx = (idx + 1) % gameModeFocusables.size();
+                stage.setKeyboardFocus(gameModeFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                gameModeFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
+            }
+        }
+        else if (playerCountTable.isVisible() && !playerCountFocusables.isEmpty()) {
+            Actor focus = stage.getKeyboardFocus();
+            int idx = playerCountFocusables.indexOf(focus);
+            if (idx < 0) idx = 0;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)) {
+                idx = (idx - 1 + playerCountFocusables.size()) % playerCountFocusables.size();
+                stage.setKeyboardFocus(playerCountFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
+                idx = (idx + 1) % playerCountFocusables.size();
+                stage.setKeyboardFocus(playerCountFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                playerCountFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
+            }
+        }
+        else if (characterSelectTable.isVisible() && !characterSelectFocusables.isEmpty()) {
+            Actor focus = stage.getKeyboardFocus();
+            int idx = characterSelectFocusables.indexOf(focus);
+            if (idx < 0) idx = 0;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)) {
+                idx = (idx - 1 + characterSelectFocusables.size()) % characterSelectFocusables.size();
+                stage.setKeyboardFocus(characterSelectFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
+                idx = (idx + 1) % characterSelectFocusables.size();
+                stage.setKeyboardFocus(characterSelectFocusables.get(idx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                characterSelectFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
+            }
+        }
+        else if (settingsTable.isVisible() && !settingsFocusables.isEmpty()) {
+            Actor focus = stage.getKeyboardFocus();
+            int idx = settingsFocusables.indexOf(focus);
+            if (idx < 0) idx = 0;
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                settingsFocusables.get(idx).fire(new ChangeListener.ChangeEvent());
+            }
+        }
+
+// --- KEYBOARD: ESC to go back from sub-menus ---
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (settingsTable.isVisible()) {
+                settingsTable.setVisible(false);
+                menuTable.setVisible(true);
+                stage.setKeyboardFocus(settingsButton);
+            } else if (gameModeTable.isVisible()) {
+                gameModeTable.setVisible(false);
+                menuTable.setVisible(true);
+                stage.setKeyboardFocus(playButton);
+            } else if (playerCountTable.isVisible()) {
+                playerCountTable.setVisible(false);
+                gameModeTable.setVisible(true);
+            } else if (characterSelectTable.isVisible()) {
+                if (selectingPlayerIndex > 0) {
+                    selectingPlayerIndex--;
+                    chosenClasses.remove(selectingPlayerIndex);
+                    updateCharacterDisplay();
+                } else {
+                    characterSelectTable.setVisible(false);
+                    if (totalSelectingPlayers > 1) {
+                        playerCountTable.setVisible(true);
+                    } else {
+                        gameModeTable.setVisible(true);
+                    }
+                }
+            }
+        }
     }
 
     @Override

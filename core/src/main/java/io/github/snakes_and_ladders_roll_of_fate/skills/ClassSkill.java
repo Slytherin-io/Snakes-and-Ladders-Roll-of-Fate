@@ -52,4 +52,29 @@ public interface ClassSkill {
      * @return Result of the activation with narrative feedback.
      */
     SkillResult execute(Player player, RollOfFateGame game);
+
+    /**
+     * @return Display name for active combat skill (e.g. "Double Strike", "Iron Fortress").
+     */
+    default String getCombatSkillName() {
+        return getSkillName();
+    }
+
+    /**
+     * @return Compact description of what the combat skill does in battle.
+     */
+    default String getCombatDescription() {
+        return getDescription();
+    }
+
+    /**
+     * Polymorphically executes the unique character combat skill in battle.
+     * @param player The activating player entity.
+     * @param enemy The defending enemy entity.
+     * @param battleSystem The active battle system context.
+     * @return Result of the combat action with narrative feedback.
+     */
+    default SkillResult executeCombat(Player player, io.github.snakes_and_ladders_roll_of_fate.entities.Enemy enemy, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem battleSystem) {
+        return new SkillResult(false, "No active combat skill.");
+    }
 }

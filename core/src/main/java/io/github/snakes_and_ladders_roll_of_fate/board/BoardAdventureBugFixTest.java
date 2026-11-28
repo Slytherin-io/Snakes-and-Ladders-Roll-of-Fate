@@ -390,7 +390,7 @@ public class BoardAdventureBugFixTest {
 
     private static void testDawnWardenPhase2Transition() {
         System.out.println("\n[Test 10] Verifying Dawn Warden True Phase 2 Ascension & Balanced Scaling...");
-        Player hero = new Player("Challenger", CharacterClass.CAT);
+        Player hero = new Player("Challenger", CharacterClass.TURTLE);
         hero.setHealth(90);
         int baseAtk = hero.getAttack();
         hero.levelUp();
@@ -407,16 +407,14 @@ public class BoardAdventureBugFixTest {
             new io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem();
         bs.startBattle(hero, boss);
 
-        // Drop boss to 1 HP and trigger Riposte defeat in Phase 1
+        // Drop boss to 1 HP and trigger Riposte defeat in Phase 1 (via Turtle Iron Fortress)
         boss.setHealth(1);
         try {
             java.lang.reflect.Field stateField = bs.getClass().getDeclaredField("currentState");
             stateField.setAccessible(true);
             stateField.set(bs, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
 
-            java.lang.reflect.Field guardField = bs.getClass().getDeclaredField("isPlayerGuarding");
-            guardField.setAccessible(true);
-            guardField.set(bs, true);
+            bs.setTurtleFortressActive(true);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -442,9 +440,7 @@ public class BoardAdventureBugFixTest {
             stateField.setAccessible(true);
             stateField.set(bs, io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleState.ENEMY_TURN);
 
-            java.lang.reflect.Field guardField = bs.getClass().getDeclaredField("isPlayerGuarding");
-            guardField.setAccessible(true);
-            guardField.set(bs, true);
+            bs.setTurtleFortressActive(true);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

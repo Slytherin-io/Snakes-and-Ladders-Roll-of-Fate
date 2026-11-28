@@ -1,6 +1,7 @@
 package io.github.snakes_and_ladders_roll_of_fate.screens;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.assets.AssetDescriptor;
 import com.badlogic.gdx.graphics.Color;
@@ -232,6 +233,7 @@ public class BattleScreen implements Screen {
     private Label topBannerLabel, battleLogLabel, playerHpLabel, enemyHpLabel, enemyNameLabel;
     private Table topBannerWrap, topBannerBox, playerHpWrap, enemyHpWrap;
     private Table battleLogContainer;
+    private TextButton btnAttack, btnDefend, btnItem, btnEscape, btnSkill, continueBtn;
     private Table bottomBar;
     private Table bossIntroTable;
     private Label introDialogueLabel;
@@ -244,7 +246,6 @@ public class BattleScreen implements Screen {
     private boolean isEpilogueVictory = false;
     private int epilogueBeatIndex = 0;
     private boolean scrambleAnnounced = false;
-    private TextButton btnAttack, btnDefend, btnItem, btnEscape, continueBtn;
     private Cell<TextButton> continueBtnCell;
     private Table itemPopup;
     private Table continueTable;
@@ -804,16 +805,19 @@ public class BattleScreen implements Screen {
         Color pillBrown = Color.valueOf("#854b25");
         Color leather = Color.valueOf("#c89259");
         TextButton.TextButtonStyle style = new TextButton.TextButtonStyle();
-        style.up = UIUtils.createRoundedDrawable(200, 100, 15, leather, pillBrown, 3);
-        style.over = UIUtils.createRoundedDrawable(200, 100, 15, Color.valueOf("#d8a46f"), pillBrown, 3);
+        style.up = UIUtils.createRoundedDrawable(180, 100, 15, leather, pillBrown, 3);
+        style.over = UIUtils.createRoundedDrawable(180, 100, 15, Color.valueOf("#d8a46f"), pillBrown, 3);
         style.font = titleFont;
         style.fontColor = Color.WHITE;
-
         btnAttack = new TextButton("ATTACK", style);
         btnDefend = new TextButton("DEFEND", style);
         btnItem = new TextButton("ITEM", style);
         btnEscape = new TextButton("ESCAPE", style);
 
+        String skillName = player.getCharacterClass() != null ? player.getCharacterClass().getName().toUpperCase() + " SKILL" : "SKILL";
+        btnSkill = new TextButton(skillName, style);
+
+        // Attack Listener
         btnAttack.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
@@ -824,26 +828,45 @@ public class BattleScreen implements Screen {
                 }
             }
         });
+
+        // Defend Listener
         btnDefend.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
                     spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
-                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "GUARD & RIPOSTE", Color.valueOf("#ffd54f"), false);
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "GUARD", Color.valueOf("#ffd54f"), false);
                     battleSystem.onPlayerDefend();
                     syncUi();
                 }
             }
         });
+
+        // Skill Listener
+        btnSkill.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent e, Actor a) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+                }
+            }
+        });
+
+        // Item Listener
+        btnItem.addListener(new ChangeListener() {
+            @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                    if (!itemPopup.isVisible()) refreshItemPopup();
+                    itemPopup.setVisible(!itemPopup.isVisible());
+                }
+            }
+        });
+
+        // Escape Listener
         btnEscape.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (isDawnWardenBattle()) return;
-                if (isPaleShepherdBattle() && battleSystem.getCombatRound() < 3) {
-                    int remaining = 3 - battleSystem.getCombatRound();
-                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "SURVIVE " + remaining + " MORE ROUND" + (remaining > 1 ? "S!" : "!"), Color.valueOf("#ff5252"), false);
-                    return;
-                }
                 if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     battleSystem.onPlayerEscape();
@@ -851,36 +874,29 @@ public class BattleScreen implements Screen {
                 }
             }
         });
-        btnItem.addListener(new ChangeListener() {
-            @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                // Only open if it's the player's turn and no animations are playing
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
-                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                    if (!itemPopup.isVisible()) {
-                        refreshItemPopup(); // Rebuild the list so it's always fresh
-                    }
-                    itemPopup.setVisible(!itemPopup.isVisible()); // Toggle popup
-                }
-            }
-        });
 
+        // FIXED: Single layout block - no duplicates
         bottomBar = new Table();
         bottomBar.setFillParent(true);
         bottomBar.bottom().padBottom(30);
 
-        if (isDawnWardenBattle()) {
-            bottomBar.add(btnAttack).size(200, 100).padRight(20);
-            bottomBar.add(btnDefend).size(200, 100).padRight(20);
-            bottomBar.add(btnItem).size(200, 100);
+        if (isBossBattle()) {
+            // Boss battles: 4 buttons (no escape)
+            bottomBar.add(btnAttack).size(180, 100).padRight(20);
+            bottomBar.add(btnDefend).size(180, 100).padRight(20);
+            bottomBar.add(btnSkill).size(180, 100).padRight(20);
+            bottomBar.add(btnItem).size(180, 100);
         } else {
-            bottomBar.add(btnAttack).size(200, 100).padRight(20);
-            bottomBar.add(btnDefend).size(200, 100).padRight(20);
-            bottomBar.add(btnItem).size(200, 100).padRight(20);
-            bottomBar.add(btnEscape).size(200, 100);
+            // Regular battles: 5 buttons
+            bottomBar.add(btnAttack).size(180, 100).padRight(10);
+            bottomBar.add(btnDefend).size(180, 100).padRight(10);
+            bottomBar.add(btnSkill).size(180, 100).padRight(10);
+            bottomBar.add(btnItem).size(180, 100).padRight(10);
+            bottomBar.add(btnEscape).size(180, 100);
         }
+
         hudStage.addActor(bottomBar);
     }
-
     /**
      * Builds the in-arena dramatic intro confrontation for Boss trials (The Dawn Warden and The Pale Shepherd).
      * Sits neatly in the bottom center space between the HP pills, below both fighters.
@@ -1860,6 +1876,19 @@ public class BattleScreen implements Screen {
         btnAttack.setColor(1, 1, 1, alpha);
         btnDefend.setColor(1, 1, 1, alpha);
         btnItem.setColor(1, 1, 1, alpha);
+        btnEscape.setColor(1, 1, 1, alpha);
+        boolean skillReady = playerTurn && player.canUseSkill();
+        btnSkill.setDisabled(!skillReady);
+
+        if (!player.canUseSkill()) {
+            btnSkill.setText("COOLDOWN (" + player.getSkillCooldown() + ")");
+            btnSkill.setColor(0.6f, 0.6f, 0.6f, 0.5f); // Dimmed grey
+        } else {
+            io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill cs = player.getClassSkill();
+            String skillBtnText = (cs != null) ? cs.getCombatSkillName().toUpperCase() : "SKILL";
+            btnSkill.setText(skillBtnText);
+            btnSkill.setColor(1, 1, 1, playerTurn ? 1f : 0.5f);
+        }
         if (!isDawnWardenBattle() && !isPaleShepherdBattle()) {
             btnEscape.setColor(1, 1, 1, alpha);
         }
@@ -2385,6 +2414,59 @@ public class BattleScreen implements Screen {
         hudStage.getViewport().apply();
         hudStage.act(hudDelta);
         hudStage.draw();
+        syncUi(); // Keep UI in sync with state machine
+        // --- KEYBOARD: NUM 1-5 for Battle Actions (Disabled when Item Popup is open) ---
+        if ((itemPopup == null || !itemPopup.isVisible()) && battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_1)) {
+                btnAttack.fire(new ChangeListener.ChangeEvent());
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_2)) {
+                btnDefend.fire(new ChangeListener.ChangeEvent());
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_3)) {
+                btnSkill.fire(new ChangeListener.ChangeEvent());
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_4) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_4)) {
+                btnItem.fire(new ChangeListener.ChangeEvent());
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_5) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_5)) {
+                btnEscape.fire(new ChangeListener.ChangeEvent());
+            }
+        }
+
+// --- KEYBOARD: NUM 1-4 for Item Usage (When Item Popup is open) ---
+        if (itemPopup != null && itemPopup.isVisible() && battleSystem.getCurrentState() == BattleState.PLAYER_TURN) {
+            Inventory inv = player.getInventory();
+            if (inv != null) {
+                for (int i = 0; i < inv.getCapacity(); i++) {
+                    int keyNum = Input.Keys.NUM_1 + i;
+                    int numpadNum = Input.Keys.NUMPAD_1 + i;
+                    if (Gdx.input.isKeyJustPressed(keyNum) || Gdx.input.isKeyJustPressed(numpadNum)) {
+                        if (i < inv.size()) {
+                            Item item = inv.getItem(i);
+                            // Re-use the exact same validation logic as the USE button
+                            boolean isCurse = item.isCurse();
+                            io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType eff = item.getEffectType();
+                            boolean isBoardOnly = (eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.MOVE
+                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_EXACT
+                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_CLAMP
+                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SNAKE_WARD
+                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SWAP_PLAYER
+                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SCOUT);
+                            boolean lethalCost = (item.getSecondaryEffectType() == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.HEALTH
+                                && item.getSecondaryEffectValue() < 0
+                                && player.getHealth() + item.getSecondaryEffectValue() <= 0);
+                            boolean canUseInBattle = !isCurse && !isBoardOnly && !lethalCost;
+
+                            if (canUseInBattle) {
+                                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                                spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
+                                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, item.getName().toUpperCase(), Color.valueOf("#81c784"), false);
+                                battleSystem.onPlayerUseItem(i);
+                                itemPopup.setVisible(false);
+                                syncUi();
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if (!isPaused) {
             syncUi(); // Keep UI in sync with state machine

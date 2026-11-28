@@ -3,7 +3,9 @@ package io.github.snakes_and_ladders_roll_of_fate.skills;
 import com.badlogic.gdx.assets.AssetDescriptor;
 import com.badlogic.gdx.graphics.Texture;
 import io.github.snakes_and_ladders_roll_of_fate.RollOfFateGame;
+import io.github.snakes_and_ladders_roll_of_fate.entities.Enemy;
 import io.github.snakes_and_ladders_roll_of_fate.entities.Player;
+import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem;
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 
 /**
@@ -57,5 +59,24 @@ public class TurtleShellSkill implements ClassSkill {
         player.setHazardImmune(true);
         String msg = "Turtle activated Slow & Steady! Cleansed " + cleansed + " curses and marching 4 safe tiles!";
         return new SkillResult(true, msg, 4, true);
+    }
+
+    @Override
+    public String getCombatSkillName() {
+        return "Iron Fortress";
+    }
+
+    @Override
+    public String getCombatDescription() {
+        return "Block all damage from the next attack and retaliate with a crushing riposte!";
+    }
+
+    @Override
+    public SkillResult executeCombat(Player player, Enemy enemy, BattleSystem battleSystem) {
+        if (battleSystem == null) {
+            return new SkillResult(false, "No active battle.");
+        }
+        battleSystem.setTurtleFortressActive(true);
+        return new SkillResult(true, "IRON FORTRESS! You brace for impact and prepare to riposte!");
     }
 }

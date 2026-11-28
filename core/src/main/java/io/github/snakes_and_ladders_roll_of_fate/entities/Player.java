@@ -340,7 +340,9 @@ public class Player extends Entity {
     }
     public int getExpThresh() { return expThresh; }
     public void setExpThresh(int expThresh) { this.expThresh = expThresh; }
-
+    public boolean canUseSkill() { return skillCooldown <= 0; }
+    public void useSkill() { this.skillCooldown = (classSkill != null) ? classSkill.getMaxCooldown() : 4; }
+    public void tickSkillCooldown() { decrementSkillCooldown(); }
     public Inventory getInventory() { return inventory; }
     public void setInventory(Inventory inventory) { this.inventory = inventory; }
 

@@ -304,6 +304,8 @@ public class BoardScreen implements Screen {
     private Label inventoryTipLabel;
     private boolean itemUsedThisTurn = false;
     private boolean isItemMovement = false;
+    private List<Button> activeEventChoices = new ArrayList<>();
+    private int highlightedChoiceIndex = 0;
 
     // Class Skill Button UI (Compact, beside Inventory Satchel)
     private Button skillButton;
@@ -2107,7 +2109,19 @@ public class BoardScreen implements Screen {
     // =========================================================================
     // INTERACTIVE EVENT MODAL SYSTEM (Tile Landing Events, Combat, Barter)
     // =========================================================================
-
+    /**
+     * Updates the visual highlight of the event choices based on the keyboard index.
+     */
+    private void updateChoiceHighlights() {
+        for (int i = 0; i < activeEventChoices.size(); i++) {
+            Button btn = activeEventChoices.get(i);
+            if (i == highlightedChoiceIndex) {
+                btn.setColor(1.15f, 1.15f, 1.15f, 1f); // Brighten the selected choice
+            } else {
+                btn.setColor(1f, 1f, 1f, 1f);           // Reset to normal
+            }
+        }
+    }
     /**
      * Builds the unified Parchment Scroll Event Modal for tile landing encounters.
      * Scroll asset is enlarged to 940x690 and inner content cards are constrained to 530px,
@@ -2354,6 +2368,8 @@ public class BoardScreen implements Screen {
 
         final Player player = game.getCurrentPlayer();
         eventContentTable.clear();
+        activeEventChoices.clear();     // <--- ADD THIS
+        highlightedChoiceIndex = 0;     // <--- ADD THIS
 
         // 1. Color-coded category badge
         Color badgeBgColor;
@@ -2439,6 +2455,7 @@ public class BoardScreen implements Screen {
             }
 
             Button choiceCard = buildChoiceCardButton(choice, available);
+            activeEventChoices.add(choiceCard); // <--- ADD THIS LINE
 
             if (available) {
                 UIUtils.addScaleHoverEffect(choiceCard);
@@ -3346,6 +3363,8 @@ public class BoardScreen implements Screen {
     private void closeEventModal() {
         isD20Rolling = false;
         d20PendingResult = null;
+        activeEventChoices.clear();
+        highlightedChoiceIndex = 0;
         modalScrim.setVisible(false);
         eventModalTable.setVisible(false);
         isEventModalActive = false;
@@ -3495,6 +3514,13 @@ public class BoardScreen implements Screen {
                 pauseGame();
             }
         }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            // Only allow rolling if waiting for roll, not paused, and no modal is open
+            if (turnState == TurnState.WAITING_FOR_ROLL && !isPaused && !isEventModalActive) {
+                triggerRoll();
+            }
+        }
+
 
         // 1. Update Game Physics & Camera only when NOT paused
         if (!isPaused) {
@@ -3949,6 +3975,50 @@ public class BoardScreen implements Screen {
             case WAITING_FOR_ROLL:
             default:
                 break;
+        }
+        // --- KEYBOARD: TAB to Toggle Inventory ---
+        if (Gdx.input.isKeyJustPressed(Input.Keys.TAB)) {
+            if (turnState == TurnState.WAITING_FOR_ROLL && !isEventModalActive && !isPaused) {
+                if (inventoryPopup != null) {
+                    boolean willShow = !inventoryPopup.isVisible();
+                    if (willShow) refreshInventoryUI();
+                    inventoryPopup.setVisible(willShow);
+                }
+            }
+        }
+
+// --- KEYBOARD: NUM Keys for Item Usage (when inventory is open) ---
+        if (inventoryPopup != null && inventoryPopup.isVisible()) {
+            Player p = game.getCurrentPlayer();
+            if (p != null && p.getInventory() != null) {
+                int cap = p.getInventory().getCapacity();
+                for (int i = 0; i < cap; i++) {
+                    int keyNum = Input.Keys.NUM_1 + i;
+                    int numpadNum = Input.Keys.NUMPAD_1 + i;
+                    if (Gdx.input.isKeyJustPressed(keyNum) || Gdx.input.isKeyJustPressed(numpadNum)) {
+                        if (i < p.getInventory().size()) {
+                            handleUseInventoryItem(i);
+                            refreshInventoryUI();
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- KEYBOARD: Arrow Keys & Enter/Space for Event Choices ---
+        if (isEventModalActive && !activeEventChoices.isEmpty()) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+                highlightedChoiceIndex = (highlightedChoiceIndex - 1 + activeEventChoices.size()) % activeEventChoices.size();
+                updateChoiceHighlights();
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+                highlightedChoiceIndex = (highlightedChoiceIndex + 1) % activeEventChoices.size();
+                updateChoiceHighlights();
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                Button selectedBtn = activeEventChoices.get(highlightedChoiceIndex);
+                if (!selectedBtn.isDisabled()) {
+                    selectedBtn.fire(new ChangeListener.ChangeEvent());
+                }
+            }
         }
     }
 
