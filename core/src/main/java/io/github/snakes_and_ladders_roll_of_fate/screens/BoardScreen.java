@@ -304,8 +304,19 @@ public class BoardScreen implements Screen {
     private Label inventoryTipLabel;
     private boolean itemUsedThisTurn = false;
     private boolean isItemMovement = false;
-    private List<Button> activeEventChoices = new ArrayList<>();
+    private final List<Button> activeEventChoices = new ArrayList<>();
     private int highlightedChoiceIndex = 0;
+    private Button eventModalCancelBtn;
+    private Button eventRevealBtn;
+    private Button eventContinueBtn;
+    private Button eventCombatActionBtn;
+
+    private Button inventoryButton;
+    private Button inventoryCloseBtn;
+    private final List<Button> inventoryFocusables = new ArrayList<>();
+    private int inventoryFocusIdx = 0;
+    private final List<Button> dicePickerBtns = new ArrayList<>();
+    private int dicePickerFocusIdx = 0;
 
     // Class Skill Button UI (Compact, beside Inventory Satchel)
     private Button skillButton;
@@ -325,6 +336,14 @@ public class BoardScreen implements Screen {
     private Table pauseModalTable;
     private Table settingsModalTable;
     private Table leaveConfirmModalTable;
+    private final List<Button> pauseFocusables = new ArrayList<>();
+    private int pauseFocusIdx = 0;
+    private final List<Actor> settingsFocusables = new ArrayList<>();
+    private int settingsFocusIdx = 0;
+    private Slider settingsMusicSlider;
+    private Slider settingsSfxSlider;
+    private final List<Button> leaveFocusables = new ArrayList<>();
+    private int leaveFocusIdx = 0;
 
     // Act Transition Immersion & Toast UI
     private Table actTransitionToastTable;

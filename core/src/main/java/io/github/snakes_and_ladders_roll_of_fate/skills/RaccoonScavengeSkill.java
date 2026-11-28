@@ -105,6 +105,7 @@ public class RaccoonScavengeSkill implements ClassSkill {
         }
         int scavDmg = battleSystem.calculateDamage(player, enemy);
         enemy.setHealth(Math.max(0, enemy.getHealth() - scavDmg));
+        battleSystem.notifyDamageDealt(player, enemy, scavDmg, false, false);
         if (enemy.getHealth() <= 0) {
             Item loot = Item.createConsumable("Scavenged Rations", EventEffectType.HEALTH, 25, "Restores 25 HP");
             player.addItem(loot);

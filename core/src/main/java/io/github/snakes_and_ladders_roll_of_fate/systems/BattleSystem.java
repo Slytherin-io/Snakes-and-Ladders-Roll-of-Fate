@@ -147,6 +147,12 @@ public class BattleSystem {
         this.battleListener = listener;
     }
 
+    public void notifyDamageDealt(Entity attacker, Entity defender, int damage, boolean isCrit, boolean isMiss) {
+        if (battleListener != null) {
+            battleListener.onDamageDealt(attacker, defender, damage, isCrit, isMiss);
+        }
+    }
+
     public void setEnemyAttackStarter(EnemyAttackStarter starter) {
         this.enemyAttackStarter = starter;
     }

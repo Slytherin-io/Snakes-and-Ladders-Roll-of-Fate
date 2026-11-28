@@ -77,6 +77,7 @@ public class FoxCunningSkill implements ClassSkill {
         int baseDmg = Math.max(1, player.getAttack() - enemy.getDefense());
         int foxDmg = baseDmg * 2;
         enemy.setHealth(Math.max(0, enemy.getHealth() - foxDmg));
+        battleSystem.notifyDamageDealt(player, enemy, foxDmg, true, false);
         return new SkillResult(true, "GUARANTEED CRIT! You strike a vital weak point for " + foxDmg + " damage!");
     }
 }

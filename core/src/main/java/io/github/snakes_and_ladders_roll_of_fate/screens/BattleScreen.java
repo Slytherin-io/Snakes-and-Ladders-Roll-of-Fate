@@ -58,7 +58,11 @@ public class BattleScreen implements Screen {
         PLAYER_SWORD,
         SNAKE_FANGS,
         DAWN_SOLAR_CLAW,
-        SHEPHERD_SCYTHE
+        SHEPHERD_SCYTHE,
+        CAT_DUAL_CLAW,
+        FOX_VITAL_PIERCE,
+        RACCOON_HOOK_SWIPE,
+        TURTLE_RIPOSTE
     }
 
     public static class HitSpark {
@@ -163,6 +167,13 @@ public class BattleScreen implements Screen {
 
     private float playerFlinchTimer = 0f;
     private float enemyFlinchTimer = 0f;
+
+    // Class Skill Animation States & Kinematics
+    private float skillAnimTimer = 0f;
+    private float skillAnimDuration = 0f;
+    private CharacterClass activeSkillClass = null;
+    private boolean skillPhase1Done = false;
+    private boolean skillPhase2Done = false;
 
     private float screenShakeTimer = 0f;
     private float screenShakeDuration = 0f;
@@ -443,6 +454,113 @@ public class BattleScreen implements Screen {
         }
     }
 
+    private float getEnemyCenterY() {
+        if (isBossBattle()) {
+            return ENEMY_DRAW_Y + 70f;
+        } else if (currentSnakeAct == 1) {
+            return 282f + 53f; // Centered on ~107px tall Forest Green Snake
+        } else if (currentSnakeAct == 2) {
+            return 282f + 70f; // Centered on ~139px tall Sapphire Horned Serpent
+        } else {
+            return 282f + 76f; // Centered on ~152px tall Crimson Magma Wyrm
+        }
+    }
+
+    private void spawnTurtleFortressSparks(float cx, float cy) {
+        Color[] fortressColors = new Color[]{
+            Color.valueOf("#2e7d32"),
+            Color.valueOf("#4caf50"),
+            Color.valueOf("#69f0ae"),
+            Color.valueOf("#ffd700"),
+            Color.valueOf("#fff9c4")
+        };
+        for (int i = 0; i < 22; i++) {
+            float angle = MathUtils.random(0f, 360f) * MathUtils.degRad;
+            float speed = MathUtils.random(90f, 240f);
+            float vx = MathUtils.cos(angle) * speed;
+            float vy = MathUtils.sin(angle) * speed + MathUtils.random(30f, 120f);
+            float dur = MathUtils.random(0.40f, 0.70f);
+            float size = MathUtils.random(4f, 7f);
+            Color c = fortressColors[MathUtils.random(fortressColors.length - 1)];
+            hitSparks.add(new HitSpark(cx, cy, vx, vy, dur, size, 220f, c));
+        }
+    }
+
+    private void spawnScavengeLootSparks(float cx, float cy) {
+        Color[] lootColors = new Color[]{
+            Color.valueOf("#ffd700"), // Gold
+            Color.valueOf("#ffea00"), // Yellow coin
+            Color.valueOf("#00e676"), // Emerald ration
+            Color.valueOf("#69f0ae"), // Mint heal
+            Color.valueOf("#ffffff")  // Sparkle
+        };
+        for (int i = 0; i < 26; i++) {
+            float angle = MathUtils.random(0f, 360f) * MathUtils.degRad;
+            float speed = MathUtils.random(120f, 320f);
+            float vx = MathUtils.cos(angle) * speed;
+            float vy = MathUtils.sin(angle) * speed + MathUtils.random(60f, 180f);
+            float dur = MathUtils.random(0.45f, 0.75f);
+            float size = MathUtils.random(4f, 7.5f);
+            Color c = lootColors[MathUtils.random(lootColors.length - 1)];
+            hitSparks.add(new HitSpark(cx, cy, vx, vy, dur, size, 380f, c));
+        }
+    }
+
+    private void startPlayerSkillAnimation() {
+        CharacterClass cls = player.getCharacterClass();
+        if (cls == null) {
+            battleSystem.onPlayerUseSkill();
+            syncUi();
+            return;
+        }
+
+        activeSkillClass = cls;
+        skillPhase1Done = false;
+        skillPhase2Done = false;
+
+        switch (cls) {
+            case CAT:
+                skillAnimDuration = 0.72f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                }
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "⚡ DOUBLE STRIKE!", Color.valueOf("#00e5ff"), true);
+                break;
+
+            case TURTLE:
+                skillAnimDuration = 0.65f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
+                }
+                spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
+                spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 30f, 130f, Color.valueOf("#2e7d32"), Color.valueOf("#ffd700"), 0.55f);
+                spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 15f, 85f, Color.valueOf("#66bb6a"), Color.valueOf("#ffffff"), 0.45f);
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🛡️ IRON FORTRESS!", Color.valueOf("#69f0ae"), true);
+                spawnTurtleFortressSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
+                break;
+
+            case FOX:
+                skillAnimDuration = 0.65f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.SCOUT_FLARE);
+                }
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🎯 VITAL STRIKE!", Color.valueOf("#ff9100"), true);
+                break;
+
+            case RACCOON:
+                skillAnimDuration = 0.60f;
+                skillAnimTimer = skillAnimDuration;
+                if (game.getAudioManager() != null) {
+                    game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                }
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🎒 SCAVENGE STRIKE!", Color.valueOf("#ffd54f"), true);
+                break;
+        }
+    }
+
     private void spawnFloatingText(float x, float y, String text, Color color, boolean isCrit) {
         damageNumbers.add(new DamageNumber(text, x, y, 1.15f, color, isCrit));
     }
@@ -528,18 +646,29 @@ public class BattleScreen implements Screen {
                 if (game.getRunTracker() != null) {
                     game.getRunTracker().recordSnakeCombat(player, damage, false, isCrit);
                 }
-                float enemyHitY;
-                if (isBossBattle()) {
-                    enemyHitY = ENEMY_DRAW_Y + 70f;
-                } else if (currentSnakeAct == 1) {
-                    enemyHitY = 282f + 53f; // Centered on ~107px tall Forest Green Snake
-                } else if (currentSnakeAct == 2) {
-                    enemyHitY = 282f + 70f; // Centered on ~139px tall Sapphire Horned Serpent
-                } else {
-                    enemyHitY = 282f + 76f; // Centered on ~152px tall Crimson Magma Wyrm
+                float enemyHitY = getEnemyCenterY();
+
+                // Riposte counter-strike when Turtle's Iron Fortress deflects during enemy turn
+                if (player.getCharacterClass() == CharacterClass.TURTLE && battleSystem.getCurrentState() == BattleState.ENEMY_TURN) {
+                    spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 40f, 160f, Color.valueOf("#ffd700"), Color.valueOf("#ffffff"), 0.45f);
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🛡️ DEFLECTED! 0 DMG", Color.valueOf("#4fc3f7"), true);
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyHitY, 0.35f, SlashStyle.TURTLE_RIPOSTE, true, 0f));
+                    spawnTurtleFortressSparks(ENEMY_X, enemyHitY);
+                    spawnFloatingText(ENEMY_X, enemyHitY + 110f, "⚡ CRUSHING RIPOSTE!", Color.valueOf("#ffd54f"), true);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    spawnDamageNumber(ENEMY_X, enemyHitY + 65f, damage, true, false);
+                    triggerScreenShake(18f, 0.35f);
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.BOSS_ROAR);
+                    }
+                    return;
                 }
-                spawnSlash(ENEMY_X, enemyHitY, false, isCrit);
-                spawnHitSparks(ENEMY_X, enemyHitY, false, isCrit ? 26 : 16, isCrit);
+
+                // If not in a skill animation, spawn generic sword slash & sparks
+                if (skillAnimTimer <= 0f) {
+                    spawnSlash(ENEMY_X, enemyHitY, false, isCrit);
+                    spawnHitSparks(ENEMY_X, enemyHitY, false, isCrit ? 26 : 16, isCrit);
+                }
                 enemyFlinchTimer = FLINCH_DURATION;
                 spawnDamageNumber(ENEMY_X, enemyHitY + 65f, damage, isCrit, isMiss);
                 triggerScreenShake(isCrit ? 15f : 8f, isCrit ? 0.28f : 0.18f);
@@ -820,7 +949,7 @@ public class BattleScreen implements Screen {
         // Attack Listener
         btnAttack.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
                     playerLungeTimer = PLAYER_LUNGE_DURATION;
                     playerAttackLanded = false;
@@ -832,7 +961,7 @@ public class BattleScreen implements Screen {
         // Defend Listener
         btnDefend.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.DEFEND_GUARD);
                     spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
                     spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "GUARD", Color.valueOf("#ffd54f"), false);
@@ -845,9 +974,13 @@ public class BattleScreen implements Screen {
         // Skill Listener
         btnSkill.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
-                    if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
-                    battleSystem.onPlayerUseSkill();
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
+                    if (!player.canUseSkill()) {
+                        if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
+                        spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "COOLDOWN (" + player.getSkillCooldown() + ")", Color.valueOf("#ff7043"), false);
+                        return;
+                    }
+                    startPlayerSkillAnimation();
                     syncUi();
                 }
             }
@@ -856,7 +989,7 @@ public class BattleScreen implements Screen {
         // Item Listener
         btnItem.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     if (!itemPopup.isVisible()) refreshItemPopup();
                     itemPopup.setVisible(!itemPopup.isVisible());
@@ -867,7 +1000,7 @@ public class BattleScreen implements Screen {
         // Escape Listener
         btnEscape.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent e, Actor a) {
-                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+                if (battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
                     if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
                     battleSystem.onPlayerEscape();
                     syncUi();
@@ -1767,7 +1900,7 @@ public class BattleScreen implements Screen {
 
     private void syncUi() {
         BattleState state = battleSystem.getCurrentState();
-        boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f);
+        boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f || skillAnimTimer > 0f);
         boolean dialogueActive = isIntroDialogueActive || isEpilogueDialogueActive;
         boolean playerTurn = (!bossEntranceActive && !dialogueActive && state == BattleState.PLAYER_TURN && !isAnimating);
         boolean ended = (state == BattleState.BATTLE_END);
@@ -2349,6 +2482,92 @@ public class BattleScreen implements Screen {
             }
         }
 
+        if (skillAnimTimer > 0f) {
+            skillAnimTimer -= delta;
+            float p = 1.0f - (skillAnimTimer / skillAnimDuration);
+            float enemyY = getEnemyCenterY();
+
+            if (activeSkillClass == CharacterClass.CAT) {
+                // Cat Double Strike: Strike 1 at p >= 0.28, Strike 2 at p >= 0.62
+                if (p >= 0.28f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.28f, SlashStyle.CAT_DUAL_CLAW, false, -38f));
+                    spawnHitSparks(ENEMY_X, enemyY, false, 18, false);
+                    enemyFlinchTimer = FLINCH_DURATION * 0.7f;
+                    triggerScreenShake(7f, 0.16f);
+                }
+                if (p >= 0.62f && !skillPhase2Done) {
+                    skillPhase2Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.32f, SlashStyle.CAT_DUAL_CLAW, true, +38f));
+                    spawnHitSparks(ENEMY_X, enemyY, false, 28, true);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    triggerScreenShake(14f, 0.26f);
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+                }
+            } else if (activeSkillClass == CharacterClass.TURTLE) {
+                // Turtle Iron Fortress: Activates at p >= 0.30
+                if (p >= 0.30f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.LEVEL_UP);
+                    }
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+                }
+            } else if (activeSkillClass == CharacterClass.FOX) {
+                // Fox Vital Strike: Hits with guaranteed critical pierce at p >= 0.50
+                if (p >= 0.50f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.38f, SlashStyle.FOX_VITAL_PIERCE, true, -42f));
+                    spawnSolarBurst(ENEMY_X, enemyY, 24);
+                    spawnHitSparks(ENEMY_X, enemyY, false, 32, true);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    triggerScreenShake(16f, 0.32f);
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+                }
+            } else if (activeSkillClass == CharacterClass.RACCOON) {
+                // Raccoon Scavenge Strike: Hits at p >= 0.48
+                if (p >= 0.48f && !skillPhase1Done) {
+                    skillPhase1Done = true;
+                    int enemyHpBefore = enemy != null ? enemy.getHealth() : 0;
+                    if (game.getAudioManager() != null) {
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.ITEM_EQUIP);
+                        game.getAudioManager().playSound(AudioManager.SoundEffect.MONSTER_HIT);
+                    }
+                    slashEffects.add(new SlashEffect(ENEMY_X, enemyY, 0.32f, SlashStyle.RACCOON_HOOK_SWIPE, false, -25f));
+                    spawnScavengeLootSparks(ENEMY_X, enemyY);
+                    enemyFlinchTimer = FLINCH_DURATION;
+                    triggerScreenShake(9f, 0.20f);
+                    battleSystem.onPlayerUseSkill();
+                    syncUi();
+
+                    // If finishing blow triggered rations loot
+                    if (enemyHpBefore > 0 && enemy != null && enemy.getHealth() <= 0) {
+                        spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 70f);
+                        spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🎒 +25 HP RATIONS!", Color.valueOf("#69f0ae"), true);
+                    }
+                }
+            }
+
+            if (skillAnimTimer <= 0f) {
+                activeSkillClass = null;
+                syncUi();
+            }
+        }
+
         if (enemyLungeTimer > 0f) {
             enemyLungeTimer -= delta;
             float progress = 1.0f - (enemyLungeTimer / ENEMY_LUNGE_DURATION);
@@ -2416,7 +2635,7 @@ public class BattleScreen implements Screen {
         hudStage.draw();
         syncUi(); // Keep UI in sync with state machine
         // --- KEYBOARD: NUM 1-5 for Battle Actions (Disabled when Item Popup is open) ---
-        if ((itemPopup == null || !itemPopup.isVisible()) && battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f) {
+        if ((itemPopup == null || !itemPopup.isVisible()) && battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_1)) {
                 btnAttack.fire(new ChangeListener.ChangeEvent());
             } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_2)) {
@@ -2485,7 +2704,42 @@ public class BattleScreen implements Screen {
         float pLungeX = 0f;
         float pLungeY = 0f;
         float pRotation = 0f;
-        if (playerLungeTimer > 0f) {
+        float pScaleX = 1.0f;
+        float pScaleY = 1.0f;
+        boolean drawGhostTrail = false;
+
+        if (skillAnimTimer > 0f) {
+            float p = 1.0f - (skillAnimTimer / skillAnimDuration);
+            if (activeSkillClass == CharacterClass.CAT) {
+                drawGhostTrail = true;
+                if (p < 0.48f) {
+                    float s = p / 0.48f;
+                    pLungeX = MathUtils.sin(s * MathUtils.PI) * 520f;
+                    pLungeY = MathUtils.sin(s * MathUtils.PI) * 20f;
+                    pRotation = -MathUtils.sin(s * MathUtils.PI) * 10f;
+                } else {
+                    float s = (p - 0.48f) / 0.52f;
+                    pLungeX = MathUtils.sin(s * MathUtils.PI) * 550f;
+                    pLungeY = MathUtils.sin(s * MathUtils.PI) * 32f;
+                    pRotation = -MathUtils.sin(s * MathUtils.PI) * 14f;
+                }
+            } else if (activeSkillClass == CharacterClass.TURTLE) {
+                float brace = MathUtils.sin(p * MathUtils.PI);
+                pLungeY = -brace * 12f;
+                pScaleX = 1.0f + brace * 0.14f;
+                pScaleY = 1.0f - brace * 0.10f;
+            } else if (activeSkillClass == CharacterClass.FOX) {
+                float s = MathUtils.sin(p * MathUtils.PI);
+                pLungeX = s * 540f;
+                pLungeY = s * 115f;
+                pRotation = -s * 20f;
+            } else if (activeSkillClass == CharacterClass.RACCOON) {
+                float s = MathUtils.sin(p * MathUtils.PI);
+                pLungeX = s * 510f;
+                pLungeY = s * 35f;
+                pRotation = -p * 360f;
+            }
+        } else if (playerLungeTimer > 0f) {
             float p = 1.0f - (playerLungeTimer / PLAYER_LUNGE_DURATION);
             if (p < 0.15f) {
                 float w = p / 0.15f;
@@ -2504,10 +2758,51 @@ public class BattleScreen implements Screen {
             pFlinchX = -MathUtils.sin(playerFlinchTimer * 40f) * p * 26f;
         }
 
-        // Draw Player
+        // Draw Player Ghost Afterimage Trail (Cat Double Strike)
         TextureRegion pFrame = playerIdleAnim != null ? playerIdleAnim.getKeyFrame(stateTime, true) : null;
+        float bob = (player.getHealth() <= 0) ? 0f : MathUtils.sin(stateTime * 3f) * 4f;
+        float drawPX = PLAYER_X + pLungeX + pFlinchX;
+        float drawPY = CHAR_DRAW_Y + (player.getHealth() <= 0 ? -12f : bob) + pLungeY;
+        float drawH = (player.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE;
+
+        if (drawGhostTrail && pFrame != null && Math.abs(pLungeX) > 20f) {
+            batch.setColor(0.15f, 0.85f, 1.0f, 0.40f);
+            batch.draw(pFrame,
+                drawPX - CHAR_DISPLAY_SIZE / 2 - Math.signum(pLungeX) * 38f, drawPY,
+                CHAR_DISPLAY_SIZE / 2, CHAR_DISPLAY_SIZE / 2,
+                CHAR_DISPLAY_SIZE, drawH,
+                pScaleX, pScaleY, pRotation);
+            batch.setColor(Color.WHITE);
+        }
+
+        // Turtle Fortress Barrier Aura (Drawn around player platform)
+        if (radialGlowTex != null && (battleSystem.isTurtleFortressActive() || (skillAnimTimer > 0f && activeSkillClass == CharacterClass.TURTLE))) {
+            float barrierCenterY = CHAR_DRAW_Y + 75f;
+            float pulse = 0.70f + 0.30f * MathUtils.sin(stateTime * 4.5f);
+
+            // Shimmering outer emerald dome
+            batch.setColor(0.12f, 0.85f, 0.35f, 0.32f * pulse);
+            batch.draw(radialGlowTex, PLAYER_X - 150f, barrierCenterY - 150f, 300f, 300f);
+
+            // Radiant gold-emerald inner shield core
+            batch.setColor(1.0f, 0.90f, 0.30f, 0.26f * pulse);
+            batch.draw(radialGlowTex, PLAYER_X - 100f, barrierCenterY - 100f, 200f, 200f);
+
+            // Rotating crystalline fortress rune motes
+            for (int k = 0; k < 4; k++) {
+                float ang = stateTime * 2.2f + k * (MathUtils.PI / 2f);
+                float rx = PLAYER_X + MathUtils.cos(ang) * 115f;
+                float ry = barrierCenterY + MathUtils.sin(ang) * 55f;
+                batch.setColor(0.4f, 1.0f, 0.6f, 0.85f);
+                batch.draw(whitePixelTex, rx - 5f, ry - 5f, 5f, 5f, 10f, 10f, 1f, 1f, 45f + stateTime * 90f, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, 0.95f);
+                batch.draw(whitePixelTex, rx - 2.5f, ry - 2.5f, 2.5f, 2.5f, 5f, 5f, 1f, 1f, 45f + stateTime * 90f, 0, 0, 1, 1, false, false);
+            }
+            batch.setColor(Color.WHITE);
+        }
+
+        // Draw Player
         if (pFrame != null) {
-            float bob = (player.getHealth() <= 0) ? 0f : MathUtils.sin(stateTime * 3f) * 4f;
             float pAlpha = (player.getHealth() <= 0) ? 0.45f : 1.0f;
             if (playerFlinchTimer > 0.12f) {
                 batch.setColor(1f, 0.25f, 0.25f, 1f); // Red hurt flash
@@ -2516,14 +2811,11 @@ public class BattleScreen implements Screen {
             } else {
                 batch.setColor(Color.WHITE);
             }
-            float drawPX = PLAYER_X + pLungeX + pFlinchX;
-            float drawPY = CHAR_DRAW_Y + (player.getHealth() <= 0 ? -12f : bob) + pLungeY;
-            float drawH = (player.getHealth() <= 0) ? CHAR_DISPLAY_SIZE * 0.72f : CHAR_DISPLAY_SIZE;
             batch.draw(pFrame,
                 drawPX - CHAR_DISPLAY_SIZE / 2, drawPY,
                 CHAR_DISPLAY_SIZE / 2, CHAR_DISPLAY_SIZE / 2,
                 CHAR_DISPLAY_SIZE, drawH,
-                1f, 1f, pRotation);
+                pScaleX, pScaleY, pRotation);
             batch.setColor(Color.WHITE);
         }
 
@@ -2672,6 +2964,50 @@ public class BattleScreen implements Screen {
                 1f, 1f, eRotation);
             batch.setColor(Color.WHITE);
         }
+
+        // Fox Vital Strike Target Reticle (Locks onto enemy core during skill leap)
+        if (skillAnimTimer > 0f && activeSkillClass == CharacterClass.FOX && enemy != null && enemy.getHealth() > 0) {
+            float p = 1.0f - (skillAnimTimer / skillAnimDuration);
+            float reticleAlpha = (p < 0.55f) ? Math.min(1.0f, p * 3.5f) : Math.max(0f, 1.0f - (p - 0.55f) / 0.30f);
+            if (reticleAlpha > 0f) {
+                float targetCX = ENEMY_X;
+                float targetCY = getEnemyCenterY();
+                float contract = (p < 0.45f) ? (1.6f - (p / 0.45f) * 0.6f) : 1.0f;
+                float reticleR = 48f * contract;
+                float spinAngle = p * 120f;
+
+                int sides = 16;
+                float segThick = 2.5f;
+                for (int s = 0; s < sides; s++) {
+                    float a1 = spinAngle + (s / (float) sides) * 360f;
+                    float a2 = spinAngle + ((s + 0.65f) / (float) sides) * 360f;
+                    float x1 = targetCX + MathUtils.cosDeg(a1) * reticleR;
+                    float y1 = targetCY + MathUtils.sinDeg(a1) * reticleR;
+                    float x2 = targetCX + MathUtils.cosDeg(a2) * reticleR;
+                    float y2 = targetCY + MathUtils.sinDeg(a2) * reticleR;
+                    float dx = x2 - x1;
+                    float dy = y2 - y1;
+                    float dLen = (float) Math.sqrt(dx * dx + dy * dy);
+                    float segAngle = MathUtils.radDeg * MathUtils.atan2(dy, dx);
+
+                    batch.setColor(1.0f, 0.2f, 0.15f, reticleAlpha * 0.85f);
+                    batch.draw(whitePixelTex, x1, y1 - segThick / 2, 0f, segThick / 2, dLen, segThick, 1f, 1f, segAngle, 0, 0, 1, 1, false, false);
+                }
+
+                float crossArm = 24f;
+                float innerGap = 8f;
+                float crossThick = 2f;
+                batch.setColor(1.0f, 0.85f, 0.2f, reticleAlpha * 0.95f);
+                batch.draw(whitePixelTex, targetCX - crossThick / 2, targetCY + innerGap, crossThick, crossArm);
+                batch.draw(whitePixelTex, targetCX - crossThick / 2, targetCY - innerGap - crossArm, crossThick, crossArm);
+                batch.draw(whitePixelTex, targetCX - innerGap - crossArm, targetCY - crossThick / 2, crossArm, crossThick);
+                batch.draw(whitePixelTex, targetCX + innerGap, targetCY - crossThick / 2, crossArm, crossThick);
+
+                batch.setColor(1.0f, 0.1f, 0.1f, reticleAlpha);
+                batch.draw(whitePixelTex, targetCX - 3f, targetCY - 3f, 6f, 6f);
+                batch.setColor(Color.WHITE);
+            }
+        }
     }
 
     private void completeBossEntrance() {
@@ -2769,6 +3105,61 @@ public class BattleScreen implements Screen {
                 batch.draw(whitePixelTex, slash.x - len / 2, slash.y - (thickness * 1.7f) / 2, len / 2, (thickness * 1.7f) / 2, len, thickness * 1.7f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
                 batch.setColor(1.0f, 0.82f, 0.35f, alpha * 0.9f);
                 batch.draw(whitePixelTex, slash.x - len / 2, slash.y - thickness / 2, len / 2, thickness / 2, len * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+            } else if (slash.style == SlashStyle.CAT_DUAL_CLAW) {
+                float len = Math.min(260f, (t / 0.22f) * 260f);
+                float thickness = Math.max(2.2f, (1.0f - t) * 18f);
+                float[] rakeOffsets = { -16f, 0f, 16f };
+                for (float off : rakeOffsets) {
+                    float cx = slash.x + MathUtils.cosDeg(slash.angle + 90f) * off;
+                    float cy = slash.y + MathUtils.sinDeg(slash.angle + 90f) * off;
+                    batch.setColor(0.0f, 0.85f, 1.0f, alpha * 0.65f);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - (thickness * 1.6f) / 2, len / 2, (thickness * 1.6f) / 2, len, thickness * 1.6f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                    batch.setColor(0.9f, 0.95f, 1.0f, alpha * 0.95f);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - thickness / 2, len / 2, thickness / 2, len * 0.96f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                    batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                    batch.draw(whitePixelTex, cx - len / 2, cy - (thickness * 0.35f) / 2, len / 2, (thickness * 0.35f) / 2, len * 0.9f, thickness * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                }
+            } else if (slash.style == SlashStyle.FOX_VITAL_PIERCE) {
+                float beamLen = Math.min(380f, (t / 0.20f) * 380f);
+                float beamThick = Math.max(3f, (1.0f - t) * 26f);
+                batch.setColor(1.0f, 0.15f, 0.20f, alpha * 0.65f);
+                batch.draw(whitePixelTex, slash.x - beamLen / 2, slash.y - (beamThick * 1.8f) / 2, beamLen / 2, (beamThick * 1.8f) / 2, beamLen, beamThick * 1.8f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.82f, 0.15f, alpha * 0.95f);
+                batch.draw(whitePixelTex, slash.x - beamLen / 2, slash.y - beamThick / 2, beamLen / 2, beamThick / 2, beamLen * 0.98f, beamThick, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                batch.draw(whitePixelTex, slash.x - beamLen / 2, slash.y - (beamThick * 0.35f) / 2, beamLen / 2, (beamThick * 0.35f) / 2, beamLen * 0.92f, beamThick * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                float needleLen = beamLen * 0.45f;
+                float needleThick = beamThick * 0.6f;
+                batch.setColor(1.0f, 0.4f, 0.2f, alpha * 0.6f);
+                batch.draw(whitePixelTex, slash.x - needleLen / 2, slash.y - needleThick / 2, needleLen / 2, needleThick / 2, needleLen, needleThick, 1f, 1f, slash.angle + 90f, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.95f, 0.7f, alpha * 0.9f);
+                batch.draw(whitePixelTex, slash.x - needleLen / 2, slash.y - (needleThick * 0.35f) / 2, needleLen / 2, (needleThick * 0.35f) / 2, needleLen * 0.85f, needleThick * 0.35f, 1f, 1f, slash.angle + 90f, 0, 0, 1, 1, false, false);
+            } else if (slash.style == SlashStyle.RACCOON_HOOK_SWIPE) {
+                float arcLen = Math.min(290f, (t / 0.24f) * 290f);
+                float thickness = Math.max(2.8f, (1.0f - t) * 22f);
+                batch.setColor(0.3f, 0.85f, 0.95f, alpha * 0.55f);
+                batch.draw(whitePixelTex, slash.x - arcLen / 2, slash.y - (thickness * 1.6f) / 2, arcLen / 2, (thickness * 1.6f) / 2, arcLen, thickness * 1.6f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.88f, 0.35f, alpha * 0.92f);
+                batch.draw(whitePixelTex, slash.x - arcLen / 2, slash.y - thickness / 2, arcLen / 2, thickness / 2, arcLen * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                batch.draw(whitePixelTex, slash.x - arcLen / 2, slash.y - (thickness * 0.35f) / 2, arcLen / 2, (thickness * 0.35f) / 2, arcLen * 0.9f, thickness * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                float hookTrail = arcLen * 0.65f;
+                batch.setColor(1.0f, 0.78f, 0.2f, alpha * 0.45f);
+                batch.draw(whitePixelTex, slash.x - hookTrail / 2 - 14f, slash.y - (thickness * 0.8f) / 2 + 10f, hookTrail / 2, (thickness * 0.8f) / 2, hookTrail, thickness * 0.8f, 1f, 1f, slash.angle - 22f, 0, 0, 1, 1, false, false);
+            } else if (slash.style == SlashStyle.TURTLE_RIPOSTE) {
+                float waveLen = Math.min(340f, (t / 0.22f) * 340f);
+                float thickness = Math.max(3.5f, (1.0f - t) * 32f);
+                batch.setColor(0.05f, 0.85f, 0.35f, alpha * 0.65f);
+                batch.draw(whitePixelTex, slash.x - waveLen / 2, slash.y - (thickness * 1.8f) / 2, waveLen / 2, (thickness * 1.8f) / 2, waveLen, thickness * 1.8f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 0.85f, 0.25f, alpha * 0.95f);
+                batch.draw(whitePixelTex, slash.x - waveLen / 2, slash.y - thickness / 2, waveLen / 2, thickness / 2, waveLen * 0.95f, thickness, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                batch.setColor(1.0f, 1.0f, 1.0f, alpha);
+                batch.draw(whitePixelTex, slash.x - waveLen / 2, slash.y - (thickness * 0.35f) / 2, waveLen / 2, (thickness * 0.35f) / 2, waveLen * 0.9f, thickness * 0.35f, 1f, 1f, slash.angle, 0, 0, 1, 1, false, false);
+                float wingLen = waveLen * 0.5f;
+                float wingThick = thickness * 0.6f;
+                batch.setColor(0.1f, 0.9f, 0.5f, alpha * 0.5f);
+                batch.draw(whitePixelTex, slash.x - wingLen / 2, slash.y - wingThick / 2 + 18f, wingLen / 2, wingThick / 2, wingLen, wingThick, 1f, 1f, slash.angle + 35f, 0, 0, 1, 1, false, false);
+                batch.draw(whitePixelTex, slash.x - wingLen / 2, slash.y - wingThick / 2 - 18f, wingLen / 2, wingThick / 2, wingLen, wingThick, 1f, 1f, slash.angle - 35f, 0, 0, 1, 1, false, false);
             } else {
                 // Radiant Sword Slash Arc
                 float len = Math.min(270f, (t / 0.3f) * 270f);

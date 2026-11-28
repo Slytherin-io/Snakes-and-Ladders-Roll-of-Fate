@@ -76,10 +76,12 @@ public class CatAgilitySkill implements ClassSkill {
         }
         int dmg1 = battleSystem.calculateDamage(player, enemy);
         enemy.setHealth(Math.max(0, enemy.getHealth() - dmg1));
+        battleSystem.notifyDamageDealt(player, enemy, dmg1, false, false);
         int dmg2 = 0;
         if (enemy.getHealth() > 0) {
             dmg2 = battleSystem.calculateDamage(player, enemy);
             enemy.setHealth(Math.max(0, enemy.getHealth() - dmg2));
+            battleSystem.notifyDamageDealt(player, enemy, dmg2, false, false);
         }
         return new SkillResult(true, "DOUBLE STRIKE! You hit for " + dmg1 + " and " + dmg2 + " damage!");
     }
