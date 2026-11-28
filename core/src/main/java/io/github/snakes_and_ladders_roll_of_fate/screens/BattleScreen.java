@@ -49,7 +49,10 @@ import io.github.snakes_and_ladders_roll_of_fate.systems.BattleSystem.BattleOutc
 import io.github.snakes_and_ladders_roll_of_fate.ui.Assets;
 import io.github.snakes_and_ladders_roll_of_fate.ui.UIUtils;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class BattleScreen implements Screen {
@@ -219,6 +222,7 @@ public class BattleScreen implements Screen {
 
     // Fonts (MATCHING BoardScreen Hierarchy)
     private BitmapFont titleFont, topBannerFont, hudHpFont, battleLogFont, playerTagFont, miniFont;
+    private BitmapFont skillBtnFont;
     private BitmapFont damageFont, critFont;
     private BitmapFont modalTitleFont, modalSubFont, modalRewardFont, modalNarrativeFont, modalStatusFont;
     private BitmapFont introSpeakerFont, introBodyFont, introBtnFont;
@@ -239,12 +243,28 @@ public class BattleScreen implements Screen {
     private Table pauseModalTable;
     private Table settingsModalTable;
     private Table leaveConfirmModalTable;
+    private final List<Button> pauseFocusables = new ArrayList<>();
+    private int pauseFocusIdx = 0;
+    private final List<Actor> settingsFocusables = new ArrayList<>();
+    private int settingsFocusIdx = 0;
+    private com.badlogic.gdx.scenes.scene2d.ui.Slider settingsMusicSlider;
+    private com.badlogic.gdx.scenes.scene2d.ui.Slider settingsSfxSlider;
+    private final List<Button> leaveFocusables = new ArrayList<>();
+    private int leaveFocusIdx = 0;
 
     // UI Elements
     private Label topBannerLabel, battleLogLabel, playerHpLabel, enemyHpLabel, enemyNameLabel;
     private Table topBannerWrap, topBannerBox, playerHpWrap, enemyHpWrap;
     private Table battleLogContainer;
     private TextButton btnAttack, btnDefend, btnItem, btnEscape, btnSkill, continueBtn;
+    private final List<Button> battleActionFocusables = new ArrayList<>();
+    private int battleActionFocusIdx = 0;
+    private final List<Button> itemPopupFocusables = new ArrayList<>();
+    private final Button[] itemSlotButtons = new Button[4];
+    private int itemPopupFocusIdx = 0;
+    private Button itemCloseBtn;
+    private final List<Button> dialogueFocusables = new ArrayList<>();
+    private int dialogueFocusIdx = 0;
     private Table bottomBar;
     private Table bossIntroTable;
     private Label introDialogueLabel;
@@ -525,7 +545,7 @@ public class BattleScreen implements Screen {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
                 }
-                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "⚡ DOUBLE STRIKE!", Color.valueOf("#00e5ff"), true);
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "DOUBLE STRIKE!", Color.valueOf("#00e5ff"), true);
                 break;
 
             case TURTLE:
@@ -537,7 +557,7 @@ public class BattleScreen implements Screen {
                 spawnShieldPulse(PLAYER_X, CHAR_DRAW_Y + 80f);
                 spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 30f, 130f, Color.valueOf("#2e7d32"), Color.valueOf("#ffd700"), 0.55f);
                 spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 15f, 85f, Color.valueOf("#66bb6a"), Color.valueOf("#ffffff"), 0.45f);
-                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🛡️ IRON FORTRESS!", Color.valueOf("#69f0ae"), true);
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "IRON FORTRESS!", Color.valueOf("#69f0ae"), true);
                 spawnTurtleFortressSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
                 break;
 
@@ -547,7 +567,7 @@ public class BattleScreen implements Screen {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.SCOUT_FLARE);
                 }
-                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🎯 VITAL STRIKE!", Color.valueOf("#ff9100"), true);
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "VITAL STRIKE!", Color.valueOf("#ff9100"), true);
                 break;
 
             case RACCOON:
@@ -556,7 +576,7 @@ public class BattleScreen implements Screen {
                 if (game.getAudioManager() != null) {
                     game.getAudioManager().playSound(AudioManager.SoundEffect.ATTACK_SLASH);
                 }
-                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🎒 SCAVENGE STRIKE!", Color.valueOf("#ffd54f"), true);
+                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "SCAVENGE STRIKE!", Color.valueOf("#ffd54f"), true);
                 break;
         }
     }
@@ -611,6 +631,7 @@ public class BattleScreen implements Screen {
 
         // Load Fredoka Fonts (Option 1 pairing matching BoardScreen)
         titleFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 26, Color.WHITE);
+        skillBtnFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 20, Color.WHITE);
         topBannerFont = UIUtils.createFont("ui/Fredoka-Bold.ttf", 32, Color.valueOf("#fffdfa"));
         hudHpFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 22, Color.valueOf("#a81717"));
         battleLogFont = UIUtils.createFont("ui/Fredoka-SemiBold.ttf", 26, Color.WHITE);
@@ -651,10 +672,10 @@ public class BattleScreen implements Screen {
                 // Riposte counter-strike when Turtle's Iron Fortress deflects during enemy turn
                 if (player.getCharacterClass() == CharacterClass.TURTLE && battleSystem.getCurrentState() == BattleState.ENEMY_TURN) {
                     spawnShockwave(PLAYER_X, CHAR_DRAW_Y + 80f, 40f, 160f, Color.valueOf("#ffd700"), Color.valueOf("#ffffff"), 0.45f);
-                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🛡️ DEFLECTED! 0 DMG", Color.valueOf("#4fc3f7"), true);
+                    spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "DEFLECTED! 0 DMG", Color.valueOf("#4fc3f7"), true);
                     slashEffects.add(new SlashEffect(ENEMY_X, enemyHitY, 0.35f, SlashStyle.TURTLE_RIPOSTE, true, 0f));
                     spawnTurtleFortressSparks(ENEMY_X, enemyHitY);
-                    spawnFloatingText(ENEMY_X, enemyHitY + 110f, "⚡ CRUSHING RIPOSTE!", Color.valueOf("#ffd54f"), true);
+                    spawnFloatingText(ENEMY_X, enemyHitY + 110f, "CRUSHING RIPOSTE!", Color.valueOf("#ffd54f"), true);
                     enemyFlinchTimer = FLINCH_DURATION;
                     spawnDamageNumber(ENEMY_X, enemyHitY + 65f, damage, true, false);
                     triggerScreenShake(18f, 0.35f);
@@ -943,8 +964,25 @@ public class BattleScreen implements Screen {
         btnItem = new TextButton("ITEM", style);
         btnEscape = new TextButton("ESCAPE", style);
 
-        String skillName = player.getCharacterClass() != null ? player.getCharacterClass().getName().toUpperCase() + " SKILL" : "SKILL";
-        btnSkill = new TextButton(skillName, style);
+        TextButton.TextButtonStyle skillStyle = new TextButton.TextButtonStyle();
+        skillStyle.up = UIUtils.createRoundedDrawable(180, 100, 15, leather, pillBrown, 3);
+        skillStyle.over = UIUtils.createRoundedDrawable(180, 100, 15, Color.valueOf("#d8a46f"), pillBrown, 3);
+        skillStyle.font = skillBtnFont;
+        skillStyle.fontColor = Color.WHITE;
+
+        String rawSkillName = (player.getClassSkill() != null)
+            ? player.getClassSkill().getCombatSkillName().toUpperCase()
+            : (player.getCharacterClass() != null ? player.getCharacterClass().getName().toUpperCase() + " SKILL" : "SKILL");
+        btnSkill = new TextButton(formatSkillButtonText(rawSkillName), skillStyle);
+        btnSkill.getLabel().setAlignment(Align.center);
+        btnSkill.getLabelCell().padLeft(6f).padRight(6f);
+
+        battleActionFocusables.clear();
+        battleActionFocusables.add(btnAttack);
+        battleActionFocusables.add(btnDefend);
+        battleActionFocusables.add(btnSkill);
+        battleActionFocusables.add(btnItem);
+        battleActionFocusables.add(btnEscape);
 
         // Attack Listener
         btnAttack.addListener(new ChangeListener() {
@@ -1030,6 +1068,15 @@ public class BattleScreen implements Screen {
 
         hudStage.addActor(bottomBar);
     }
+
+    private String formatSkillButtonText(String text) {
+        if (text == null) return "SKILL";
+        if (text.contains(" ") && !text.contains("\n")) {
+            return text.replaceFirst(" ", "\n");
+        }
+        return text;
+    }
+
     /**
      * Builds the in-arena dramatic intro confrontation for Boss trials (The Dawn Warden and The Pale Shepherd).
      * Sits neatly in the bottom center space between the HP pills, below both fighters.
@@ -1689,6 +1736,11 @@ public class BattleScreen implements Screen {
             }
         });
 
+        pauseFocusables.clear();
+        pauseFocusables.add(resumeBtn);
+        pauseFocusables.add(settingsBtn);
+        pauseFocusables.add(leaveBtn);
+
         pauseContent.add(resumeBtn).size(340, 52).padBottom(12).center().row();
         pauseContent.add(settingsBtn).size(340, 52).padBottom(12).center().row();
         pauseContent.add(leaveBtn).size(340, 52).padBottom(16).center().row();
@@ -1724,6 +1776,7 @@ public class BattleScreen implements Screen {
         Slider.SliderStyle sliderStyle = UIUtils.createSliderStyle(darkBrown, darkBrown);
 
         Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
+        this.settingsMusicSlider = musicSlider;
         int musicVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getMusicVolume() * 10f) : 7;
         musicSlider.setValue(musicVal);
         Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(sliderFont, darkBrown));
@@ -1739,6 +1792,7 @@ public class BattleScreen implements Screen {
         });
 
         Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
+        this.settingsSfxSlider = sfxSlider;
         int sfxVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getSfxVolume() * 10f) : 8;
         sfxSlider.setValue(sfxVal);
         Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(sliderFont, darkBrown));
@@ -1787,6 +1841,11 @@ public class BattleScreen implements Screen {
                 showPauseMenu();
             }
         });
+
+        settingsFocusables.clear();
+        settingsFocusables.add(musicSlider);
+        settingsFocusables.add(sfxSlider);
+        settingsFocusables.add(backSettingsBtn);
 
         settingsModalTable = new Table();
         settingsModalTable.setFillParent(true);
@@ -1838,6 +1897,10 @@ public class BattleScreen implements Screen {
             }
         });
 
+        leaveFocusables.clear();
+        leaveFocusables.add(stayBtn);
+        leaveFocusables.add(confirmLeaveBtn);
+
         leaveBtnRow.add(stayBtn).size(170, 52).padRight(20);
         leaveBtnRow.add(confirmLeaveBtn).size(170, 52);
         leaveContent.add(leaveBtnRow).padBottom(12).center();
@@ -1878,6 +1941,8 @@ public class BattleScreen implements Screen {
         pauseModalTable.setVisible(true);
         settingsModalTable.setVisible(false);
         leaveConfirmModalTable.setVisible(false);
+        pauseFocusIdx = 0;
+        UIUtils.applyFocusVisuals(pauseFocusables, pauseFocusIdx);
     }
 
     private void showSettingsMenu() {
@@ -1885,6 +1950,8 @@ public class BattleScreen implements Screen {
         pauseModalTable.setVisible(false);
         settingsModalTable.setVisible(true);
         leaveConfirmModalTable.setVisible(false);
+        settingsFocusIdx = 0;
+        UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
     }
 
     private void showLeaveConfirmMenu() {
@@ -1892,6 +1959,8 @@ public class BattleScreen implements Screen {
         pauseModalTable.setVisible(false);
         settingsModalTable.setVisible(false);
         leaveConfirmModalTable.setVisible(true);
+        leaveFocusIdx = 0;
+        UIUtils.applyFocusVisuals(leaveFocusables, leaveFocusIdx);
     }
 
     private void leaveGameToMainMenu() {
@@ -2014,16 +2083,32 @@ public class BattleScreen implements Screen {
         btnSkill.setDisabled(!skillReady);
 
         if (!player.canUseSkill()) {
-            btnSkill.setText("COOLDOWN (" + player.getSkillCooldown() + ")");
+            btnSkill.setText("COOLDOWN\n(" + player.getSkillCooldown() + ")");
             btnSkill.setColor(0.6f, 0.6f, 0.6f, 0.5f); // Dimmed grey
         } else {
             io.github.snakes_and_ladders_roll_of_fate.skills.ClassSkill cs = player.getClassSkill();
             String skillBtnText = (cs != null) ? cs.getCombatSkillName().toUpperCase() : "SKILL";
-            btnSkill.setText(skillBtnText);
+            btnSkill.setText(formatSkillButtonText(skillBtnText));
             btnSkill.setColor(1, 1, 1, playerTurn ? 1f : 0.5f);
         }
         if (!isDawnWardenBattle() && !isPaleShepherdBattle()) {
             btnEscape.setColor(1, 1, 1, alpha);
+            btnEscape.setDisabled(!playerTurn);
+        }
+        btnAttack.setDisabled(!playerTurn);
+        btnDefend.setDisabled(!playerTurn);
+        btnItem.setDisabled(!playerTurn);
+
+        if (playerTurn && !isPaused && (itemPopup == null || !itemPopup.isVisible())) {
+            if (!UIUtils.isActorActivatable(battleActionFocusables.get(battleActionFocusIdx))) {
+                battleActionFocusIdx = UIUtils.stepFocus(battleActionFocusables, battleActionFocusIdx, 1);
+            } else {
+                UIUtils.applyFocusVisuals(battleActionFocusables, battleActionFocusIdx);
+            }
+        } else {
+            for (Button b : battleActionFocusables) {
+                b.setScale(1.0f);
+            }
         }
 
         // Handle End State (wait for lunge return animation to finish cleanly first)
@@ -2296,6 +2381,9 @@ public class BattleScreen implements Screen {
 
     private void refreshItemPopup() {
         itemPopup.clear(); // Clear old rows
+        itemPopupFocusables.clear();
+        java.util.Arrays.fill(itemSlotButtons, null);
+        itemPopupFocusIdx = 0;
 
         Inventory inv = player.getInventory();
         if (inv == null) return;
@@ -2355,6 +2443,8 @@ public class BattleScreen implements Screen {
             TextButton useBtn = new TextButton(btnText, useStyle);
 
             if (canUseInBattle) {
+                itemSlotButtons[i] = useBtn;
+                itemPopupFocusables.add(useBtn);
                 useBtn.addListener(new ChangeListener() {
                     @Override
                     public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
@@ -2384,6 +2474,7 @@ public class BattleScreen implements Screen {
         closeStyle.fontColor = Color.WHITE;
 
         TextButton closeBtn = new TextButton("CLOSE", closeStyle);
+        this.itemCloseBtn = closeBtn;
         closeBtn.addListener(new ChangeListener() {
             @Override public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
                 if (game.getAudioManager() != null) {
@@ -2392,25 +2483,176 @@ public class BattleScreen implements Screen {
                 itemPopup.setVisible(false);
             }
         });
+        itemPopupFocusables.add(closeBtn);
         itemPopup.add(closeBtn).size(140, 44).padTop(16).center().row();
+        UIUtils.applyFocusVisuals(itemPopupFocusables, itemPopupFocusIdx);
+    }
+
+    private void handleBattleKeyboardInput() {
+        boolean tabPressed = Gdx.input.isKeyJustPressed(Input.Keys.TAB);
+        int tabDelta = UIUtils.isShiftHeld() ? -1 : 1;
+
+        if (isPaused) {
+            if (settingsModalTable != null && settingsModalTable.isVisible()) {
+                UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
+                if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                    settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, -1);
+                } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+                } else if (UIUtils.isNavPrevHorizontalJustPressed()) {
+                    if (settingsFocusIdx == 0 && settingsMusicSlider != null) {
+                        settingsMusicSlider.setValue(Math.max(0, settingsMusicSlider.getValue() - 1f));
+                    } else if (settingsFocusIdx == 1 && settingsSfxSlider != null) {
+                        settingsSfxSlider.setValue(Math.max(0, settingsSfxSlider.getValue() - 1f));
+                    }
+                } else if (UIUtils.isNavNextHorizontalJustPressed()) {
+                    if (settingsFocusIdx == 0 && settingsMusicSlider != null) {
+                        settingsMusicSlider.setValue(Math.min(10, settingsMusicSlider.getValue() + 1f));
+                    } else if (settingsFocusIdx == 1 && settingsSfxSlider != null) {
+                        settingsSfxSlider.setValue(Math.min(10, settingsSfxSlider.getValue() + 1f));
+                    }
+                } else if (UIUtils.isConfirmJustPressed()) {
+                    if (settingsFocusIdx == settingsFocusables.size() - 1) {
+                        UIUtils.activateButton(settingsFocusables.get(settingsFocusIdx));
+                    } else {
+                        settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+                    }
+                } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                    showPauseMenu();
+                }
+            } else if (leaveConfirmModalTable != null && leaveConfirmModalTable.isVisible()) {
+                UIUtils.applyFocusVisuals(leaveFocusables, leaveFocusIdx);
+                if (UIUtils.isNavPrevHorizontalJustPressed() || UIUtils.isNavNextHorizontalJustPressed()
+                        || UIUtils.isNavPrevVerticalJustPressed() || UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    leaveFocusIdx = UIUtils.stepFocus(leaveFocusables, leaveFocusIdx, tabDelta);
+                } else if (UIUtils.isConfirmJustPressed() && !leaveFocusables.isEmpty()) {
+                    UIUtils.activateButton(leaveFocusables.get(leaveFocusIdx));
+                } else if (UIUtils.isBackJustPressed()) {
+                    showPauseMenu();
+                } else if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                    resumeGame();
+                }
+            } else {
+                UIUtils.applyFocusVisuals(pauseFocusables, pauseFocusIdx);
+                if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                    pauseFocusIdx = UIUtils.stepFocus(pauseFocusables, pauseFocusIdx, -1);
+                } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    pauseFocusIdx = UIUtils.stepFocus(pauseFocusables, pauseFocusIdx, 1);
+                } else if (UIUtils.isConfirmJustPressed() && !pauseFocusables.isEmpty()) {
+                    UIUtils.activateButton(pauseFocusables.get(pauseFocusIdx));
+                } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                    resumeGame();
+                } else {
+                    int num = UIUtils.justPressedNumberKey(pauseFocusables.size());
+                    if (num >= 0) {
+                        pauseFocusIdx = num;
+                        UIUtils.activateButton(pauseFocusables.get(num));
+                    }
+                }
+            }
+            return;
+        }
+
+        if (bossIntroTable != null && bossIntroTable.isVisible() && !bossEntranceActive) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                pauseGame();
+                return;
+            }
+            dialogueFocusables.clear();
+            if (introActionsRow != null) {
+                for (Actor child : introActionsRow.getChildren()) {
+                    if (child instanceof Button && child.isVisible()) {
+                        dialogueFocusables.add((Button) child);
+                    }
+                }
+            }
+            if (dialogueFocusIdx >= dialogueFocusables.size()) {
+                dialogueFocusIdx = 0;
+            }
+            UIUtils.applyFocusVisuals(dialogueFocusables, dialogueFocusIdx);
+
+            if (UIUtils.isNavPrevHorizontalJustPressed() || UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                dialogueFocusIdx = UIUtils.stepFocus(dialogueFocusables, dialogueFocusIdx, -1);
+            } else if (UIUtils.isNavNextHorizontalJustPressed() || UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                dialogueFocusIdx = UIUtils.stepFocus(dialogueFocusables, dialogueFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !dialogueFocusables.isEmpty()) {
+                UIUtils.activateButton(dialogueFocusables.get(dialogueFocusIdx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE) && introSkipBtn != null && introSkipBtn.isVisible()) {
+                UIUtils.activateButton(introSkipBtn);
+            } else {
+                int num = UIUtils.justPressedNumberKey(dialogueFocusables.size());
+                if (num >= 0) {
+                    UIUtils.activateButton(dialogueFocusables.get(num));
+                }
+            }
+            return;
+        }
+
+        if (continueTable != null && continueTable.isVisible() && continueBtn != null) {
+            UIUtils.applyFocusVisuals(Collections.singletonList(continueBtn), 0);
+            if (UIUtils.isConfirmJustPressed() || UIUtils.justPressedNumberKey(1) == 0) {
+                UIUtils.activateButton(continueBtn);
+            }
+            return;
+        }
+
+        if (itemPopup != null && itemPopup.isVisible() && battleSystem.getCurrentState() == BattleState.PLAYER_TURN) {
+            UIUtils.applyFocusVisuals(itemPopupFocusables, itemPopupFocusIdx);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                pauseGame();
+            } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.I) || tabPressed) {
+                itemPopup.setVisible(false);
+            } else if (UIUtils.isNavPrevVerticalJustPressed()) {
+                itemPopupFocusIdx = UIUtils.stepFocus(itemPopupFocusables, itemPopupFocusIdx, -1);
+            } else if (UIUtils.isNavNextVerticalJustPressed()) {
+                itemPopupFocusIdx = UIUtils.stepFocus(itemPopupFocusables, itemPopupFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !itemPopupFocusables.isEmpty()) {
+                UIUtils.activateButton(itemPopupFocusables.get(itemPopupFocusIdx));
+            } else {
+                int num = UIUtils.justPressedNumberKey(itemSlotButtons.length);
+                if (num >= 0 && itemSlotButtons[num] != null) {
+                    UIUtils.activateButton(itemSlotButtons[num]);
+                }
+            }
+            return;
+        }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+            pauseGame();
+            return;
+        }
+
+        boolean dialogueActive = isIntroDialogueActive || isEpilogueDialogueActive;
+        boolean isAnimating = (playerLungeTimer > 0f || enemyLungeTimer > 0f || skillAnimTimer > 0f);
+        if (!bossEntranceActive && !dialogueActive
+                && battleSystem.getCurrentState() == BattleState.PLAYER_TURN && !isAnimating) {
+            int num = UIUtils.justPressedNumberKey(battleActionFocusables.size());
+            if (num >= 0) {
+                if (UIUtils.activateButton(battleActionFocusables.get(num))) {
+                    battleActionFocusIdx = num;
+                }
+            } else if (UIUtils.isNavPrevHorizontalJustPressed() || (tabPressed && tabDelta < 0)) {
+                battleActionFocusIdx = UIUtils.stepFocus(battleActionFocusables, battleActionFocusIdx, -1);
+            } else if (UIUtils.isNavNextHorizontalJustPressed() || tabPressed) {
+                battleActionFocusIdx = UIUtils.stepFocus(battleActionFocusables, battleActionFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !battleActionFocusables.isEmpty()) {
+                UIUtils.activateButton(battleActionFocusables.get(battleActionFocusIdx));
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.Q)) {
+                if (UIUtils.activateButton(btnSkill)) {
+                    battleActionFocusIdx = 2;
+                }
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.I)) {
+                if (UIUtils.activateButton(btnItem)) {
+                    battleActionFocusIdx = 3;
+                }
+            }
+        }
     }
 
     @Override
     public void render(float delta) {
         float hudDelta = delta;
-
-        // Hotkeys: Toggle pause with ESC or P, or step back in modal hierarchy
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
-            if (isPaused) {
-                if (settingsModalTable.isVisible() || leaveConfirmModalTable.isVisible()) {
-                    showPauseMenu();
-                } else {
-                    resumeGame();
-                }
-            } else if (continueTable == null || !continueTable.isVisible()) {
-                pauseGame();
-            }
-        }
+        handleBattleKeyboardInput();
 
         if (isPaused) {
             delta = 0f;
@@ -2557,7 +2799,7 @@ public class BattleScreen implements Screen {
                     // If finishing blow triggered rations loot
                     if (enemyHpBefore > 0 && enemy != null && enemy.getHealth() <= 0) {
                         spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 70f);
-                        spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "🎒 +25 HP RATIONS!", Color.valueOf("#69f0ae"), true);
+                        spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, "+25 HP RATIONS!", Color.valueOf("#69f0ae"), true);
                     }
                 }
             }
@@ -2633,59 +2875,6 @@ public class BattleScreen implements Screen {
         hudStage.getViewport().apply();
         hudStage.act(hudDelta);
         hudStage.draw();
-        syncUi(); // Keep UI in sync with state machine
-        // --- KEYBOARD: NUM 1-5 for Battle Actions (Disabled when Item Popup is open) ---
-        if ((itemPopup == null || !itemPopup.isVisible()) && battleSystem.getCurrentState() == BattleState.PLAYER_TURN && playerLungeTimer <= 0f && enemyLungeTimer <= 0f && skillAnimTimer <= 0f) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_1)) {
-                btnAttack.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_2)) {
-                btnDefend.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_3)) {
-                btnSkill.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_4) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_4)) {
-                btnItem.fire(new ChangeListener.ChangeEvent());
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_5) || Gdx.input.isKeyJustPressed(Input.Keys.NUMPAD_5)) {
-                btnEscape.fire(new ChangeListener.ChangeEvent());
-            }
-        }
-
-// --- KEYBOARD: NUM 1-4 for Item Usage (When Item Popup is open) ---
-        if (itemPopup != null && itemPopup.isVisible() && battleSystem.getCurrentState() == BattleState.PLAYER_TURN) {
-            Inventory inv = player.getInventory();
-            if (inv != null) {
-                for (int i = 0; i < inv.getCapacity(); i++) {
-                    int keyNum = Input.Keys.NUM_1 + i;
-                    int numpadNum = Input.Keys.NUMPAD_1 + i;
-                    if (Gdx.input.isKeyJustPressed(keyNum) || Gdx.input.isKeyJustPressed(numpadNum)) {
-                        if (i < inv.size()) {
-                            Item item = inv.getItem(i);
-                            // Re-use the exact same validation logic as the USE button
-                            boolean isCurse = item.isCurse();
-                            io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType eff = item.getEffectType();
-                            boolean isBoardOnly = (eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.MOVE
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_EXACT
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.DICE_CLAMP
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SNAKE_WARD
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SWAP_PLAYER
-                                || eff == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.SCOUT);
-                            boolean lethalCost = (item.getSecondaryEffectType() == io.github.snakes_and_ladders_roll_of_fate.systems.EventEffectType.HEALTH
-                                && item.getSecondaryEffectValue() < 0
-                                && player.getHealth() + item.getSecondaryEffectValue() <= 0);
-                            boolean canUseInBattle = !isCurse && !isBoardOnly && !lethalCost;
-
-                            if (canUseInBattle) {
-                                if (game.getAudioManager() != null) game.getAudioManager().playSound(AudioManager.SoundEffect.CLICK);
-                                spawnHealSparks(PLAYER_X, CHAR_DRAW_Y + 80f);
-                                spawnFloatingText(PLAYER_X, CHAR_DRAW_Y + 160f, item.getName().toUpperCase(), Color.valueOf("#81c784"), false);
-                                battleSystem.onPlayerUseItem(i);
-                                itemPopup.setVisible(false);
-                                syncUi();
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         if (!isPaused) {
             syncUi(); // Keep UI in sync with state machine
@@ -3316,6 +3505,7 @@ public class BattleScreen implements Screen {
         if (whitePixelTex != null) whitePixelTex.dispose();
         if (radialGlowTex != null) radialGlowTex.dispose();
         if (titleFont != null) titleFont.dispose();
+        if (skillBtnFont != null) skillBtnFont.dispose();
         if (topBannerFont != null) topBannerFont.dispose();
         if (hudHpFont != null) hudHpFont.dispose();
         if (battleLogFont != null) battleLogFont.dispose();

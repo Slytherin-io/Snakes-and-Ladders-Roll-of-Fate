@@ -362,7 +362,7 @@ public class BattleSystem {
 
         // Turtle's Iron Fortress: Complete immunity to attack and heavy defense-scaled riposte
         if (turtleFortressActive) {
-            log.append("🛡️ IRON FORTRESS! You take 0 damage! ");
+            log.append("IRON FORTRESS! You take 0 damage! ");
             int riposteDmg = player.getBaseDefense() * 3;
             int newEnemyHp = Math.max(0, enemy.getHealth() - riposteDmg);
             enemy.setHealth(newEnemyHp);
@@ -454,7 +454,7 @@ public class BattleSystem {
         // Guard mitigation (Teammate proposal: standard guard blocks damage/crits without generic riposte)
         if (isPlayerGuarding) {
             isPlayerGuarding = false;
-            log.append("🛡️ Blocked! Took ").append(damage).append(" reduced damage! ");
+            log.append("Blocked! Took ").append(damage).append(" reduced damage! ");
         } else {
             log.append(enemy.getEnemyType()).append(" deals ").append(damage).append(" damage! ");
         }

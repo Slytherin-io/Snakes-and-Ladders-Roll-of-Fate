@@ -1025,6 +1025,7 @@ public class BoardScreen implements Screen {
         satchelStyle.over = UIUtils.createRoundedDrawable(250, 120, 20, leatherHover, containerBorder, 3);
 
         Button inventoryBtn = new Button(satchelStyle);
+        this.inventoryButton = inventoryBtn;
         UIUtils.addScaleHoverEffect(inventoryBtn);
 
         Image satchelIcon = new Image(game.getAssetManager().get(Assets.ICON_SATCHEL));
@@ -1272,6 +1273,7 @@ public class BoardScreen implements Screen {
         closeStyle.fontColor = Color.WHITE;
 
         TextButton closeBtn = new TextButton("CLOSE", closeStyle);
+        this.inventoryCloseBtn = closeBtn;
         UIUtils.addScaleHoverEffect(closeBtn);
         closeBtn.addListener(new ChangeListener() {
             @Override
@@ -1305,6 +1307,7 @@ public class BoardScreen implements Screen {
         dicePickerPopup = new Table();
         dicePickerPopup.setBackground(UIUtils.createRoundedDrawable(600, 175, 20, darkLeather, borderGold, 3));
         dicePickerPopup.setVisible(false);
+        dicePickerBtns.clear();
 
         Label header = new Label("GOLDEN DIE ACTIVE - CHOOSE YOUR EXACT ROLL:", new Label.LabelStyle(playerTagFont, borderGold));
         dicePickerPopup.add(header).padTop(14).padBottom(12).center().row();
@@ -1317,6 +1320,7 @@ public class BoardScreen implements Screen {
             faceStyle.over = UIUtils.createRoundedDrawable(76, 76, 14, Color.valueOf("#a66032"), Color.WHITE, 2);
 
             Button faceBtn = new Button(faceStyle);
+            dicePickerBtns.add(faceBtn);
             Image faceImg = new Image(diceDrawables[face]);
             faceImg.setScaling(Scaling.fit);
             faceBtn.add(faceImg).size(52, 52).center();
@@ -1355,6 +1359,8 @@ public class BoardScreen implements Screen {
     private void refreshInventoryUI() {
         if (inventorySlotsTable == null) return;
         inventorySlotsTable.clear();
+        inventoryFocusables.clear();
+        inventoryFocusIdx = 0;
 
         Player player = game.getCurrentPlayer();
         if (player == null || player.getInventory() == null) return;
@@ -1492,6 +1498,7 @@ public class BoardScreen implements Screen {
                     useBtn.setDisabled(false);
                     useBtn.setTouchable(Touchable.enabled);
                     useBtn.setColor(Color.WHITE);
+                    inventoryFocusables.add(useBtn);
                 }
 
                 slotRow.add(useBtn).size(88, 42).right();
@@ -1519,6 +1526,10 @@ public class BoardScreen implements Screen {
 
             inventorySlotsTable.add(slotRow).size(580, 80).padBottom(6).row();
         }
+        if (inventoryCloseBtn != null) {
+            inventoryFocusables.add(inventoryCloseBtn);
+        }
+        UIUtils.applyFocusVisuals(inventoryFocusables, inventoryFocusIdx);
     }
 
     /**
@@ -1910,6 +1921,11 @@ public class BoardScreen implements Screen {
             }
         });
 
+        pauseFocusables.clear();
+        pauseFocusables.add(resumeBtn);
+        pauseFocusables.add(settingsBtn);
+        pauseFocusables.add(leaveBtn);
+
         pauseContent.add(resumeBtn).size(340, 52).padBottom(12).center().row();
         pauseContent.add(settingsBtn).size(340, 52).padBottom(12).center().row();
         pauseContent.add(leaveBtn).size(340, 52).padBottom(16).center().row();
@@ -1945,6 +1961,7 @@ public class BoardScreen implements Screen {
         Slider.SliderStyle sliderStyle = UIUtils.createSliderStyle(darkBrown, darkBrown);
 
         Slider musicSlider = new Slider(0, 10, 1, false, sliderStyle);
+        this.settingsMusicSlider = musicSlider;
         int musicVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getMusicVolume() * 10f) : 7;
         musicSlider.setValue(musicVal);
         Label musicNum = new Label(String.valueOf(musicVal), new Label.LabelStyle(sliderFont, darkBrown));
@@ -1960,6 +1977,7 @@ public class BoardScreen implements Screen {
         });
 
         Slider sfxSlider = new Slider(0, 10, 1, false, sliderStyle);
+        this.settingsSfxSlider = sfxSlider;
         int sfxVal = game.getAudioManager() != null ? Math.round(game.getAudioManager().getSfxVolume() * 10f) : 8;
         sfxSlider.setValue(sfxVal);
         Label sfxNum = new Label(String.valueOf(sfxVal), new Label.LabelStyle(sliderFont, darkBrown));
@@ -2008,6 +2026,11 @@ public class BoardScreen implements Screen {
                 showPauseMenu();
             }
         });
+
+        settingsFocusables.clear();
+        settingsFocusables.add(musicSlider);
+        settingsFocusables.add(sfxSlider);
+        settingsFocusables.add(backSettingsBtn);
 
         settingsModalTable = new Table();
         settingsModalTable.setFillParent(true);
@@ -2059,6 +2082,10 @@ public class BoardScreen implements Screen {
             }
         });
 
+        leaveFocusables.clear();
+        leaveFocusables.add(stayBtn);
+        leaveFocusables.add(confirmLeaveBtn);
+
         leaveBtnRow.add(stayBtn).size(170, 52).padRight(20);
         leaveBtnRow.add(confirmLeaveBtn).size(170, 52);
         leaveContent.add(leaveBtnRow).padBottom(12).center();
@@ -2105,6 +2132,8 @@ public class BoardScreen implements Screen {
         pauseModalTable.setVisible(true);
         settingsModalTable.setVisible(false);
         leaveConfirmModalTable.setVisible(false);
+        pauseFocusIdx = 0;
+        UIUtils.applyFocusVisuals(pauseFocusables, pauseFocusIdx);
     }
 
     private void showSettingsMenu() {
@@ -2112,6 +2141,8 @@ public class BoardScreen implements Screen {
         pauseModalTable.setVisible(false);
         settingsModalTable.setVisible(true);
         leaveConfirmModalTable.setVisible(false);
+        settingsFocusIdx = 0;
+        UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
     }
 
     private void showLeaveConfirmMenu() {
@@ -2119,6 +2150,8 @@ public class BoardScreen implements Screen {
         pauseModalTable.setVisible(false);
         settingsModalTable.setVisible(false);
         leaveConfirmModalTable.setVisible(true);
+        leaveFocusIdx = 0;
+        UIUtils.applyFocusVisuals(leaveFocusables, leaveFocusIdx);
     }
 
     private void leaveGameToMainMenu() {
@@ -2131,15 +2164,17 @@ public class BoardScreen implements Screen {
     /**
      * Updates the visual highlight of the event choices based on the keyboard index.
      */
+    private void clearEventModalButtonRefs() {
+        eventModalCancelBtn = null;
+        eventRevealBtn = null;
+        eventContinueBtn = null;
+        eventCombatActionBtn = null;
+        activeEventChoices.clear();
+        highlightedChoiceIndex = 0;
+    }
+
     private void updateChoiceHighlights() {
-        for (int i = 0; i < activeEventChoices.size(); i++) {
-            Button btn = activeEventChoices.get(i);
-            if (i == highlightedChoiceIndex) {
-                btn.setColor(1.15f, 1.15f, 1.15f, 1f); // Brighten the selected choice
-            } else {
-                btn.setColor(1f, 1f, 1f, 1f);           // Reset to normal
-            }
-        }
+        UIUtils.applyFocusVisuals(activeEventChoices, highlightedChoiceIndex);
     }
     /**
      * Builds the unified Parchment Scroll Event Modal for tile landing encounters.
@@ -2387,8 +2422,7 @@ public class BoardScreen implements Screen {
 
         final Player player = game.getCurrentPlayer();
         eventContentTable.clear();
-        activeEventChoices.clear();     // <--- ADD THIS
-        highlightedChoiceIndex = 0;     // <--- ADD THIS
+        clearEventModalButtonRefs();
 
         // 1. Color-coded category badge
         Color badgeBgColor;
@@ -2491,6 +2525,14 @@ public class BoardScreen implements Screen {
 
             eventContentTable.add(choiceCard).width(530).minHeight(54).padBottom(cardGap).center().row();
         }
+
+        for (int i = 0; i < activeEventChoices.size(); i++) {
+            if (!activeEventChoices.get(i).isDisabled()) {
+                highlightedChoiceIndex = i;
+                break;
+            }
+        }
+        updateChoiceHighlights();
 
         modalScrim.setVisible(true);
         eventModalTable.setVisible(true);
@@ -2759,6 +2801,7 @@ public class BoardScreen implements Screen {
                                           boolean succeeded, boolean isTailSlide,
                                           EventChoice.EventResult res, boolean isRetreat) {
         eventContentTable.clear();
+        clearEventModalButtonRefs();
         isD20Rolling = true;
         d20RollElapsed = 0f;
         d20NextTickTime = 0f;
@@ -2814,6 +2857,7 @@ public class BoardScreen implements Screen {
         eventContentTable.add(d20StatusBanner).size(490, 48).padBottom(12).center().row();
 
         TextButton skipRollBtn = new TextButton("TAP TO REVEAL", cancelEventChoiceBtnStyle);
+        this.eventRevealBtn = skipRollBtn;
         skipRollBtn.getLabel().setFontScale(0.85f);
         UIUtils.addScaleHoverEffect(skipRollBtn);
         skipRollBtn.addListener(new ChangeListener() {
@@ -2827,6 +2871,7 @@ public class BoardScreen implements Screen {
             }
         });
         eventContentTable.add(skipRollBtn).size(220, 38).center().row();
+        UIUtils.applyFocusVisuals(Collections.singletonList(skipRollBtn), 0);
 
         if (game.getAudioManager() != null) {
             game.getAudioManager().playSound(AudioManager.SoundEffect.DICE_ROLL);
@@ -2849,6 +2894,7 @@ public class BoardScreen implements Screen {
      */
     private void showCombatView(final Player player, final SnakeTile tile) {
         eventContentTable.clear();
+        clearEventModalButtonRefs();
 
         setEventBadge("SERPENT BATTLE  -  TILE " + tile.getPosition(), Color.valueOf("#8a2424"));
 
@@ -2906,6 +2952,7 @@ public class BoardScreen implements Screen {
 
         // Action Button: STRIKE (ROLL D20)
         final TextButton actionBtn = new TextButton("STRIKE (ROLL D20)", combatStrikeBtnStyle);
+        this.eventCombatActionBtn = actionBtn;
         UIUtils.addScaleHoverEffect(actionBtn);
 
         final boolean[] combatOver = new boolean[]{false};
@@ -2998,6 +3045,7 @@ public class BoardScreen implements Screen {
      */
     private void showBarterItemSelector(final Player player, final EventChoice choice, final Tile tile) {
         eventContentTable.clear();
+        clearEventModalButtonRefs();
 
         final BarterCategory cat = (choice.getBarterCategory() != null) ? choice.getBarterCategory() : BarterCategory.ELIXIR;
         setEventBadge("BARTER  -  EQUAL EXCHANGE", Color.valueOf("#9c6818"));
@@ -3126,10 +3174,12 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Equal Barter Completed", res, false);
                 }
             });
+            activeEventChoices.add(itemCard);
             eventContentTable.add(itemCard).width(530).minHeight(60).padBottom(6).center().row();
         }
 
         TextButton cancelBtn = new TextButton("CANCEL & RETURN", cancelEventChoiceBtnStyle);
+        this.eventModalCancelBtn = cancelBtn;
         UIUtils.addScaleHoverEffect(cancelBtn);
         cancelBtn.addListener(new ChangeListener() {
             @Override
@@ -3140,6 +3190,8 @@ public class BoardScreen implements Screen {
                 showEventChoiceView(activeCurrentEvent, tile);
             }
         });
+        activeEventChoices.add(cancelBtn);
+        updateChoiceHighlights();
         eventContentTable.add(cancelBtn).size(280, 46).padTop(6).center().row();
     }
 
@@ -3148,6 +3200,7 @@ public class BoardScreen implements Screen {
      */
     private void showItemSwapPrompt(final Player player, final Item newItem) {
         eventContentTable.clear();
+        clearEventModalButtonRefs();
 
         setEventBadge("INVENTORY FULL (4/4)  -  ITEM SWAP", Color.valueOf("#a63232"));
 
@@ -3222,10 +3275,12 @@ public class BoardScreen implements Screen {
                     showOutcomeView("Item Swapped", res, false);
                 }
             });
+            activeEventChoices.add(swapCard);
             eventContentTable.add(swapCard).width(530).minHeight(60).padBottom(6).center().row();
         }
 
         TextButton leaveBtn = new TextButton("LEAVE " + newItem.getName().toUpperCase() + " BEHIND", cancelEventChoiceBtnStyle);
+        this.eventModalCancelBtn = leaveBtn;
         UIUtils.addScaleHoverEffect(leaveBtn);
         leaveBtn.addListener(new ChangeListener() {
             @Override
@@ -3238,6 +3293,8 @@ public class BoardScreen implements Screen {
                 showOutcomeView("Discovery Left Behind", res, false);
             }
         });
+        activeEventChoices.add(leaveBtn);
+        updateChoiceHighlights();
         eventContentTable.add(leaveBtn).width(440).minHeight(48).padTop(6).center().row();
 
         modalScrim.setVisible(true);
@@ -3252,6 +3309,7 @@ public class BoardScreen implements Screen {
     private void showOutcomeView(String choiceTitle, EventChoice.EventResult res, boolean isRetreat) {
         isD20Rolling = false;
         eventContentTable.clear();
+        clearEventModalButtonRefs();
 
         if (res != null && res.consequences != null && !res.consequences.isEmpty()) {
             String firstConseq = res.consequences.get(0);
@@ -3341,6 +3399,7 @@ public class BoardScreen implements Screen {
 
         // Action Button: CONTINUE
         TextButton continueBtn = new TextButton("CONTINUE", eventChoiceBtnStyle);
+        this.eventContinueBtn = continueBtn;
         continueBtn.getLabel().setWrap(true);
         UIUtils.addScaleHoverEffect(continueBtn);
         continueBtn.addListener(new ChangeListener() {
@@ -3353,6 +3412,7 @@ public class BoardScreen implements Screen {
             }
         });
         eventContentTable.add(continueBtn).size(280, 50).center().row();
+        UIUtils.applyFocusVisuals(Collections.singletonList(continueBtn), 0);
     }
 
     private Color resolveOutcomeLineColor(String msg) {
@@ -3382,8 +3442,7 @@ public class BoardScreen implements Screen {
     private void closeEventModal() {
         isD20Rolling = false;
         d20PendingResult = null;
-        activeEventChoices.clear();
-        highlightedChoiceIndex = 0;
+        clearEventModalButtonRefs();
         modalScrim.setVisible(false);
         eventModalTable.setVisible(false);
         isEventModalActive = false;
@@ -3465,8 +3524,13 @@ public class BoardScreen implements Screen {
         Player player = game.getCurrentPlayer();
         if (player != null && player.hasPendingDiceChoice()) {
             if (dicePickerPopup != null) {
-                dicePickerPopup.setVisible(!dicePickerPopup.isVisible());
-                topBannerLabel.setText("GOLDEN DIE ACTIVE! CHOOSE YOUR EXACT ROLL (1 - 6):");
+                boolean willShow = !dicePickerPopup.isVisible();
+                dicePickerPopup.setVisible(willShow);
+                if (willShow) {
+                    dicePickerFocusIdx = 0;
+                    UIUtils.applyFocusVisuals(dicePickerBtns, dicePickerFocusIdx);
+                    topBannerLabel.setText("GOLDEN DIE ACTIVE! CHOOSE YOUR EXACT ROLL (1 - 6):");
+                }
             }
             return;
         }
@@ -3519,26 +3583,182 @@ public class BoardScreen implements Screen {
         turnState = TurnState.STEPPING_TILES;
     }
 
-    @Override
-    public void render(float delta) {
-        // Hotkeys: Toggle pause with ESC or P, or step back in modal hierarchy
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
-            if (isPaused) {
-                if (settingsModalTable.isVisible() || leaveConfirmModalTable.isVisible()) {
+    private void handleKeyboardInput() {
+        boolean tabPressed = Gdx.input.isKeyJustPressed(Input.Keys.TAB);
+        int tabDelta = UIUtils.isShiftHeld() ? -1 : 1;
+
+        if (isPaused) {
+            if (settingsModalTable != null && settingsModalTable.isVisible()) {
+                UIUtils.applyFocusVisuals(settingsFocusables, settingsFocusIdx);
+                if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                    settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, -1);
+                } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+                } else if (UIUtils.isNavPrevHorizontalJustPressed()) {
+                    if (settingsFocusIdx == 0 && settingsMusicSlider != null) {
+                        settingsMusicSlider.setValue(Math.max(0, settingsMusicSlider.getValue() - 1f));
+                    } else if (settingsFocusIdx == 1 && settingsSfxSlider != null) {
+                        settingsSfxSlider.setValue(Math.max(0, settingsSfxSlider.getValue() - 1f));
+                    }
+                } else if (UIUtils.isNavNextHorizontalJustPressed()) {
+                    if (settingsFocusIdx == 0 && settingsMusicSlider != null) {
+                        settingsMusicSlider.setValue(Math.min(10, settingsMusicSlider.getValue() + 1f));
+                    } else if (settingsFocusIdx == 1 && settingsSfxSlider != null) {
+                        settingsSfxSlider.setValue(Math.min(10, settingsSfxSlider.getValue() + 1f));
+                    }
+                } else if (UIUtils.isConfirmJustPressed()) {
+                    if (settingsFocusIdx == settingsFocusables.size() - 1) {
+                        UIUtils.activateButton(settingsFocusables.get(settingsFocusIdx));
+                    } else {
+                        settingsFocusIdx = UIUtils.stepFocus(settingsFocusables, settingsFocusIdx, 1);
+                    }
+                } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
                     showPauseMenu();
-                } else {
+                }
+            } else if (leaveConfirmModalTable != null && leaveConfirmModalTable.isVisible()) {
+                UIUtils.applyFocusVisuals(leaveFocusables, leaveFocusIdx);
+                if (UIUtils.isNavPrevHorizontalJustPressed() || UIUtils.isNavNextHorizontalJustPressed()
+                        || UIUtils.isNavPrevVerticalJustPressed() || UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    leaveFocusIdx = UIUtils.stepFocus(leaveFocusables, leaveFocusIdx, tabDelta);
+                } else if (UIUtils.isConfirmJustPressed() && !leaveFocusables.isEmpty()) {
+                    UIUtils.activateButton(leaveFocusables.get(leaveFocusIdx));
+                } else if (UIUtils.isBackJustPressed()) {
+                    showPauseMenu();
+                } else if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
                     resumeGame();
                 }
             } else {
+                UIUtils.applyFocusVisuals(pauseFocusables, pauseFocusIdx);
+                if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                    pauseFocusIdx = UIUtils.stepFocus(pauseFocusables, pauseFocusIdx, -1);
+                } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    pauseFocusIdx = UIUtils.stepFocus(pauseFocusables, pauseFocusIdx, 1);
+                } else if (UIUtils.isConfirmJustPressed() && !pauseFocusables.isEmpty()) {
+                    UIUtils.activateButton(pauseFocusables.get(pauseFocusIdx));
+                } else if (UIUtils.isBackJustPressed() || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                    resumeGame();
+                } else {
+                    int num = UIUtils.justPressedNumberKey(pauseFocusables.size());
+                    if (num >= 0) {
+                        pauseFocusIdx = num;
+                        UIUtils.activateButton(pauseFocusables.get(num));
+                    }
+                }
+            }
+            return;
+        }
+
+        if (dicePickerPopup != null && dicePickerPopup.isVisible()) {
+            UIUtils.applyFocusVisuals(dicePickerBtns, dicePickerFocusIdx);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
                 pauseGame();
+            } else if (UIUtils.isNavPrevHorizontalJustPressed() || (tabPressed && tabDelta < 0)) {
+                dicePickerFocusIdx = UIUtils.stepFocus(dicePickerBtns, dicePickerFocusIdx, -1);
+            } else if (UIUtils.isNavNextHorizontalJustPressed() || tabPressed) {
+                dicePickerFocusIdx = UIUtils.stepFocus(dicePickerBtns, dicePickerFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !dicePickerBtns.isEmpty()) {
+                UIUtils.activateButton(dicePickerBtns.get(dicePickerFocusIdx));
+            } else {
+                int num = UIUtils.justPressedNumberKey(dicePickerBtns.size());
+                if (num >= 0) {
+                    UIUtils.activateButton(dicePickerBtns.get(num));
+                }
             }
+            return;
         }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            // Only allow rolling if waiting for roll, not paused, and no modal is open
-            if (turnState == TurnState.WAITING_FOR_ROLL && !isPaused && !isEventModalActive) {
+
+        if (inventoryPopup != null && inventoryPopup.isVisible()) {
+            UIUtils.applyFocusVisuals(inventoryFocusables, inventoryFocusIdx);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                pauseGame();
+            } else if (tabPressed || Gdx.input.isKeyJustPressed(Input.Keys.I) || UIUtils.isBackJustPressed()) {
+                inventoryPopup.setVisible(false);
+            } else if (UIUtils.isNavPrevVerticalJustPressed()) {
+                inventoryFocusIdx = UIUtils.stepFocus(inventoryFocusables, inventoryFocusIdx, -1);
+            } else if (UIUtils.isNavNextVerticalJustPressed()) {
+                inventoryFocusIdx = UIUtils.stepFocus(inventoryFocusables, inventoryFocusIdx, 1);
+            } else if (UIUtils.isConfirmJustPressed() && !inventoryFocusables.isEmpty()) {
+                Actor target = inventoryFocusables.get(inventoryFocusIdx);
+                UIUtils.activateButton(target);
+                if (target != inventoryCloseBtn && inventoryPopup.isVisible()) {
+                    refreshInventoryUI();
+                }
+            } else {
+                Player p = game.getCurrentPlayer();
+                if (p != null && p.getInventory() != null) {
+                    int num = UIUtils.justPressedNumberKey(p.getInventory().getCapacity());
+                    if (num >= 0 && num < p.getInventory().size()) {
+                        handleUseInventoryItem(num);
+                        refreshInventoryUI();
+                    }
+                }
+            }
+            return;
+        }
+
+        if (isEventModalActive) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                pauseGame();
+                return;
+            }
+            if (isD20Rolling) {
+                if (UIUtils.isConfirmJustPressed()) {
+                    if (eventRevealBtn != null) {
+                        UIUtils.activateButton(eventRevealBtn);
+                    } else {
+                        finishD20RollAnimation();
+                    }
+                }
+            } else if (eventCombatActionBtn != null) {
+                if (UIUtils.isConfirmJustPressed() || UIUtils.justPressedNumberKey(1) == 0) {
+                    UIUtils.activateButton(eventCombatActionBtn);
+                }
+            } else if (!activeEventChoices.isEmpty()) {
+                if (UIUtils.isNavPrevVerticalJustPressed() || (tabPressed && tabDelta < 0)) {
+                    highlightedChoiceIndex = UIUtils.stepFocus(activeEventChoices, highlightedChoiceIndex, -1);
+                } else if (UIUtils.isNavNextVerticalJustPressed() || tabPressed) {
+                    highlightedChoiceIndex = UIUtils.stepFocus(activeEventChoices, highlightedChoiceIndex, 1);
+                } else if (UIUtils.isConfirmJustPressed()) {
+                    if (highlightedChoiceIndex >= 0 && highlightedChoiceIndex < activeEventChoices.size()) {
+                        UIUtils.activateButton(activeEventChoices.get(highlightedChoiceIndex));
+                    }
+                } else if (UIUtils.isBackJustPressed() && eventModalCancelBtn != null) {
+                    UIUtils.activateButton(eventModalCancelBtn);
+                } else {
+                    int num = UIUtils.justPressedNumberKey(activeEventChoices.size());
+                    if (num >= 0) {
+                        UIUtils.activateButton(activeEventChoices.get(num));
+                    }
+                }
+            } else if (eventContinueBtn != null) {
+                if (UIUtils.isConfirmJustPressed() || UIUtils.isBackJustPressed()) {
+                    UIUtils.activateButton(eventContinueBtn);
+                }
+            }
+            return;
+        }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+            pauseGame();
+            return;
+        }
+
+        if (turnState == TurnState.WAITING_FOR_ROLL) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
+                    || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)
+                    || Gdx.input.isKeyJustPressed(Input.Keys.R)) {
                 triggerRoll();
+            } else if (tabPressed || Gdx.input.isKeyJustPressed(Input.Keys.I)) {
+                UIUtils.activateButton(inventoryButton);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.Q) || Gdx.input.isKeyJustPressed(Input.Keys.E)) {
+                UIUtils.activateButton(skillButton);
             }
         }
+    }
+
+    @Override
+    public void render(float delta) {
+        handleKeyboardInput();
 
 
         // 1. Update Game Physics & Camera only when NOT paused
@@ -3994,50 +4214,6 @@ public class BoardScreen implements Screen {
             case WAITING_FOR_ROLL:
             default:
                 break;
-        }
-        // --- KEYBOARD: TAB to Toggle Inventory ---
-        if (Gdx.input.isKeyJustPressed(Input.Keys.TAB)) {
-            if (turnState == TurnState.WAITING_FOR_ROLL && !isEventModalActive && !isPaused) {
-                if (inventoryPopup != null) {
-                    boolean willShow = !inventoryPopup.isVisible();
-                    if (willShow) refreshInventoryUI();
-                    inventoryPopup.setVisible(willShow);
-                }
-            }
-        }
-
-// --- KEYBOARD: NUM Keys for Item Usage (when inventory is open) ---
-        if (inventoryPopup != null && inventoryPopup.isVisible()) {
-            Player p = game.getCurrentPlayer();
-            if (p != null && p.getInventory() != null) {
-                int cap = p.getInventory().getCapacity();
-                for (int i = 0; i < cap; i++) {
-                    int keyNum = Input.Keys.NUM_1 + i;
-                    int numpadNum = Input.Keys.NUMPAD_1 + i;
-                    if (Gdx.input.isKeyJustPressed(keyNum) || Gdx.input.isKeyJustPressed(numpadNum)) {
-                        if (i < p.getInventory().size()) {
-                            handleUseInventoryItem(i);
-                            refreshInventoryUI();
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- KEYBOARD: Arrow Keys & Enter/Space for Event Choices ---
-        if (isEventModalActive && !activeEventChoices.isEmpty()) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
-                highlightedChoiceIndex = (highlightedChoiceIndex - 1 + activeEventChoices.size()) % activeEventChoices.size();
-                updateChoiceHighlights();
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
-                highlightedChoiceIndex = (highlightedChoiceIndex + 1) % activeEventChoices.size();
-                updateChoiceHighlights();
-            } else if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                Button selectedBtn = activeEventChoices.get(highlightedChoiceIndex);
-                if (!selectedBtn.isDisabled()) {
-                    selectedBtn.fire(new ChangeListener.ChangeEvent());
-                }
-            }
         }
     }
 

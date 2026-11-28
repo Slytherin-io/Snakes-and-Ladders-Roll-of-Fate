@@ -477,10 +477,12 @@ public class EndingStoryScreen implements Screen {
         stage.addListener(new InputListener() {
             @Override
             public boolean keyDown(InputEvent event, int keycode) {
-                if (keycode == Input.Keys.RIGHT || keycode == Input.Keys.SPACE || keycode == Input.Keys.ENTER) {
+                if (keycode == Input.Keys.RIGHT || keycode == Input.Keys.D
+                        || keycode == Input.Keys.SPACE || keycode == Input.Keys.ENTER) {
                     advanceSlide();
                     return true;
-                } else if (keycode == Input.Keys.LEFT) {
+                } else if (keycode == Input.Keys.LEFT || keycode == Input.Keys.A
+                        || keycode == Input.Keys.BACKSPACE) {
                     previousSlide();
                     return true;
                 } else if (keycode == Input.Keys.ESCAPE) {
