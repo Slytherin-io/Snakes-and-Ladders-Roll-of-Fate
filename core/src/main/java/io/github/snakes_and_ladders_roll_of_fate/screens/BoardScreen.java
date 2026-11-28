@@ -3459,8 +3459,8 @@ public class BoardScreen implements Screen {
                 game.getRunTracker().recordPlayerFallen(player);
             }
             if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                game.setScreen(new GameSummaryScreen(
-                    game, false, player,
+                game.setScreen(new EndingStoryScreen(
+                    game, player,
                     io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.FALLEN_ON_TRAIL));
                 return;
             }
@@ -4159,8 +4159,8 @@ public class BoardScreen implements Screen {
                             game.getRunTracker().recordPlayerFallen(player);
                         }
                         if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                            game.setScreen(new GameSummaryScreen(
-                                game, false, player,
+                            game.setScreen(new EndingStoryScreen(
+                                game, player,
                                 io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.FALLEN_ON_TRAIL));
                             return;
                         }

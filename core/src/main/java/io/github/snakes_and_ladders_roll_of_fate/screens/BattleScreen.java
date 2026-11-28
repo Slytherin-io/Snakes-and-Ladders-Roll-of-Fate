@@ -1397,6 +1397,9 @@ public class BattleScreen implements Screen {
                     920, 70, 20, Color.valueOf("#8f5916"), Color.valueOf("#ffd54f"), 3));
             }
         } else {
+            if (game.getAudioManager() != null) {
+                game.getAudioManager().playMusic(AudioManager.MusicTrack.EPILOGUE_REST, true);
+            }
             if (topBannerLabel != null) {
                 topBannerLabel.setText("THE DAWN WARDEN STEADIES YOUR FALL");
             }
@@ -1630,8 +1633,8 @@ public class BattleScreen implements Screen {
                             game.getRunTracker().recordPlayerFallen(player);
                         }
                         if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                            game.setScreen(new GameSummaryScreen(
-                                game, false, player,
+                            game.setScreen(new EndingStoryScreen(
+                                game, player,
                                 io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.HARVESTED_BY_SHEPHERD));
                             return;
                         }
@@ -1644,8 +1647,8 @@ public class BattleScreen implements Screen {
                         game.getRunTracker().recordPlayerFallen(player);
                     }
                     if (game.getPlayers().size() <= 1 || game.isPartyWiped()) {
-                        game.setScreen(new GameSummaryScreen(
-                            game, false, player,
+                        game.setScreen(new EndingStoryScreen(
+                            game, player,
                             io.github.snakes_and_ladders_roll_of_fate.systems.RunTracker.EndingType.FALLEN_ON_TRAIL));
                         return;
                     }
